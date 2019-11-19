@@ -38,7 +38,12 @@ class CellPrompter implements DocumentRegistry.IWidgetExtension<NotebookPanel, I
   constructor(app: JupyterFrontEnd, tracker: INotebookTracker) {
     this.app = app;
     /*this.tracker = tracker;*/
-    new CellListen(tracker.currentWidget); 
+    if (!tracker.currentWidget) {
+      console.log("No current widget");
+      console.log(tracker);
+    } else {
+      new CellListen(tracker.currentWidget); 
+    }
   }
 
   public createNew(nb: NotebookPanel, context: DocumentRegistry.IContext<INotebookModel>): IDisposable {
@@ -62,16 +67,18 @@ const extension: JupyterFrontEndPlugin<void> = {
   autoStart: true,
   requires: [INotebookTracker],
   activate: (app: JupyterFrontEnd, tracker : INotebookTracker) => {
-    console.log("Hello world");
     
     if (tracker.currentWidget) {
       tracker.currentWidget.content.widgets.forEach((cell: Cell) => {
         console.log("cell ", cell.id);
       }); 
     }
+    const startPromise = app.restored;
 
-    const prompter = new CellPrompter(app, tracker);
-    app.docRegistry.addWidgetExtension("Notebook", prompter);
+    startPromise.then(function() {
+      const prompter = new CellPrompter(app, tracker);
+      app.docRegistry.addWidgetExtension("Notebook", prompter);
+    });
   }
 
 };

@@ -20,6 +20,7 @@ export class CellListen {
   constructor(notebookPanel : NotebookPanel) {
     console.log("init listener");
     this.notebookPanel = notebookPanel;
+    console.log("nbpanel = ",notebookPanel);
     this.init();
   }
 
@@ -29,12 +30,18 @@ export class CellListen {
   private async init() {
 
     await this.notebookPanel.revealed;
+    console.log("notebookpanel revealed");
     this.notebook = this.notebookPanel.content;
+    console.log("notebook = ", this.notebook);
     this.listen();
     this._ready.resolve(undefined) /* IDK what this does*/
   }
 
   private listen() {
+
+    console.log("listening");
+    console.log("changed = ",this.notebook.model.cells.changed);
+
     this.notebook.model.cells.changed.connect(
       (sender: any, data: IObservableList.IChangedArgs<ICellModel>) => {
         console.log("Cell list change type: ", data.type);
