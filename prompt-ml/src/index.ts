@@ -73,6 +73,7 @@ const extension: JupyterFrontEndPlugin<void> = {
         console.log("cell ", cell.id);
       }); 
     }
+
     const startPromise = app.restored;
 
     startPromise.then(function() {

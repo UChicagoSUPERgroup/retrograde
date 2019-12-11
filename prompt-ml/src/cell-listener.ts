@@ -1,16 +1,47 @@
 import { 
   NotebookPanel, 
   Notebook, 
+  NotebookActions,
 } from "@jupyterlab/notebook";
 
 import {
   ICellModel,
+  Cell,
 } from "@jupyterlab/cells";
 
 import { IObservableList } from "@jupyterlab/observables";
+import { ServerConnection } from "@jupyterlab/services";
 
 import { PromiseDelegate } from "@phosphor/coreutils";
+import { CodeCellClient } from "./client";
+export class Listener {
+  /*
+   This listens on a notebook and records changes to cells on execution
+  */
+  private client: CodeCellClient;
+  constructor(client: CodeCellClient) {
+    this.client = client;
+    this.init();
+  }
 
+  private async init() {
+    this.listen();
+    this._ready.resolve(undefined);
+  }
+
+  private listen() {
+    NotebookActions.executed().connect(
+      (notebook: Notebook, cell: Cell) => {
+        if (cell.model.isCodeCell()) {
+          console.log("sent ", cell.model.value);
+          this.client.request(
+            "exec", "POST", cell.model.value, ServerConnection.defaultSettings);
+        } 
+      });
+  }
+
+  private _ready = new PromiseDelegate<void>();
+}
 export class CellListen {
   /*public activeCell: Cell;*/
   /**
@@ -47,6 +78,10 @@ export class CellListen {
         console.log("Cell list change type: ", data.type);
         /*TODO: add change type handling*/
       });
+    this.notebook.model.contentChanged.connect(
+      (sender: any, data: any) => {
+        console.log("notebook changed", data);
+    });
   }
 
   private _ready = new PromiseDelegate<void>();
