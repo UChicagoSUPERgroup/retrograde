@@ -6,6 +6,7 @@ import {
 
 import {
   ICellModel,
+  CodeCell,
   Cell,
 } from "@jupyterlab/cells";
 
@@ -14,6 +15,7 @@ import { ServerConnection } from "@jupyterlab/services";
 
 import { PromiseDelegate } from "@phosphor/coreutils";
 import { CodeCellClient } from "./client";
+
 export class Listener {
   /*
    This listens on a notebook and records changes to cells on execution
@@ -30,14 +32,26 @@ export class Listener {
   }
 
   private listen() {
-    NotebookActions.executed().connect(
-      (notebook: Notebook, cell: Cell) => {
-        if (cell.model.isCodeCell()) {
-          console.log("sent ", cell.model.value);
+
+    var cell: Cell;
+//    var notebook: Notebook;
+
+    NotebookActions.executed.connect(
+      (signal: any, bunch: object) => {
+       
+        console.log(typeof bunch);
+        console.log(Object.getOwnPropertyNames(bunch));
+
+        cell = (Object(bunch)["cell"] as Cell);
+//        notebook = (Object(bunch)["notebook"] as Notebook);
+
+        if (cell instanceof CodeCell) {
+
+          console.log("sent ", cell);
           this.client.request(
-            "exec", "POST", cell.model.value, ServerConnection.defaultSettings);
-        } 
-      });
+            "exec", "POST", (cell as CodeCell).model.value, ServerConnection.defaultSettings);
+        }
+      })
   }
 
   private _ready = new PromiseDelegate<void>();
