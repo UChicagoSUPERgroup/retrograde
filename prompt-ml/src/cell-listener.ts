@@ -34,22 +34,29 @@ export class Listener {
   private listen() {
 
     var cell: Cell;
+    var contents: string;
+    var id: string;
 //    var notebook: Notebook;
 
     NotebookActions.executed.connect(
       (signal: any, bunch: object) => {
        
-        console.log(typeof bunch);
-        console.log(Object.getOwnPropertyNames(bunch));
-
         cell = (Object(bunch)["cell"] as Cell);
 //        notebook = (Object(bunch)["notebook"] as Notebook);
 
         if (cell instanceof CodeCell) {
 
           console.log("sent ", cell);
+          // todo: cell is cyclic, so cannot turn into string
+          contents = cell.model.value.text;
+          id = cell.model.id;
+
           this.client.request(
-            "exec", "POST", (cell as CodeCell).model.value, ServerConnection.defaultSettings);
+            "exec", "POST", 
+            JSON.stringify({
+                contents, 
+                id}),
+            ServerConnection.defaultSettings);
         }
       })
   }
