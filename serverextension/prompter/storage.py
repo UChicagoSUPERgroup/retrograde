@@ -13,17 +13,17 @@ class DbHandler(object):
 
         db_path_resolved = os.path.expanduser(dirname)
 
-        try:
-            conn = sqlite3.connect(db_path_resolved+dbname, 
-                detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
-            self._cursor = conn.cursor()
+        if os.path.isdir(db_path_resolved) and os.path.isfile(db_path_resolved+dbname):
 
-        except sqlite3.OperationalError:
-            if not os.path.isdir(DB_DIR):
-               os.mkdir(db_path_resolved)
-            conn = sqlite3.connect(db_path_resolved+dbname, 
+            self._conn = sqlite3.connect(db_path_resolved+dbname, 
                 detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
-            self._cursor = conn.cursor()
+            self._cursor = self._conn.cursor()
+        else:
+            if not os.path.isdir(db_path_resolved):
+               os.mkdir(db_path_resolved)
+            self._conn = sqlite3.connect(db_path_resolved+dbname, 
+                detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
+            self._cursor = self._conn.cursor()
             self._init_db()
 
     def _init_db(self):
@@ -36,5 +36,5 @@ class DbHandler(object):
         self._cursor.execute("""
             CREATE TABLE versions(id TEXT, version INT, time TIMESTAMP, contents TEXT, PRIMARY KEY(id, version))
         """)
+        self._conn.commit()
 
-        self._cursor.commit()

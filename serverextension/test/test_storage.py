@@ -34,13 +34,13 @@ class TestDBMethods(unittest.TestCase):
         tables = cursor.fetchall() 
         
         self.assertEqual(len(tables), 2)
-        table_names = [t["name"] for t in tables]
+        table_names = [t[0] for t in tables]
 
         self.assertTrue("cells" in table_names)
         self.assertTrue("versions" in table_names)
 
     def tearDown(self):
-        if os.is_file(self.TEST_DB_DIR+self.TEST_DB_NAME):
+        if os.path.exists(self.TEST_DB_DIR+self.TEST_DB_NAME):
             os.remove(self.TEST_DB_DIR+self.TEST_DB_NAME)
 
 if __name__ == "__main__":
