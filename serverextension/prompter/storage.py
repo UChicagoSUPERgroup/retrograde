@@ -38,3 +38,4 @@ class DbHandler(object):
         """)
         self._conn.commit()
 
+#    def add_entry(self, entry):
