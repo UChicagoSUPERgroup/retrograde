@@ -28,6 +28,64 @@ Right now it just responds to the GET requests.
 
 It will need to store the contents of the cells in a database as well as contain a mechanism for determining which cells need characterization.
 
+# Build Instructions
+
+This extension is best developed using a python virtual environment.
+This is because fully testing the front and back end requires installing the backend as a library accessible to jupyter.
+
+To set up the virtual environment:
+
+```bash
+git clone https://bitbucket.org/galen_harrison/prompt-ml.git
+cd prompt-ml
+python3 -m venv .
+source bin/activate
+pip3 install jupyterlab
+```
+This only needs to happen once. 
+After this step, you can just use source bin/activate and deactivate to start the environment.
+To run jupyterlab, from the prompt-ml directory: 
+
+```bash
+source bin/activate
+jupyter lab .
+```
+In order to install the front end plugin, from the top level directory:
+
+```bash
+cd ./prompt-ml
+jlpm install
+jupyter labextension install --no-build
+```
+
+To install the back end plugin from the top level directory, while in the virtual environment:
+
+```bash
+cd ./serverextension
+python3 setup.py install
+pip3 install -U -I dist/prompter-0.1-py3-none-any.whl
+jupyter serverextension enable --py prompter --sys-prefix --debug
+jupyter serverextension list
+```
+
+To test the installation, go back to the top level directory in this repo, and run `jupyter lab .`.
+This should open a browser window with the jupyter lab environment. 
+Open a new python notebook, enter some python code and execute the cell.
+If you look in the log, you should see whatever code you wrote down echoed in the console.
+
+For example, the cell I executed was 
+
+```python
+print("hello world")
+```
+
+so the output I saw was
+
+```python
+{'contents': 'print("hello world")', 'id': '2ce8fc3c-1f65-4294-b23f-c267e5db91d0'}
+```
+
+
 # Helpful examples
 
 [Jupyter lab code formatter](https://github.com/ryantam626/jupyterlab_code_formatter)
