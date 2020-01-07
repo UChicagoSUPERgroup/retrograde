@@ -38,4 +38,29 @@ class DbHandler(object):
         """)
         self._conn.commit()
 
-#    def add_entry(self, entry):
+    def add_entry(self, cell):
+        """
+         TODO: should take cell, and add it to the database
+               a cell is a python object produced by the 
+               tornado.escape.json_decode call in the CodeExecHandler.post
+               method.
+
+               The cell is an object with an 'id' field (a unique 
+               alphanumeric identifier for that code cell), and a 'contents'
+               field, which is a string containing the code in the cell.
+
+               At most two things need to happen to add the cell to the database.
+               
+               if the cell is new (as determined by the id), then we need to insert a 
+               new entry into the cells table.
+
+               If the cell is not new, then we need to increment the num_exec field, 
+               update the last_exec field, and replace the contents field with
+               the most recent cell contents, if they have changed.
+
+               In both cases, we will need to see if the cell is a new version or not.
+               If the cell is not a new version (the code has changed), then we 
+               will need to create a new entry in the versions table  
+        """
+
+        pass
