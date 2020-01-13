@@ -34,7 +34,7 @@ class DbHandler(object):
             CREATE TABLE cells(id TEXT PRIMARY KEY, contents TEXT, num_exec INT, last_exec TIMESTAMP)
             """)
         self._cursor.execute("""
-            CREATE TABLE versions(id TEXT, version INT, time TIMESTAMP, contents TEXT, PRIMARY KEY(id, version))
+            CREATE TABLE versions(id TEXT, version INT, time TIMESTAMP, contents TEXT, PRIMARY KEY(id, text))
         """)
         self._conn.commit()
 
@@ -60,7 +60,7 @@ class DbHandler(object):
 
                In both cases, we will need to see if the cell is a new version or not.
                If the cell is not a new version (the code has changed), then we 
-               will need to create a new entry in the versions table  
+               will need to create a new entry in the versions table
         """
 
         pass
