@@ -6,6 +6,11 @@ bin/**
 etc/**
 serverextension/build/
 serverextension/dist/
+serverextension/prompter.egg-info/
 **/__pycache__
 share/**
-pyenv.cfg
+pyvenv.cfg
+*.ipynb
+package-lock.json
+**/yarn.lock
+**/tsconfig.tsbuildinfo
