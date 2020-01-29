@@ -1,0 +1,11 @@
+**/.DS_Store
+**/*.swp
+**/*.swo
+lib/**
+bin/**
+etc/**
+serverextension/build/
+serverextension/dist/
+**/__pycache__
+share/**
+pyenv.cfg
