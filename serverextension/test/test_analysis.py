@@ -3,15 +3,21 @@ test the DbHandler methods
 """
 
 import unittest
-import sqlite3
-import os
 
 from ast import parse
 from context import prompter
 
 class TestAnalysisMethods(unittest.TestCase):
+    """
+    test import detection, new data addition, tracking, and model train/test
+    call functionality
+    """
 
     def test_import_module(self):
+        """
+        test whether various ways of importing pandas and sklearn functions
+        are properly detected
+        """
 
         simple_import = "import pandas"
         alias_import = "import pandas as pd"
@@ -64,7 +70,7 @@ class TestAnalysisMethods(unittest.TestCase):
             "sklearn" : 
                 {"module_aliases" : set(["sk"]),
                  "func_mapping" : {},
-                 "functions" : set()},
+                  "functions" : set()},
             },
             {"pandas" : 
                 {"module_aliases" : set(), 
@@ -75,12 +81,12 @@ class TestAnalysisMethods(unittest.TestCase):
                  "func_mapping" : {},
                  "functions" : set()},
             },]
-        for source,import_ast,expected in zip(imports_list, imports_asts, expected_outputs):
+        for import_ast, expected in zip(imports_asts, expected_outputs):
 
             env = prompter.AnalysisEnvironment(None)
             env.add_imports(import_ast)
-            self._compare_alias_env(env, expected_outputs)
-            
+            self._compare_alias_env(env, expected)
+
     def _compare_alias_env(self, env, expected):
 
         self.assertEqual(expected["pandas"]["module_aliases"],
@@ -89,7 +95,7 @@ class TestAnalysisMethods(unittest.TestCase):
                          env.pandas_alias.func_mapping)
         self.assertEqual(expected["pandas"]["functions"],
                          env.pandas_alias.functions)
-                          
+
         self.assertEqual(expected["sklearn"]["module_aliases"],
                          env.sklearn_alias.module_aliases)
         self.assertEqual(expected["sklearn"]["func_mapping"],
@@ -98,99 +104,230 @@ class TestAnalysisMethods(unittest.TestCase):
                          env.sklearn_alias.functions)
 
     def test_import_from(self):
+        """test whether imports of the form "from <module> import foo" are correctly tagged"""
 
         from_import = "from pandas import Dataframe"
         from_alias = "from pandas import Dataframe as Df"
         from_submod = "from sklearn.neighbors import BallTree"
         from_as_submod = "from sklearn.neighbors import BallTree as bt"
 
+        import_stmnts = [from_import, from_alias, from_submod, from_as_submod]
+        import_asts = [parse(stmnt).body[0] for stmnt in import_stmnts]
+
         expected_outputs = [
-            {"pandas" : 
-                {"module_aliases" : set(), 
+            {"pandas" : {
+                "module_aliases" : set(),
                  "func_mapping" : {"Dataframe" : "Dataframe"},
                  "functions" : set(["Dataframe"])},
-            "sklearn" : 
-                {"module_aliases" : set(),
-                 "func_mapping" : {},
-                 "functions" : set()},
+            "sklearn" : {
+                "module_aliases" : set(),
+                "func_mapping" : {},
+                "functions" : set()},
             },
-            {"pandas" : 
-                {"module_aliases" : set(), 
+            {"pandas" : {
+                "module_aliases" : set(),
                  "func_mapping" : {"Dataframe": "Df"},
                  "functions" : set("Df")},
-            "sklearn" : 
-                {"module_aliases" : set(),
-                 "func_mapping" : {},
-                 "functions" : set()},
+             "sklearn" : {
+                "module_aliases" : set(),
+                "func_mapping" : {},
+                "functions" : set()},
             },
-            {"pandas" : 
-                {"module_aliases" : set(), 
-                 "func_mapping" : {},
-                 "functions" : set()},
-            "sklearn" : 
-                {"module_aliases" : set(),
-                 "func_mapping" : {"BallTree" : "BallTree"},
-                 "functions" : set(["BallTree"])},
+            {"pandas" : {
+                "module_aliases" : set(),
+                "func_mapping" : {},
+                "functions" : set()},
+             "sklearn" : {
+                "module_aliases" : set(),
+                "func_mapping" : {"BallTree" : "BallTree"},
+                "functions" : set(["BallTree"])},
             },
-            {"pandas" : 
-                {"module_aliases" : set(), 
-                 "func_mapping" : {},
-                 "functions" : set()},
-            "sklearn" : 
-                {"module_aliases" : set(),
-                 "func_mapping" : {"BallTree", "bt"},
-                 "functions" : set("bt")},
+            {"pandas" : {
+                "module_aliases" : set(),
+                "func_mapping" : {},
+                "functions" : set()},
+             "sklearn" : {
+                "module_aliases" : set(),
+                "func_mapping" : {"BallTree", "bt"},
+                "functions" : set("bt")},
             },]
-        for source,import_ast,expected in zip(imports_list, imports_asts, expected_outputs):
+        for import_ast, expected in zip(import_asts, expected_outputs):
 
             env = prompter.AnalysisEnvironment(None)
             env.add_imports(import_ast)
-            self._compare_alias_env(env, expected_outputs)
+            self._compare_alias_env(env, expected)
 
     def test_newdata(self):
-
-        formats = ["csv", "fwf", "json", "html", "clipboard", "excel", 
-                    "hdf", "feather", "parquet", "orc", "msgpack", "stata",
-                    "sas", "spss", "pickle", "sql", "gbq"]
+        """
+        test whether importation of new data is properly noted
+        """
+        formats = ["csv", "fwf", "json", "html", "clipboard", "excel",
+                   "hdf", "feather", "parquet", "orc", "msgpack", "stata",
+                   "sas", "spss", "pickle", "sql", "gbq"]
 
         function_names = ["read_"+fmt for fmt in formats]
-        import_stmnt = "import pandas as pd\n" 
+        import_stmnt = "import pandas as pd\n"
         calls = [import_stmnt+"df = pd."+fn+"(filename.csv)" for fn in function_names]
-        
-    
-        for call in calls:
+
+        expected_imports = {
+            "pandas" :
+                {"module_aliases" : set(["pd"]),
+                 "func_mapping" : {},
+                 "functions" : set()},
+            "sklearn" :
+                {"module_aliases" : set(),
+                 "func_mapping" : {},
+                 "functions" : set()},
+            }
+
+        expected = [{"df": {"source": "filename.csv", "format" : fmt}} for fmt in formats]
+
+        for call, data in zip(calls, expected):
 
             env = prompter.AnalysisEnvironment(None)
-            output = env.new_data(call_ast)
-            self.assertEqual(output, "filename.csv", "error interpreting "+call)
+            env.execute_line(call)
+
+            self._compare_alias_env(env, expected_imports)
+            self._compare_new_data_env(env, data)
+
+    def _compare_new_data_env(self, env, data_entries):
+        """
+        are the expected source nodes noted in the environment?
+        """
+        for var_name in data_entries.keys():
+            self.assertTrue(var_name in env.entry_points,
+                            "{0} not in {1}".format(var_name, str(env.entry_points)))
+            self.assertEqual(data_entries[var_name], env.entry_points[var_name])
+
     def test_newdata_importfrom(self):
         """
         test from pandas import read_*
         """
 
-        formats = ["csv", "fwf", "json", "html", "clipboard", "excel", 
-                    "hdf", "feather", "parquet", "orc", "msgpack", "stata",
-                    "sas", "spss", "pickle", "sql", "gbq"]
+        formats = ["csv", "fwf", "json", "html", "clipboard", "excel",
+                   "hdf", "feather", "parquet", "orc", "msgpack", "stata",
+                   "sas", "spss", "pickle", "sql", "gbq"]
 
         function_names = ["read_"+fmt for fmt in formats]
-         
-        calls = ["from pandas import "+fn+"\n" for fn in function_names]
+
+        calls = ["from pandas import "+fn+"\n df = "+fn+"(filename.csv)" for fn in function_names]
+
+        expected = [{"df": {"source": "filename.csv", "format" : fmt}} for fmt in formats]
+
+        for call, data in zip(calls, expected):
+
+            env = prompter.AnalysisEnvironment(None)
+            env.execute_line(call)
+
+            self._compare_new_data_env(env, data)
 
     def test_newdata_import_alias(self):
         """
         test from pandas import read_* as func_name
         """
-        pass
-    def test_newdata_import_comprehension(self)
+        formats = ["csv", "fwf", "json", "html", "clipboard", "excel",
+                   "hdf", "feather", "parquet", "orc", "msgpack", "stata",
+                   "sas", "spss", "pickle", "sql", "gbq"]
+
+        function_names = ["read_"+fmt for fmt in formats]
+
+        calls = ["from pandas import "+fn+" as gimme_data\n df = gimme_data(filename.csv)"
+                 for fn in function_names]
+
+        expected = [{"df": {"source": "filename.csv", "format" : fmt}} for fmt in formats]
+
+        for call, data in zip(calls, expected):
+
+            env = prompter.AnalysisEnvironment(None)
+            env.execute_line(call)
+
+            self._compare_new_data_env(env, data)
+
+    def test_newdata_slicing_chaining(self):
         """
-        test x = read_csv()[d]...[y]
+        test x = read_csv()[d]...[y], or x = read_csv().select()
         """
-        pass 
-    def test_newdata_import_chaining(self):
+
+        slicing_cell = """
+            from pandas import read_fwf
+            df = read_fwf(filename)[0:6,5:10]
+            """
+        chaining_cell = """
+            import pandas as pd
+            df = pd.read_csv(filename).between_time("2016-05-01","2020-01-01")
+            """
+
+        expected_slicing = {"df" : {"source": "filename", "format" : "fwf"}}
+        expected_chaining = {"df" : {"source": "filename", "format" : "csv"}}
+
+        env = prompter.AnalysisEnvironment(None)
+        env.execute_line(parse(slicing_cell).body[0])
+        self._compare_new_data_env(env, expected_slicing)
+
+        env = prompter.AnalysisEnvironment(None)
+        env.execute_line(parse(chaining_cell).body[0])
+        self._compare_new_data_env(env, expected_chaining)
+
+    def test_multiple_new_datasources(self):
         """
-        test x = read_csv(file).select()
+        make sure that we get both data sources in when multiple
+        read_* calls are made
         """
-        pass
+        multiple_cell = """
+            import pandas as pd
+            df = pd.read_csv(filename).between_time("2016-05-01","2020-01-01")
+            df2 = pd.read_csv(filename).between_time("2016-05-02","2020-02-01")
+            """
+
+        expected_multiple = {"df" : {"source": "filename", "format" : "csv"},
+                             "df2" : {"source" : "filename", "format" : "csv"}}
+
+        env = prompter.AnalysisEnvironment(None)
+        env.execute_line(parse(multiple_cell).body[0])
+        self._compare_new_data_env(env, expected_multiple)
+
+    def test_reassign_newdata(self):
+        """
+        df = read_csv(file1) df = read_csv(file2), should only have 1
+        df = read_csv(file) df = x + 1
+        also del df
+        """
+
+        reassign_cell = """
+            from pandas import read_csv 
+            df = read_csv(filename).between_time("2016-05-01","2020-01-01")
+            df = read_csv(filename).between_time("2016-05-02","2020-02-01")
+            """
+
+        expected_reassign = {"df" : {"source": "filename", "format" : "csv"}}
+
+        env = prompter.AnalysisEnvironment(None)
+        env.execute_line(parse(reassign_cell).body[0])
+        self._compare_new_data_env(env, expected_reassign)
+
+        newvar_cell = """
+            from pandas import read_csv 
+            df = read_csv(filename).between_time("2016-05-01","2020-01-01")
+            df = 12 + 6
+            """
+
+        expected_newvar = {"df" : {"source": "filename", "format" : "csv"}}
+
+        env = prompter.AnalysisEnvironment(None)
+        env.execute_line(parse(newvar_cell).body[0])
+        self._compare_new_data_env(env, expected_newvar)
+
+        delete_cell = """
+            from pandas import read_csv 
+            df = read_csv(filename).between_time("2016-05-01","2020-01-01")
+            del df
+            """
+
+        expected_delete = {"df" : {"source": "filename", "format" : "csv"}}
+
+        env = prompter.AnalysisEnvironment(None)
+        env.execute_line(parse(delete_cell).body[0])
+        self._compare_new_data_env(env, expected_delete)
 
 if __name__ == "__main__":
     unittest.main()

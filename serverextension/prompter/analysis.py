@@ -11,13 +11,11 @@ class AnalysisEnvironment(object):
     """
     def __init__(self, dbhandler):
 
-        self.pandas_alias = Alias("pandas")
-        self.sklearn_alias = Alias("sklearn")
+        self.pandas_alias = Aliases("pandas")
+        self.sklearn_alias = Aliases("sklearn")
 
-        self._var_table = {
-            "functions" : {},
-            "vars" : {}}
-    
+        self.entry_points = {}
+
 #        self._session = InteractiveInterpreter()
 
     def cell_exec(self, code):
@@ -28,10 +26,11 @@ class AnalysisEnvironment(object):
        
         for block in cell_code.body: 
             if type(block) in [ClassDef, FunctionDef]:
-                self.execute_function(block):
+                self.execute_function(block)
             else:
                 self.execute_line(block)
-
+    def execute_function(self, line):
+        pass
     def execute_line(self, line):
         """
         execute a single line from the cell. 
@@ -40,6 +39,7 @@ class AnalysisEnvironment(object):
         if type(line) == Import:
             self.add_imports(line)
         if type(line) == Assign:
+            pass
             # bringing in new data?
             # data being propagated?
     def add_imports(self, line):
@@ -70,7 +70,7 @@ class AnalysisEnvironment(object):
         """
         note introduction of new entry points (i.e. call to pd.read_*)
         """
-        
+                
 class Aliases(object):
 
     def __init__(self, module_name):
