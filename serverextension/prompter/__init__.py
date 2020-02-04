@@ -10,6 +10,7 @@ from notebook.base.handlers import APIHandler
 from notebook.utils import url_path_join
 
 from prompter.storage import DbHandler
+from prompter.analysis import AnalysisEnvironment
 
 # all the examples I've seen require _jupyter_server_extension_paths
 # and load_jupyter_server_extension
