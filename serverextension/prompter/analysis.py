@@ -7,9 +7,12 @@ from code import InteractiveInterpreter
 
 class AnalysisEnvironment(object):
     """
-    Analysis environment creates a session wit
+    Analysis environment tracks relevant variables in execution
+
+    TODO: should add ability to execute in parallel, in order to be able to run
+          tests DS isn't thinking of
     """
-    def __init__(self, dbhandler):
+    def __init__(self):
 
         self.pandas_alias = Aliases("pandas")
         self.sklearn_alias = Aliases("sklearn")
@@ -23,25 +26,7 @@ class AnalysisEnvironment(object):
         execute a cell and propagate the analysis
         """
         cell_code = parse(code) 
-       
-        for block in cell_code.body: 
-            if type(block) in [ClassDef, FunctionDef]:
-                self.execute_function(block)
-            else:
-                self.execute_line(block)
-    def execute_function(self, line):
-        pass
-    def execute_line(self, line):
-        """
-        execute a single line from the cell. 
-        """
-        # imports?
-        if type(line) == Import:
-            self.add_imports(line)
-        if type(line) == Assign:
-            pass
-            # bringing in new data?
-            # data being propagated?
+
     def add_imports(self, line):
         """
         take an import ast node and render the names to watch for
@@ -70,7 +55,8 @@ class AnalysisEnvironment(object):
         """
         note introduction of new entry points (i.e. call to pd.read_*)
         """
-                
+    def is_tagged(self, node):
+        pass
 class Aliases(object):
 
     def __init__(self, module_name):
@@ -103,11 +89,57 @@ class Aliases(object):
         
         in normal case return true for things like pandas.Dataframe 
         """
+        pass #TODO
 
-        self._imports.sort(key = lambda x: x.count("."))
-         
-        for already_import in self._imports:
-            # this is a bug - but not likely to come up
-            if modulename.find(already_import) == 0:
-                return True
-        return False
+    def add_import(self, alias_node):
+        """
+        take an alias node from an import stmnt ("name","asname") and 
+        add to space if imported module a submod of this alias space
+        """
+        pass #TODO
+    def add_importfrom(self, module_name, alias_node):
+        """
+        take an import from statement, and add mapping if 
+        module_name is a submodule of this alias space
+        """
+        pass # TODO
+
+class CellVisitor(NodeVisitor):
+
+    """
+    visit the AST of the code in the cell
+    connect data introduction, flow, and sinks
+    """
+
+    def __init__(self, environment):
+        """
+        environment = the analysis environment, necessary to log aliases, etc.
+        """
+        super.__init__()
+        self.env = environment
+
+    def visit_Import(self, node):
+        """visit nodes formed by import foo or import foo.bar or import foo as bar"""
+        for alias in node.names:
+            self.env.pandas_alias.add_import(alias)
+            self.env.sklearn_alias.add_import(alias)
+
+    def visit_ImportFrom(self, node):
+        """visit nodes which are like import x from y [as z]"""
+        for alias in node.names:
+            self.env.pandas_alias.add_importfrom(module_name, alias)
+            self.env.sklearn_alias.add_importfrom(module_name, alias)
+
+    def visit_Assign(self, node):
+        """
+        in visiting assign, check if the RHS either is tagged (TODO) or
+        intros new data
+        """
+        self.generic_visit(node) # visit children BEFORE completing this 
+   
+        if self.env.is_tagged(node.value):
+            for trgt in node.targets:
+                self.env.tag(trgt)
+
+    def visit_Call(self, node)
+    # TODO: function definitions
