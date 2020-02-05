@@ -26,37 +26,22 @@ class AnalysisEnvironment(object):
         execute a cell and propagate the analysis
         """
         cell_code = parse(code) 
-
-    def add_imports(self, line):
-        """
-        take an import ast node and render the names to watch for
-        """
-         
-        new_imports = []
-
-        if type(line) == Import:
-            for alias_node in line.names:
-                if self._check_submod(alias_node.name):
-                    if not alias_node.asname:
-                        new_imports.append(alias_node.name)
-                    else:
-                        new_imports.append(alias_node.asname)
-        elif type(line) == ImportFrom:
-            if self._check_submod(line.module):
-                for alias_node in line.names:
-                    if not alias_node.asname:
-                        new_imports.append(alias_node.name)
-                    else:
-                        new_imports.append(alias_node.asname)
-        return new_imports
-
+        visitor = CellVisitor(self)
+        visitor.visit(cell_code)
     
     def new_data(self, line):
         """
         note introduction of new entry points (i.e. call to pd.read_*)
         """
     def is_tagged(self, node):
+        """
+        is a node tagged, and if not is it new data?
+
+        if it is new data, tag it and create node in graph
+        """
         pass
+    def link(self, value, target):
+        """link two nodes together"""
 class Aliases(object):
 
     def __init__(self, module_name):
@@ -139,7 +124,14 @@ class CellVisitor(NodeVisitor):
    
         if self.env.is_tagged(node.value):
             for trgt in node.targets:
-                self.env.tag(trgt)
+                self.env.link(node.value, trgt)
 
-    def visit_Call(self, node)
+    def visit_Call(self, node):
+        """propogate tagging if function or arguments tagged"""
+        self.generic_visit(node)
+        if self.env.is_tagged(node.func):
+            self.env.link(node.func, node)
+        for arg in node.args:
+            if self.env.is_tagged(arg): self.env.link(arg, node)
+
     # TODO: function definitions
