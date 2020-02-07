@@ -49,7 +49,11 @@ class AnalysisEnvironment(object):
         """add an entry point"""
         source = as_string(call_node.args[0])
         if type(call_node.func) == Name:
-            fmt = call_node.func.id.split("_")[-1]
+            if call_node.func.id not in self._read_funcs:
+                func_name = self.pandas_alias.get_alias_for(call_node.func.id)
+                fmt = func_name.split("_")[-1]
+            else:
+                fmt = call_node.func.id.split("_")[-1]
         else:
             fmt = call_node.func.attr.split("_")[-1]
         for target in targets:
@@ -145,6 +149,13 @@ class Aliases(object):
             else:
                 self.func_mapping[alias_node.name] = alias_node.name
                 self.functions.add(alias_node.name)
+
+    def get_alias_for(self, func_name):
+        """return function func_name is alias for"""
+        for mod_func, alias in self.func_mapping.items():
+            if alias == func_name:
+                return mod_func
+        return None
 
 class CellVisitor(NodeVisitor):
 
