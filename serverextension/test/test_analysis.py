@@ -33,8 +33,6 @@ class TestAnalysisMethods(unittest.TestCase):
                         multiple_import, multiple_alias, submod_import]
 
         
-        imports_asts = [parse(c).body[0] for c in imports_list]
-       
         expected_outputs = [
             {"pandas" : 
                 {"module_aliases" : set(["pandas"]), 
@@ -77,14 +75,14 @@ class TestAnalysisMethods(unittest.TestCase):
                  "func_mapping" : {},
                  "functions" : set()},
             "sklearn" : 
-                {"module_aliases" : set(["sklearn"]),
+                {"module_aliases" : set(["sklearn.metrics"]),
                  "func_mapping" : {},
                  "functions" : set()},
             },]
-        for import_ast, expected in zip(imports_asts, expected_outputs):
+        for import_stmnt, expected in zip(imports_list, expected_outputs):
 
-            env = prompter.AnalysisEnvironment(None)
-            env.add_imports(import_ast)
+            env = prompter.AnalysisEnvironment()
+            env.cell_exec(import_stmnt)
             self._compare_alias_env(env, expected)
 
     def _compare_alias_env(self, env, expected):
@@ -112,8 +110,6 @@ class TestAnalysisMethods(unittest.TestCase):
         from_as_submod = "from sklearn.neighbors import BallTree as bt"
 
         import_stmnts = [from_import, from_alias, from_submod, from_as_submod]
-        import_asts = [parse(stmnt).body[0] for stmnt in import_stmnts]
-
         expected_outputs = [
             {"pandas" : {
                 "module_aliases" : set(),
@@ -127,7 +123,7 @@ class TestAnalysisMethods(unittest.TestCase):
             {"pandas" : {
                 "module_aliases" : set(),
                  "func_mapping" : {"Dataframe": "Df"},
-                 "functions" : set("Df")},
+                 "functions" : set(["Df"])},
              "sklearn" : {
                 "module_aliases" : set(),
                 "func_mapping" : {},
@@ -148,13 +144,13 @@ class TestAnalysisMethods(unittest.TestCase):
                 "functions" : set()},
              "sklearn" : {
                 "module_aliases" : set(),
-                "func_mapping" : {"BallTree", "bt"},
-                "functions" : set("bt")},
+                "func_mapping" : {"BallTree": "bt"},
+                "functions" : set(["bt"])},
             },]
-        for import_ast, expected in zip(import_asts, expected_outputs):
+        for import_stmnt, expected in zip(import_stmnts, expected_outputs):
 
-            env = prompter.AnalysisEnvironment(None)
-            env.add_imports(import_ast)
+            env = prompter.AnalysisEnvironment()
+            env.cell_exec(import_stmnt)
             self._compare_alias_env(env, expected)
 
     def test_newdata(self):
@@ -184,8 +180,8 @@ class TestAnalysisMethods(unittest.TestCase):
 
         for call, data in zip(calls, expected):
 
-            env = prompter.AnalysisEnvironment(None)
-            env.execute_line(call)
+            env = prompter.AnalysisEnvironment()
+            env.cell_exec(call)
 
             self._compare_alias_env(env, expected_imports)
             self._compare_new_data_env(env, data)
@@ -210,14 +206,14 @@ class TestAnalysisMethods(unittest.TestCase):
 
         function_names = ["read_"+fmt for fmt in formats]
 
-        calls = ["from pandas import "+fn+"\n df = "+fn+"(filename.csv)" for fn in function_names]
+        calls = ["from pandas import "+fn+"\ndf = "+fn+"(filename.csv)" for fn in function_names]
 
         expected = [{"df": {"source": "filename.csv", "format" : fmt}} for fmt in formats]
 
         for call, data in zip(calls, expected):
 
-            env = prompter.AnalysisEnvironment(None)
-            env.execute_line(call)
+            env = prompter.AnalysisEnvironment()
+            env.cell_exec(call)
 
             self._compare_new_data_env(env, data)
 
@@ -231,15 +227,15 @@ class TestAnalysisMethods(unittest.TestCase):
 
         function_names = ["read_"+fmt for fmt in formats]
 
-        calls = ["from pandas import "+fn+" as gimme_data\n df = gimme_data(filename.csv)"
+        calls = ["from pandas import "+fn+" as gimme_data\ndf = gimme_data(filename.csv)"
                  for fn in function_names]
 
         expected = [{"df": {"source": "filename.csv", "format" : fmt}} for fmt in formats]
 
         for call, data in zip(calls, expected):
 
-            env = prompter.AnalysisEnvironment(None)
-            env.execute_line(call)
+            env = prompter.AnalysisEnvironment()
+            env.cell_exec(call)
 
             self._compare_new_data_env(env, data)
 
@@ -248,24 +244,19 @@ class TestAnalysisMethods(unittest.TestCase):
         test x = read_csv()[d]...[y], or x = read_csv().select()
         """
 
-        slicing_cell = """
-            from pandas import read_fwf
-            df = read_fwf(filename)[0:6,5:10]
-            """
-        chaining_cell = """
-            import pandas as pd
-            df = pd.read_csv(filename).between_time("2016-05-01","2020-01-01")
-            """
+        slicing_cell = """from pandas import read_fwf\ndf = read_fwf(filename)[0:6,5:10]"""
+        chaining_cell = """import pandas as pd\n"""+\
+            """df = pd.read_csv(filename).between_time("2016-05-01","2020-01-01")"""
 
         expected_slicing = {"df" : {"source": "filename", "format" : "fwf"}}
         expected_chaining = {"df" : {"source": "filename", "format" : "csv"}}
 
-        env = prompter.AnalysisEnvironment(None)
-        env.execute_line(parse(slicing_cell).body[0])
+        env = prompter.AnalysisEnvironment()
+        env.cell_exec(slicing_cell)
         self._compare_new_data_env(env, expected_slicing)
 
-        env = prompter.AnalysisEnvironment(None)
-        env.execute_line(parse(chaining_cell).body[0])
+        env = prompter.AnalysisEnvironment()
+        env.cell_exec(chaining_cell)
         self._compare_new_data_env(env, expected_chaining)
 
     def test_multiple_new_datasources(self):
@@ -273,17 +264,15 @@ class TestAnalysisMethods(unittest.TestCase):
         make sure that we get both data sources in when multiple
         read_* calls are made
         """
-        multiple_cell = """
-            import pandas as pd
-            df = pd.read_csv(filename).between_time("2016-05-01","2020-01-01")
-            df2 = pd.read_csv(filename).between_time("2016-05-02","2020-02-01")
-            """
+        multiple_cell = "import pandas as pd\n"+\
+            """df = pd.read_csv(filename).between_time("2016-05-01","2020-01-01")\n""" +\
+            """df2 = pd.read_csv(filename).between_time("2016-05-02","2020-02-01")\n"""
 
         expected_multiple = {"df" : {"source": "filename", "format" : "csv"},
                              "df2" : {"source" : "filename", "format" : "csv"}}
 
-        env = prompter.AnalysisEnvironment(None)
-        env.execute_line(parse(multiple_cell).body[0])
+        env = prompter.AnalysisEnvironment()
+        env.cell_exec(multiple_cell)
         self._compare_new_data_env(env, expected_multiple)
 
     def test_reassign_newdata(self):
@@ -293,16 +282,14 @@ class TestAnalysisMethods(unittest.TestCase):
         also del df
         """
 
-        reassign_cell = """
-            from pandas import read_csv 
-            df = read_csv(filename).between_time("2016-05-01","2020-01-01")
-            df = read_csv(filename).between_time("2016-05-02","2020-02-01")
-            """
+        reassign_cell = "from pandas import read_csv\n" +\
+            """df = read_csv(filename).between_time("2016-05-01","2020-01-01")\n"""+\
+            """df = read_csv(filename).between_time("2016-05-02","2020-02-01")\n"""
 
         expected_reassign = {"df" : {"source": "filename", "format" : "csv"}}
 
-        env = prompter.AnalysisEnvironment(None)
-        env.execute_line(parse(reassign_cell).body[0])
+        env = prompter.AnalysisEnvironment()
+        env.cell_exec(reassign_cell)
         self._compare_new_data_env(env, expected_reassign)
 
         newvar_cell = """
@@ -313,8 +300,8 @@ class TestAnalysisMethods(unittest.TestCase):
 
         expected_newvar = {"df" : {"source": "filename", "format" : "csv"}}
 
-        env = prompter.AnalysisEnvironment(None)
-        env.execute_line(parse(newvar_cell).body[0])
+        env = prompter.AnalysisEnvironment()
+        env.cell_exec(newvar_cell)
         self._compare_new_data_env(env, expected_newvar)
 
         delete_cell = """
@@ -325,8 +312,8 @@ class TestAnalysisMethods(unittest.TestCase):
 
         expected_delete = {"df" : {"source": "filename", "format" : "csv"}}
 
-        env = prompter.AnalysisEnvironment(None)
-        env.execute_line(parse(delete_cell).body[0])
+        env = prompter.AnalysisEnvironment()
+        env.cell_exec(delete_cell)
         self._compare_new_data_env(env, expected_delete)
 
 if __name__ == "__main__":
