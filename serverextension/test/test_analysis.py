@@ -292,11 +292,9 @@ class TestAnalysisMethods(unittest.TestCase):
         env.cell_exec(reassign_cell)
         self._compare_new_data_env(env, expected_reassign)
 
-        newvar_cell = """
-            from pandas import read_csv 
-            df = read_csv(filename).between_time("2016-05-01","2020-01-01")
-            df = 12 + 6
-            """
+        newvar_cell = """from pandas import read_csv\n"""+\
+            """df = read_csv(filename).between_time("2016-05-01","2020-01-01")\n"""+\
+            """df = 12 + 6"""
 
         expected_newvar = {"df" : {"source": "filename", "format" : "csv"}}
 
@@ -304,11 +302,9 @@ class TestAnalysisMethods(unittest.TestCase):
         env.cell_exec(newvar_cell)
         self._compare_new_data_env(env, expected_newvar)
 
-        delete_cell = """
-            from pandas import read_csv 
-            df = read_csv(filename).between_time("2016-05-01","2020-01-01")
-            del df
-            """
+        delete_cell = """from pandas import read_csv\n"""+\
+            """df = read_csv(filename).between_time("2016-05-01","2020-01-01")\n"""+\
+            """del df"""
 
         expected_delete = {"df" : {"source": "filename", "format" : "csv"}}
 
