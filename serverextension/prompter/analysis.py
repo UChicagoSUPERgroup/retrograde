@@ -60,13 +60,13 @@ class AnalysisEnvironment(object):
             while type(target) != Name:
                 target = target.value # assumes target is attribute type
             self.entry_points[target.id] = {"source" : source, "format" : fmt}
-    def is_newdata(self, assign_node):
-        """is the call node a call to pd.read_*?"""
-       
-        call_node = get_call(assign_node)
-        if not call_node:
-            return False
- 
+
+    def make_newdata(self, call_node, assign_node):
+        """got to assign at top of new data, fill in entry point"""
+        self._add_entry(call_node, assign_node.targets)
+
+    def is_newdata_call(self, call_node):
+        """is this call node a pd read function"""
         func = call_node.func
 
         if type(func) == Name:
@@ -74,16 +74,14 @@ class AnalysisEnvironment(object):
                 if read_func in self.pandas_alias.func_mapping:
                     if self.pandas_alias.func_mapping[read_func] == func.id:
                         self.graph.root_node(call_node)
-                        self._add_entry(call_node, assign_node.targets)
                         return True
         elif type(func) == Attribute:
             # in this case, no issue with aliasing
             if func.attr in self._read_funcs:
                 self.graph.root_node(call_node)
-                self._add_entry(call_node, assign_node.targets)
                 return True
         return False 
-
+             
     def link(self, value, target):
         """link two nodes together"""
         self.live_set.add(target)
@@ -171,6 +169,7 @@ class CellVisitor(NodeVisitor):
         super().__init__()
         self.env = environment
         self.nodes = set()
+        self.unfinished_call = None
 
     def visit_Import(self, node):
         """visit nodes formed by import foo or import foo.bar or import foo as bar"""
@@ -191,8 +190,11 @@ class CellVisitor(NodeVisitor):
         intros new data
         """
         self.generic_visit(node) # visit children BEFORE completing this 
-        self.env.is_newdata(node)
- 
+        # a call node is newdata, and this is nearest assign 
+        if self.unfinished_call:
+            self.env.make_newdata(self.unfinished_call, node)
+            self.unfinished_call = None
+
         if node.value in self.nodes:
             for trgt in node.targets:
                 self.env.graph.link(node.value, trgt)
@@ -208,14 +210,35 @@ class CellVisitor(NodeVisitor):
         self.generic_visit(node)
         if node.func in self.nodes:
             self.env.graph.link(node.func, node)
+            self.nodes.add(node)
         for arg in node.args:
-            if arg in self.nodes: self.env.graph.link(arg, node)
+            if arg in self.nodes: 
+                self.env.graph.link(arg, node)
+                self.nodes.add(node)
+
+        if self.env.is_newdata_call(node):
+            self.nodes.add(node)
+            self.unfinished_call = node
+
+    def visit_Attribute(self, node):
+        self.generic_visit(node)
+        if node.value in self.nodes: # referencing a tagged element
+            self.nodes.add(node)
+            self.env.graph.link(node.value, node)
 
     def visit_Name(self, node):
         """is name referencing a var we care about?"""
         if self.env.graph.find_by_name(node):
-            self.env.graph.link(self.graph.find_by_name(node), node)
+            self.env.graph.link(self.env.graph.find_by_name(node), node)
+            self.nodes.add(node)
 
+    def visit_Subscript(self, node):
+        self.generic_visit(node)
+        if node.value in self.nodes:
+            self.nodes.add(node)
+            self.env.graph.link(node.value, node)
+#    def visit_Expr(self, node):
+        
     # TODO: function definitions, attributes
 
 class Graph:

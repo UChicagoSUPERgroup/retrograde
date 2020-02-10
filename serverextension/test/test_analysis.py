@@ -4,7 +4,7 @@ test the DbHandler methods
 
 import unittest
 
-from ast import parse
+from ast import parse, Call, Assign, Slice, Name, Attribute, Subscript
 from context import prompter
 
 class TestAnalysisMethods(unittest.TestCase):
@@ -312,5 +312,82 @@ class TestAnalysisMethods(unittest.TestCase):
         env.cell_exec(delete_cell)
         self._compare_new_data_env(env, expected_delete)
 
+
+    def test_flow(self):
+
+        call_cell = """from pandas import read_csv\n"""+\
+                """from sklearn import linear_regression\n"""+\
+                """df = read_csv("filename").between_time("2016-05-01","2020-01-01")\n"""+\
+                """lr = linear_regression()\n"""+\
+                """lr.fit(df[1:4,:].to_numpy(), df[5,:].to_numpy())\n"""
+        env = prompter.AnalysisEnvironment()
+        env.cell_exec(call_cell)
+        
+        expected_path = [Call, Attribute, Call, Name, Name, Subscript, Attribute, Call]
+        expected_size = 13
+        actual_nodes = set(env.graph.edges.keys())
+
+        for v in env.graph.edges.values():
+            actual_nodes.update(v)
+
+        self.assertEqual(expected_size, len(actual_nodes))
+        path_exists, longest_path = self._compare_graph_path(env.graph, expected_path, list(env.graph.entry_points)[0], [])
+        self.assertTrue(path_exists, "expected " + str(expected_path) + " longest " + str(longest_path))
+
+    def test_intercell_flow(self):
+
+        data_cell = """from pandas import read_csv\n"""+\
+                """from sklearn import linear_regression\n"""+\
+                """df = read_csv("filename").between_time("2016-05-01","2020-01-01")\n"""
+    
+        fit_cell = """lr = linear_regression()\n"""+\
+                """lr.fit(df[1:4,:].to_numpy(), df[5,:].to_numpy())\n"""
+
+        env = prompter.AnalysisEnvironment()
+        env.cell_exec(data_cell)
+        env.cell_exec(fit_cell)
+ 
+        expected_size = 13
+        expected_path = [Call, Attribute, Call, Name, Name, Subscript, Attribute, Call]
+        actual_nodes = set(env.graph.edges.keys())
+
+        for v in env.graph.edges.values():
+            actual_nodes.update(v)
+         
+        self.assertEqual(expected_size, len(actual_nodes))
+        path_exists, longest_path = self._compare_graph_path(env.graph, expected_path, list(env.graph.entry_points)[0], [])
+        self.assertTrue(path_exists, "expected " + str(expected_path) + " longest " + str(longest_path))
+    
+        print(longest_path)
+
+    def _compare_graph_path(self, graph, expected_path, start_point, actual_path):
+        """expected is a list of connections"""
+        if len(expected_path) == 0:
+            return True, actual_path
+        if isinstance(start_point, expected_path[0]):
+            actual_path += [start_point]
+
+            for next_pt in graph.edges[start_point]:
+                is_poss, path = self._compare_graph_path(graph, expected_path[1:], next_pt, actual_path)
+                if is_poss:
+                    return True, path
+        return False, actual_path
+def node_to_string(node):
+    """make a node into a string"""
+    out_string = node.__class__.__name__+"("
+    
+    for field in node._fields:
+        if type(getattr(node, field)) == str:
+            out_string += field + ":"+getattr(node, field)
+        elif type(getattr(node, field)) == list:
+            out_string += field + ":"+str(len(getattr(node, field)))
+    out_string += ")"
+    return out_string
+
+def print_graph(graph):
+    for k in graph.edges.keys():
+        print(node_to_string(k) + "->")
+        for child in graph.edges[k]:
+            print("    "+node_to_string(child))
 if __name__ == "__main__":
     unittest.main()
