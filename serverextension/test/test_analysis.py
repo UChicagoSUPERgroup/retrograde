@@ -357,9 +357,7 @@ class TestAnalysisMethods(unittest.TestCase):
         self.assertEqual(expected_size, len(actual_nodes))
         path_exists, longest_path = self._compare_graph_path(env.graph, expected_path, list(env.graph.entry_points)[0], [])
         self.assertTrue(path_exists, "expected " + str(expected_path) + " longest " + str(longest_path))
-    
-        print(longest_path)
-
+   
     def _compare_graph_path(self, graph, expected_path, start_point, actual_path):
         """expected is a list of connections"""
         if len(expected_path) == 0:
@@ -372,6 +370,7 @@ class TestAnalysisMethods(unittest.TestCase):
                 if is_poss:
                     return True, path
         return False, actual_path
+
 def node_to_string(node):
     """make a node into a string"""
     out_string = node.__class__.__name__+"("
