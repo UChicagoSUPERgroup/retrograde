@@ -1,5 +1,5 @@
 """
-test the DbHandler methods
+test the analysis methods
 """
 
 import unittest
