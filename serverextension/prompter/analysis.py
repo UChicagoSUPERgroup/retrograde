@@ -13,8 +13,10 @@ class AnalysisEnvironment(object):
     TODO: should add ability to execute in parallel, in order to be able to run
           tests DS isn't thinking of
     """
-    def __init__(self):
-
+    def __init__(self, nbapp):
+        """
+        nbapp = the notebook application object
+        """
         self.pandas_alias = Aliases("pandas") # handle imports and functions
         self.sklearn_alias = Aliases("sklearn")
 
@@ -28,7 +30,7 @@ class AnalysisEnvironment(object):
                             "read_msgpack", "read_stata", "read_sas",
                             "read_spss", "read_pickle", "read_sql", 
                             "read_gbq"]
-
+        self._nbapp = nbapp
 #        self._session = InteractiveInterpreter()
 
     def cell_exec(self, code):
@@ -61,6 +63,41 @@ class AnalysisEnvironment(object):
                 target = target.value # assumes target is attribute type
             self.entry_points[target.id] = {"source" : source, "format" : fmt}
 
+    def _execute_code(self, code, kernel_id):
+
+        kernel = self._nbapp.get_kernel(kernel_id)
+        client = kernel.client()
+        msg_id = client.execute(code)
+
+        reply = client.get_shell_msg(msg_id)
+
+        # using loop from https://github.com/abalter/polyglottus/blob/master/simple_kernel.py
+
+        io_msg_content = client.get_iopub_msg(timeout=1)['content']
+
+        if 'execution_state' in io_msg_content and io_msg_content['execution_state'] == 'idle':
+            return "no output"
+
+        while True:
+            temp = io_msg_content
+
+            try:
+                io_msg_content = self.client.get_iopub_msg(timeout=1)['content']
+                if 'execution_state' in io_msg_content and io_msg_content['execution_state'] == 'idle':
+                    break
+            except queue.Empty:
+                break
+
+        if 'data' in temp: # Indicates completed operation
+            out = temp['data']['text/plain']
+        elif 'name' in temp and temp['name'] == "stdout": # indicates output
+            out = temp['text']
+        elif 'traceback' in temp: # Indicates error
+            out = '\n'.join(temp['traceback']) # Put error into nice format
+        else:
+            out = ''
+
+        return out
     def make_newdata(self, call_node, assign_node):
         """got to assign at top of new data, fill in entry point"""
         self._add_entry(call_node, assign_node.targets)

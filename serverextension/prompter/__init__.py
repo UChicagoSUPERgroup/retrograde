@@ -20,15 +20,12 @@ from prompter.analysis import AnalysisEnvironment
 class CodeExecHandler(APIHandler):
     """handles transactions from notebook js app and server backend"""
     
-    def __init__(self):
-        super().__init__()
-#        self.db = DbHandler()
-
     def get(self):
         self.finish("hello")
 
     def post(self):
         print(tornado.escape.json_decode(self.request.body))
+
 #        self.db.add_entry(tornado.escape.json_decode(self.request.body))
         self.finish("done")
 
@@ -36,9 +33,10 @@ def _jupyter_server_extension_paths():
     return [{"module" : "prompter"}]
 
 def load_jupyter_server_extension(app):
-
+    
+    global CODE_ANALYSIS = AnalysisEnvironment(app)
+    
     handlers = [("/code_tracker/exec", CodeExecHandler)]
     base_url = app.web_app.settings["base_url"]
     handlers = [(url_path_join(base_url, x[0]), x[1]) for x in handlers]
-
     app.web_app.add_handlers(".*", handlers)

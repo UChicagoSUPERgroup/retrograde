@@ -50,7 +50,7 @@ export class Listener {
           // todo: cell is cyclic, so cannot turn into string
           contents = cell.model.value.text;
           id = cell.model.id;
-
+          //todo: should add url/kernel id to differentiate
           this.client.request(
             "exec", "POST", 
             JSON.stringify({
