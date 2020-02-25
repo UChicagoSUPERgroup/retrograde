@@ -90,7 +90,6 @@ class AnalysisEnvironment(object):
                     break
             except Empty:
                 break
-
         if 'data' in temp: # Indicates completed operation
             out = temp['data']['text/plain']
         elif 'name' in temp and temp['name'] == "stdout": # indicates output
@@ -134,12 +133,11 @@ class AnalysisEnvironment(object):
                 args = [call_node, Str("fit")], keywords = []))
         
         resp = self._execute_code(astor.to_source(expr), "TEST")
+        return resp == "True"
 
-        return resp == "True\n"
-    def make_new_model(self, assign_node):
+    def make_new_model(self, call_node, assign_node):
         """add model to environment"""
         var_names = assign_node.targets
-        
         for var_name in assign_node.targets:
             self.models[var_name.id] = {}
             # TODO: add get data, add get model name and type    
@@ -256,7 +254,7 @@ class CellVisitor(NodeVisitor):
             if self.env.is_newdata_call(self.unfinished_call): 
                 self.env.make_newdata(self.unfinished_call, node)
             elif self.env.is_model_call(self.unfinished_call):
-                self.env.make_new_model(self.unfinished_call)
+                self.env.make_new_model(self.unfinished_call, node)
             self.unfinished_call = None
 
         if node.value in self.nodes:
