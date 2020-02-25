@@ -140,14 +140,41 @@ class AnalysisEnvironment(object):
         var_names = assign_node.targets
         for var_name in assign_node.targets:
             self.models[var_name.id] = {}
-            # TODO: add get data, add get model name and type    
-    def link(self, value, target):
-        """link two nodes together"""
-        self.live_set.add(target)
-        if value not in self.edges:
-            self.edges[value] = [target]
-        else:
-            self.edges[value].append(target)
+
+#    def link(self, value, target):
+#        """link two nodes together"""
+#        self.live_set.add(target)
+#        if value not in self.edges:
+#            self.edges[value] = [target]
+#        else:
+#            self.edges[value].append(target)
+    def add_train(self, func_node, args)
+        """
+        have made a fit(X, y) call on model
+        fill in info about training data
+
+        func_node is Attribute where attr == "fit" 
+        args are args input to fit 
+        """
+        
+        model_name = func_node.value.id
+
+        if model_name not in self.models:
+            return
+
+        # id labels 
+        label_call_or_assign = self.resolve_data(args[1])
+        # id features 
+        feature_call_or_assign = self.resolve_data(args[0]) 
+        # get label column names
+        # get feature column names
+       
+        # run perf. test on features
+
+    def resolve_data(self, node):
+        """given a node, find nearest df variable"""
+        if self.graph.is_dataframe(node):
+            return node
 
 class Aliases(object):
 
@@ -289,11 +316,14 @@ class CellVisitor(NodeVisitor):
         if self.env.is_model_call(node):
             self.nodes.add(node)
             self.unfinished_call = node
+        if isinstance(node.func, Attribute) and node.func.attr == "fit":
+            self.env.add_train(node.func.value, node.args)
+            
     def visit_Attribute(self, node):
         self.generic_visit(node)
         if node.value in self.nodes: # referencing a tagged element
             self.nodes.add(node)
-            self.env.graph.link(node.value, node)
+            self.env.graph.link(node.value, node, preserve_df = self.env.graph.is_df_func(node))
 
     def visit_Name(self, node):
         """is name referencing a var we care about?"""
@@ -317,35 +347,55 @@ class Graph:
     def __init__(self):
 
         self.edges = {}
+        self.nodes = set()
         self.active_nodes = set()
         self.entry_points = set()
         self._name_register = {}
+    
+        self._df_nodes = set() # nodes which resolve to a dataframe type
+
+    def is_df_func(self, attr_node):
+        """is this attribute accessing a function that transforms away from df function?"""
+        if attr_node.value not in self._df_nodes:
+            return False
+        # Check against a list of df methods
+
 
     def _register_name(self, maybe_name):
         if type(maybe_name) == Name:
             if maybe_name.id not in self._name_register:
                 self._name_register[maybe_name.id] = maybe_name
 
-    def link(self, source, dest):
+    def link(self, source, dest, preserve_df = True):
         """
         create link between source and dest nodes
         """
 
         self.active_nodes.add(source)
         self.active_nodes.add(dest)
+        self.nodes.add(source)
 
         self._register_name(dest)
 
         if source not in self.edges:
             self.edges[source] = [dest]
         else:
+            if preserve_df and source in self._df_nodes:
+                self._df_nodes.add(dest)
             self.edges[source].append(dest)
 
-    def root_node(self, node):
+        self.nodes.add(source)
+        self.nodes.add(dest)
+
+    def root_node(self, node, is_df = True):
         """add root node"""
         self.edges[node] = []
+        self.nodes.add(node)
+
         self.active_nodes.add(node)
         self.entry_points.add(node)
+        
+        if is_df: self._df_nodes.add(node)
 
     def find_by_name(self, name_node):        
         """find the nodes associated with name"""
@@ -353,9 +403,16 @@ class Graph:
             return self._name_register[name_node.id]
         else:
             return None
+
     def remove_name(self, name_node):
         if name_node.id in self._name_register:
             del self._name_register[name_node.id]
+
+    def is_dataframe(self, node):
+        """will node resolve to a dataframe type object?"""
+        if node not in self.nodes:
+            raise Exception("node is not tracked, so cannot say if is dataframe or not")
+        return node in self._df_nodes
 
 def get_call(assign_node):
     """search down until we find the root call node"""
