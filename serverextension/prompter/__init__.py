@@ -33,9 +33,13 @@ def _jupyter_server_extension_paths():
     return [{"module" : "prompter"}]
 
 def load_jupyter_server_extension(app):
+   
+    env = AnalysisEnvironment(app)
+    db = DbHandler()
     
-    global CODE_ANALYSIS = AnalysisEnvironment(app)
-    
+    global LISTENER 
+    LISTENER = Heuristics(db, env)
+     
     handlers = [("/code_tracker/exec", CodeExecHandler)]
     base_url = app.web_app.settings["base_url"]
     handlers = [(url_path_join(base_url, x[0]), x[1]) for x in handlers]

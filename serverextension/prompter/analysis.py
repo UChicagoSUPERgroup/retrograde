@@ -2,8 +2,10 @@
 analysis.py creates a running environment for dynamically tracking
 data relationships between variables
 """
-from ast import Import, Assign, Import, ImportFrom, NodeVisitor, Call, Name, Attribute
-from ast import parse, walk, iter_child_nodes
+import astor
+from ast import Import, Assign, Import, ImportFrom, NodeVisitor, Call, Name, Attribute, Expr, Load, Str
+from ast import parse, walk, iter_child_nodes, NodeTransformer
+from queue import Empty
 #from code import InteractiveInterpreter
 
 class AnalysisEnvironment(object):
@@ -32,8 +34,9 @@ class AnalysisEnvironment(object):
                             "read_gbq"]
         self._nbapp = nbapp
 #        self._session = InteractiveInterpreter()
+        self.models = {}
 
-    def cell_exec(self, code):
+    def cell_exec(self, code, notebook):
         """
         execute a cell and propagate the analysis
         """
@@ -46,6 +49,8 @@ class AnalysisEnvironment(object):
 
         visitor = CellVisitor(self)
         visitor.visit(cell_code)
+
+        # TODO: need hooks to check if kernel access needed 
 
     def _add_entry(self, call_node, targets):
         """add an entry point"""
@@ -63,29 +68,27 @@ class AnalysisEnvironment(object):
                 target = target.value # assumes target is attribute type
             self.entry_points[target.id] = {"source" : source, "format" : fmt}
 
-    def _execute_code(self, code, kernel_id):
+    def _execute_code(self, code, kernel_id, timeout=1):
 
         kernel = self._nbapp.get_kernel(kernel_id)
         client = kernel.client()
         msg_id = client.execute(code)
 
         reply = client.get_shell_msg(msg_id)
-
         # using loop from https://github.com/abalter/polyglottus/blob/master/simple_kernel.py
 
-        io_msg_content = client.get_iopub_msg(timeout=1)['content']
+        io_msg_content = client.get_iopub_msg(timeout=timeout)['content']
 
         if 'execution_state' in io_msg_content and io_msg_content['execution_state'] == 'idle':
             return "no output"
 
         while True:
             temp = io_msg_content
-
             try:
-                io_msg_content = self.client.get_iopub_msg(timeout=1)['content']
+                io_msg_content = client.get_iopub_msg(timeout=timeout)['content']
                 if 'execution_state' in io_msg_content and io_msg_content['execution_state'] == 'idle':
                     break
-            except queue.Empty:
+            except Empty:
                 break
 
         if 'data' in temp: # Indicates completed operation
@@ -96,8 +99,8 @@ class AnalysisEnvironment(object):
             out = '\n'.join(temp['traceback']) # Put error into nice format
         else:
             out = ''
-
         return out
+
     def make_newdata(self, call_node, assign_node):
         """got to assign at top of new data, fill in entry point"""
         self._add_entry(call_node, assign_node.targets)
@@ -118,7 +121,28 @@ class AnalysisEnvironment(object):
                 self.graph.root_node(call_node)
                 return True
         return False 
-             
+
+    def is_model_call(self, call_node):
+        """is this call to an entity which is a model?"""
+        
+        """try executing to test if has "fit" method"""
+        """there are a lot of sklearn methods so this seems easier"""
+
+        expr = Expr(
+            value = Call(
+                func = Name(id="hasattr", ctx=Load()),
+                args = [call_node, Str("fit")], keywords = []))
+        
+        resp = self._execute_code(astor.to_source(expr), "TEST")
+
+        return resp == "True\n"
+    def make_new_model(self, assign_node):
+        """add model to environment"""
+        var_names = assign_node.targets
+        
+        for var_name in assign_node.targets:
+            self.models[var_name.id] = {}
+            # TODO: add get data, add get model name and type    
     def link(self, value, target):
         """link two nodes together"""
         self.live_set.add(target)
@@ -229,7 +253,10 @@ class CellVisitor(NodeVisitor):
         self.generic_visit(node) # visit children BEFORE completing this 
         # a call node is newdata, and this is nearest assign 
         if self.unfinished_call:
-            self.env.make_newdata(self.unfinished_call, node)
+            if self.env.is_newdata_call(self.unfinished_call): 
+                self.env.make_newdata(self.unfinished_call, node)
+            elif self.env.is_model_call(self.unfinished_call):
+                self.env.make_new_model(self.unfinished_call)
             self.unfinished_call = None
 
         if node.value in self.nodes:
@@ -252,11 +279,18 @@ class CellVisitor(NodeVisitor):
             if arg in self.nodes: 
                 self.env.graph.link(arg, node)
                 self.nodes.add(node)
+        
+        # TODO: this could be potentially an issue if someone 
+        #       does something goofy like 
+        #    
+        #       lr = LinearRegression().fit(read_csv(), read_csv())
 
         if self.env.is_newdata_call(node):
             self.nodes.add(node)
             self.unfinished_call = node
-
+        if self.env.is_model_call(node):
+            self.nodes.add(node)
+            self.unfinished_call = node
     def visit_Attribute(self, node):
         self.generic_visit(node)
         if node.value in self.nodes: # referencing a tagged element
@@ -346,7 +380,9 @@ def get_call(assign_node):
             # TODO make more precise by chekcing if subtype of AST node 
     return last_call
 
+
 def as_string(name_or_attrib):
+    """print as string name or attribute"""
     if type(name_or_attrib) == Attribute:
         full = name_or_attrib.attr
         curr = name_or_attrib
@@ -360,3 +396,5 @@ def as_string(name_or_attrib):
         return full
     if type(name_or_attrib) == Name:
         return name_or_attrib.id
+    else:
+        return ""

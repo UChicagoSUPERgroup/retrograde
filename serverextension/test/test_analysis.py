@@ -81,7 +81,7 @@ class TestAnalysisMethods(unittest.TestCase):
             },]
         for import_stmnt, expected in zip(imports_list, expected_outputs):
 
-            env = prompter.AnalysisEnvironment()
+            env = prompter.AnalysisEnvironment(None)
             env.cell_exec(import_stmnt)
             self._compare_alias_env(env, expected)
 
@@ -149,7 +149,7 @@ class TestAnalysisMethods(unittest.TestCase):
             },]
         for import_stmnt, expected in zip(import_stmnts, expected_outputs):
 
-            env = prompter.AnalysisEnvironment()
+            env = prompter.AnalysisEnvironment(None)
             env.cell_exec(import_stmnt)
             self._compare_alias_env(env, expected)
 
@@ -180,7 +180,7 @@ class TestAnalysisMethods(unittest.TestCase):
 
         for call, data in zip(calls, expected):
 
-            env = prompter.AnalysisEnvironment()
+            env = prompter.AnalysisEnvironment(None)
             env.cell_exec(call)
 
             self._compare_alias_env(env, expected_imports)
@@ -194,7 +194,10 @@ class TestAnalysisMethods(unittest.TestCase):
             self.assertTrue(var_name in env.entry_points,
                             "{0} not in {1}".format(var_name, str(env.entry_points)))
             self.assertEqual(data_entries[var_name], env.entry_points[var_name])
-
+        for var_name in env.entry_points.keys():
+            self.assertTrue(var_name in data_entries,
+                            "{0} not in {1}".format(var_name, str(env.entry_points)))
+            self.assertEqual(data_entries[var_name], env.entry_points[var_name])
     def test_newdata_importfrom(self):
         """
         test from pandas import read_*
@@ -212,7 +215,7 @@ class TestAnalysisMethods(unittest.TestCase):
 
         for call, data in zip(calls, expected):
 
-            env = prompter.AnalysisEnvironment()
+            env = prompter.AnalysisEnvironment(None)
             env.cell_exec(call)
 
             self._compare_new_data_env(env, data)
@@ -234,7 +237,7 @@ class TestAnalysisMethods(unittest.TestCase):
 
         for call, data in zip(calls, expected):
 
-            env = prompter.AnalysisEnvironment()
+            env = prompter.AnalysisEnvironment(None)
             env.cell_exec(call)
 
             self._compare_new_data_env(env, data)
@@ -251,11 +254,11 @@ class TestAnalysisMethods(unittest.TestCase):
         expected_slicing = {"df" : {"source": "filename", "format" : "fwf"}}
         expected_chaining = {"df" : {"source": "filename", "format" : "csv"}}
 
-        env = prompter.AnalysisEnvironment()
+        env = prompter.AnalysisEnvironment(None)
         env.cell_exec(slicing_cell)
         self._compare_new_data_env(env, expected_slicing)
 
-        env = prompter.AnalysisEnvironment()
+        env = prompter.AnalysisEnvironment(None)
         env.cell_exec(chaining_cell)
         self._compare_new_data_env(env, expected_chaining)
 
@@ -271,7 +274,7 @@ class TestAnalysisMethods(unittest.TestCase):
         expected_multiple = {"df" : {"source": "filename", "format" : "csv"},
                              "df2" : {"source" : "filename", "format" : "csv"}}
 
-        env = prompter.AnalysisEnvironment()
+        env = prompter.AnalysisEnvironment(None)
         env.cell_exec(multiple_cell)
         self._compare_new_data_env(env, expected_multiple)
 
@@ -288,7 +291,7 @@ class TestAnalysisMethods(unittest.TestCase):
 
         expected_reassign = {"df" : {"source": "filename", "format" : "csv"}}
 
-        env = prompter.AnalysisEnvironment()
+        env = prompter.AnalysisEnvironment(None)
         env.cell_exec(reassign_cell)
         self._compare_new_data_env(env, expected_reassign)
 
@@ -296,9 +299,9 @@ class TestAnalysisMethods(unittest.TestCase):
             """df = read_csv(filename).between_time("2016-05-01","2020-01-01")\n"""+\
             """df = 12 + 6"""
 
-        expected_newvar = {"df" : {"source": "filename", "format" : "csv"}}
+        expected_newvar = {}
 
-        env = prompter.AnalysisEnvironment()
+        env = prompter.AnalysisEnvironment(None)
         env.cell_exec(newvar_cell)
         self._compare_new_data_env(env, expected_newvar)
 
@@ -306,9 +309,9 @@ class TestAnalysisMethods(unittest.TestCase):
             """df = read_csv(filename).between_time("2016-05-01","2020-01-01")\n"""+\
             """del df"""
 
-        expected_delete = {"df" : {"source": "filename", "format" : "csv"}}
+        expected_delete = {}
 
-        env = prompter.AnalysisEnvironment()
+        env = prompter.AnalysisEnvironment(None)
         env.cell_exec(delete_cell)
         self._compare_new_data_env(env, expected_delete)
 
@@ -320,7 +323,7 @@ class TestAnalysisMethods(unittest.TestCase):
                 """df = read_csv("filename").between_time("2016-05-01","2020-01-01")\n"""+\
                 """lr = linear_regression()\n"""+\
                 """lr.fit(df[1:4,:].to_numpy(), df[5,:].to_numpy())\n"""
-        env = prompter.AnalysisEnvironment()
+        env = prompter.AnalysisEnvironment(None)
         env.cell_exec(call_cell)
         
         expected_path = [Call, Attribute, Call, Name, Name, Subscript, Attribute, Call]
@@ -343,7 +346,7 @@ class TestAnalysisMethods(unittest.TestCase):
         fit_cell = """lr = linear_regression()\n"""+\
                 """lr.fit(df[1:4,:].to_numpy(), df[5,:].to_numpy())\n"""
 
-        env = prompter.AnalysisEnvironment()
+        env = prompter.AnalysisEnvironment(None)
         env.cell_exec(data_cell)
         env.cell_exec(fit_cell)
  
