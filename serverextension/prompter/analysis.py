@@ -2,10 +2,13 @@
 analysis.py creates a running environment for dynamically tracking
 data relationships between variables
 """
-import astor
-from ast import Import, Assign, Import, ImportFrom, NodeVisitor, Call, Name, Attribute, Expr, Load, Str
-from ast import parse, walk, iter_child_nodes, NodeTransformer
 from queue import Empty
+from ast import Import, NodeVisitor, Call, Name, Attribute, Expr, Load, Str
+from ast import parse, walk, iter_child_nodes
+
+from .config import df_funcs, index_funcs
+
+import astor
 #from code import InteractiveInterpreter
 
 class AnalysisEnvironment(object):
@@ -148,7 +151,7 @@ class AnalysisEnvironment(object):
 #            self.edges[value] = [target]
 #        else:
 #            self.edges[value].append(target)
-    def add_train(self, func_node, args)
+    def add_train(self, func_node, args):
         """
         have made a fit(X, y) call on model
         fill in info about training data
@@ -158,24 +161,88 @@ class AnalysisEnvironment(object):
         """
         
         model_name = func_node.value.id
+        self._nbapp.log("Retrieved model %s" % model_name)
 
         if model_name not in self.models:
+            self._nbapp.log("%s not a registered model" % model_name)
             return
 
         # id labels 
-        label_call_or_assign = self.resolve_data(args[1])
+        label_call_or_name = self.resolve_data(args[1])
+        self._nbapp.log("model %s has %s as labels" % (model_name, label_call_or_name))
+
         # id features 
-        feature_call_or_assign = self.resolve_data(args[0]) 
+        feature_call_or_name = self.resolve_data(args[0]) 
+        self._nbapp.log("model %s has %s as features" % (model_name, feature_call_or_name))
+
         # get label column names
+        label_cols = self.get_col_names(label_call_or_name)
+        self._nbapp.log("%s seems to use %s as labels" % (model_name, label_cols))
+
         # get feature column names
-       
+        feature_cols = self.get_col_names(feature_call_or_name)
+        self._nbapp.log("%s seems to use %s as features" % (model_name, feature_cols))
+
+        self.models[model_name]["train"] = {}
+        self.models[model_name]["train"]["features"] = feature_cols
+        self.models[model_name]["train"]["labels"] = feature_cols
+
         # run perf. test on features
+    def get_col_names(self, call_or_name_node):
+        """try to get columns from the node"""
+        if not self.is_node_df(call_or_name_node):
+            return None
+
+        colnames_expression = Call(
+                func = Name(id="list", ctx=Load()),
+                args = [Attribute(value = call_or_name_node, attr="columns")], keywords=[])
+        colnames_return = self._execute_code(astor.to_source(colnames_expression), "TEST")
+
+        try:
+            return eval(colnames_return)
+        except:
+            return None
+    def is_node_df(self, call_or_name_node): 
+
+        if "DataFrame" in self.pandas_alias.func_mapping:
+            df_alias = parse(self.pandas_alias.func_mapping["DataFrame"])
+        else:
+            # TODO: we need to rewrite the alias module to handle this better.
+            #       this is absolutely a dumb hack, and I expect it to break 
+            #       quickly.
+
+            mod_aliases = list(self.pandas_alias.module_aliases)
+            mod_aliases.sort(key = lambda x: len(x), reverse=True)
+            df_alias = parse(mod_aliases[0]+".DataFrame")
+
+        is_df_expr = Expr(
+                value = Call(
+                    func = Name(id="isinstance", ctx=Load()),
+                    args = [call_or_name_node, df_alias], keywords = []))
+        is_df = self._execute_code(astor.to_source(is_df_expr), "TEST")
+        return is_df == "True"
 
     def resolve_data(self, node):
         """given a node, find nearest df variable"""
         if self.graph.is_dataframe(node):
             return node
+        queue = self.graph.get_parents(node)
+        
+        while queue:
+            parent = queue.pop()
+            if self.graph.is_dataframe(parent):
+                return parent
+            queue.extend(self.graph.get_parents(parent))
+        return None
 
+    def is_df_func(self, attr_node):
+        """is this attribute accessing a function that could return a nondataframe typed value?"""
+        if not self.graph.is_dataframe(attr_node.value):
+            return False
+        # Check against a list of df methods
+        if attr_node.attr in df_funcs + index_funcs:
+            return False
+        return True
 class Aliases(object):
 
     def __init__(self, module_name):
@@ -317,13 +384,13 @@ class CellVisitor(NodeVisitor):
             self.nodes.add(node)
             self.unfinished_call = node
         if isinstance(node.func, Attribute) and node.func.attr == "fit":
-            self.env.add_train(node.func.value, node.args)
+            self.env.add_train(node.func, node.args)
             
     def visit_Attribute(self, node):
         self.generic_visit(node)
         if node.value in self.nodes: # referencing a tagged element
             self.nodes.add(node)
-            self.env.graph.link(node.value, node, preserve_df = self.env.graph.is_df_func(node))
+            self.env.graph.link(node.value, node, preserve_df = self.env.is_df_func(node))
 
     def visit_Name(self, node):
         """is name referencing a var we care about?"""
@@ -336,6 +403,14 @@ class CellVisitor(NodeVisitor):
         if node.value in self.nodes:
             self.nodes.add(node)
             self.env.graph.link(node.value, node)
+        
+            if isinstance(node.value, Attribute) and node.value.attr in index_funcs:
+                if self.env.is_node_df(node): 
+                    self.env.graph._df_nodes.add(node)
+                    self.env.graph._df_nodes.add(node.value)
+        # TODO: pickup here tomorrow -- if subscript encloses a pd indexing function, 
+        # test if the subscript is a dataframe instance
+
 #    def visit_Expr(self, node):
         
     # TODO: function definitions, attributes
@@ -347,18 +422,13 @@ class Graph:
     def __init__(self):
 
         self.edges = {}
+        self.reverse_edges = {} # not super efficient representation, but w/e
         self.nodes = set()
         self.active_nodes = set()
         self.entry_points = set()
         self._name_register = {}
     
         self._df_nodes = set() # nodes which resolve to a dataframe type
-
-    def is_df_func(self, attr_node):
-        """is this attribute accessing a function that transforms away from df function?"""
-        if attr_node.value not in self._df_nodes:
-            return False
-        # Check against a list of df methods
 
 
     def _register_name(self, maybe_name):
@@ -383,6 +453,11 @@ class Graph:
             if preserve_df and source in self._df_nodes:
                 self._df_nodes.add(dest)
             self.edges[source].append(dest)
+
+        if dest not in self.reverse_edges:
+            self.reverse_edges[dest] = [source]
+        else:
+            self.reverse_edges[dest].append(source)
 
         self.nodes.add(source)
         self.nodes.add(dest)
@@ -414,42 +489,45 @@ class Graph:
             raise Exception("node is not tracked, so cannot say if is dataframe or not")
         return node in self._df_nodes
 
+    def get_parents(self, node):
+        """return the parents of node, raises keyerror if node has no parents"""
+        return self.reverse_edges[node]
+
 def get_call(assign_node):
     """search down until we find the root call node"""
     last_call = None
-    q = [assign_node]
+    queue = [assign_node]
 
-    while len(q) > 0:
-        node = q.pop()
+    while len(queue) > 0:
+        node = queue.pop()
         if type(node) == Call:
             last_call = node
         if not hasattr(node, "_fields"):
             continue
         for field in node._fields:
-            if type(getattr(node, field)) == list:
+            if isinstance(getattr(node, field), list):
                 for elt in getattr(node, field):
                     if type(elt) != str:
-                        q.insert(0, elt)
-            elif type(getattr(node, field)) != str:
-                q.insert(0, getattr(node, field))
+                        queue.insert(0, elt)
+            elif not isinstance(getattr(node, field),str):
+                queue.insert(0, getattr(node, field))
             # TODO make more precise by chekcing if subtype of AST node 
     return last_call
 
 
 def as_string(name_or_attrib):
     """print as string name or attribute"""
-    if type(name_or_attrib) == Attribute:
+    if isinstance(name_or_attrib, Attribute):
         full = name_or_attrib.attr
         curr = name_or_attrib
 
-        while type(curr) == Attribute:
+        while isinstance(curr, Attribute):
             curr = curr.value
-            if type(curr) == Attribute:
+            if isinstance(curr, Attribute):
                 full = curr.attr+"."+full
-            elif type(curr) == Name:
+            elif isinstance(curr, Name):
                 full = curr.id+"."+full
         return full
-    if type(name_or_attrib) == Name:
+    if isinstance(name_or_attrib, Name):
         return name_or_attrib.id
-    else:
-        return ""
+    return ""

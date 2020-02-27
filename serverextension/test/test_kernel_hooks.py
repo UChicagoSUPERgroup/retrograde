@@ -23,7 +23,7 @@ class TestKernelHooks(unittest.TestCase):
 
         kl_mock.client = MagicMock(return_value = self.client)
         nbapp.get_kernel = MagicMock(return_value = kl_mock) 
-
+        nbapp.log = print
         self.env = prompter.AnalysisEnvironment(nbapp)
 
         # create test csv
@@ -72,11 +72,10 @@ class TestKernelHooks(unittest.TestCase):
             """df = pd.read_csv("test.csv")\n"""+\
             """lr = sklearn.linear_model.LinearRegression()"""
 
-        expected_models = [{"lr": {"type" : "LinearRegression"}}] 
         self.env._execute_code(model_cell, "TEST") # need to execute code this way to avoid issues with message queueing
         self.env.cell_exec(model_cell, "TEST")
         
-        self.assertEqual(self.env.models, expected_models)
+        self.assertTrue("lr" in self.env.models)
 
     def test_get_model_module_alias(self):
         model_cell = """import pandas as pd\n"""+\
@@ -84,18 +83,17 @@ class TestKernelHooks(unittest.TestCase):
             """df = pd.read_csv("test.csv")\n"""+\
             """lr = lm.LinearRegression()"""
 
-        expected_models = [{"lr": {"type" : "LinearRegression"}}] 
         self.env._execute_code(model_cell, "TEST") # need to execute code this way to avoid issues with message queueing
         self.env.cell_exec(model_cell, "TEST")
         
-        self.assertEqual(self.env.models, expected_models)
+        self.assertTrue("lr" in self.env.models)
 
     def test_model_fit(self):
         model_cell = """import pandas as pd\n"""+\
             """import sklearn.linear_model as lm\n"""+\
             """df = pd.read_csv("test.csv")\n"""+\
             """lr = lm.LinearRegression()\n"""+\
-            """lr.fit(df.iloc[:,1:4].to_numpy(), df.iloc[:,4].to_numpy())"""
+            """lr.fit(df.iloc[:,2:5].to_numpy(), df.iloc[:,5].to_numpy())"""
 
         expected_models = [{"lr": 
                 {"type" : "LinearRegression",
@@ -104,7 +102,7 @@ class TestKernelHooks(unittest.TestCase):
                  "avail_cols" : ["age", "gender", "grade", "height", "score"], 
                 }}]
  
-        self.env._execute_code(model_cell, "TEST") # need to execute code this way to avoid issues with message queueing
+        resp = self.env._execute_code(model_cell, "TEST") # need to execute code this way to avoid issues with message queueing
         self.env.cell_exec(model_cell, "TEST")
         
         self.assertEqual(self.env.models, expected_models)
