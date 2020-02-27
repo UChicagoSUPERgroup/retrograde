@@ -3,15 +3,20 @@ analysis.py creates a running environment for dynamically tracking
 data relationships between variables
 """
 from queue import Empty
-from ast import Import, NodeVisitor, Call, Name, Attribute, Expr, Load, Str
+from ast import NodeVisitor, Call, Name, Attribute, Expr, Load, Str
 from ast import parse, walk, iter_child_nodes
-
-from .config import df_funcs, index_funcs
-
 import astor
+
+from .config import other_funcs, ambig_funcs, series_funcs
+
 #from code import InteractiveInterpreter
 
-class AnalysisEnvironment(object):
+DATAFRAME_TYPE = "DataFrame"
+SERIES_TYPE = "Series"
+OTHER_TYPE = "Other"
+MAYBE_TYPE = "Maybe"
+
+class AnalysisEnvironment:
     """
     Analysis environment tracks relevant variables in execution
 
@@ -31,9 +36,9 @@ class AnalysisEnvironment(object):
 
         self._read_funcs = ["read_csv", "read_fwf", "read_json", "read_html",
                             "read_clipboard", "read_excel", "read_hdf",
-                            "read_feather", "read_parquet", "read_orc", 
+                            "read_feather", "read_parquet", "read_orc",
                             "read_msgpack", "read_stata", "read_sas",
-                            "read_spss", "read_pickle", "read_sql", 
+                            "read_spss", "read_pickle", "read_sql",
                             "read_gbq"]
         self._nbapp = nbapp
 #        self._session = InteractiveInterpreter()
@@ -43,8 +48,8 @@ class AnalysisEnvironment(object):
         """
         execute a cell and propagate the analysis
         """
-        cell_code = parse(code) 
-        
+        cell_code = parse(code)
+
         # add parent data to each node
         for node in walk(cell_code):
             for child in iter_child_nodes(node):
@@ -53,12 +58,12 @@ class AnalysisEnvironment(object):
         visitor = CellVisitor(self)
         visitor.visit(cell_code)
 
-        # TODO: need hooks to check if kernel access needed 
+        # TODO: need hooks to check if kernel access needed
 
     def _add_entry(self, call_node, targets):
         """add an entry point"""
         source = as_string(call_node.args[0])
-        if type(call_node.func) == Name:
+        if isinstance(call_node.func, Name):
             if call_node.func.id not in self._read_funcs:
                 func_name = self.pandas_alias.get_alias_for(call_node.func.id)
                 fmt = func_name.split("_")[-1]
@@ -67,7 +72,7 @@ class AnalysisEnvironment(object):
         else:
             fmt = call_node.func.attr.split("_")[-1]
         for target in targets:
-            while type(target) != Name:
+            while not isinstance(target, Name):
                 target = target.value # assumes target is attribute type
             self.entry_points[target.id] = {"source" : source, "format" : fmt}
 
@@ -89,7 +94,8 @@ class AnalysisEnvironment(object):
             temp = io_msg_content
             try:
                 io_msg_content = client.get_iopub_msg(timeout=timeout)['content']
-                if 'execution_state' in io_msg_content and io_msg_content['execution_state'] == 'idle':
+                if 'execution_state' in io_msg_content and\
+                        io_msg_content['execution_state'] == 'idle':
                     break
             except Empty:
                 break
@@ -111,30 +117,30 @@ class AnalysisEnvironment(object):
         """is this call node a pd read function"""
         func = call_node.func
 
-        if type(func) == Name:
+        if isinstance(func, Name):
             for read_func in self._read_funcs:
                 if read_func in self.pandas_alias.func_mapping:
                     if self.pandas_alias.func_mapping[read_func] == func.id:
                         self.graph.root_node(call_node)
                         return True
-        elif type(func) == Attribute:
+        elif isinstance(func, Attribute):
             # in this case, no issue with aliasing
             if func.attr in self._read_funcs:
                 self.graph.root_node(call_node)
                 return True
-        return False 
+        return False
 
     def is_model_call(self, call_node):
         """is this call to an entity which is a model?"""
-        
+
         """try executing to test if has "fit" method"""
         """there are a lot of sklearn methods so this seems easier"""
 
         expr = Expr(
-            value = Call(
-                func = Name(id="hasattr", ctx=Load()),
-                args = [call_node, Str("fit")], keywords = []))
-        
+            value=Call(
+                func=Name(id="hasattr", ctx=Load()),
+                args=[call_node, Str("fit")], keywords=[]))
+
         resp = self._execute_code(astor.to_source(expr), "TEST")
         return resp == "True"
 
@@ -156,10 +162,10 @@ class AnalysisEnvironment(object):
         have made a fit(X, y) call on model
         fill in info about training data
 
-        func_node is Attribute where attr == "fit" 
-        args are args input to fit 
+        func_node is Attribute where attr == "fit"
+        args are args input to fit
         """
-        
+
         model_name = func_node.value.id
         self._nbapp.log("Retrieved model %s" % model_name)
 
@@ -167,84 +173,148 @@ class AnalysisEnvironment(object):
             self._nbapp.log("%s not a registered model" % model_name)
             return
 
-        # id labels 
+        # id labels
         label_call_or_name = self.resolve_data(args[1])
         self._nbapp.log("model %s has %s as labels" % (model_name, label_call_or_name))
 
-        # id features 
-        feature_call_or_name = self.resolve_data(args[0]) 
+        # id features
+        feature_call_or_name = self.resolve_data(args[0])
         self._nbapp.log("model %s has %s as features" % (model_name, feature_call_or_name))
 
         # get label column names
-        label_cols = self.get_col_names(label_call_or_name)
+        label_cols = None
+        if self.graph.get_type(label_call_or_name) == DATAFRAME_TYPE:
+            label_cols = self.get_col_names(label_call_or_name)
+        elif self.graph.get_type(label_call_or_name) == SERIES_TYPE:
+            label_cols = self.get_series_name(label_call_or_name)
         self._nbapp.log("%s seems to use %s as labels" % (model_name, label_cols))
 
         # get feature column names
-        feature_cols = self.get_col_names(feature_call_or_name)
+        feature_cols = None
+        if self.graph.get_type(feature_call_or_name) == DATAFRAME_TYPE:
+            feature_cols = self.get_col_names(feature_call_or_name)
+        elif self.graph.get_type(feature_call_or_name) == SERIES_TYPE:
+            feature_cols = self.get_series_name(feature_call_or_name)
         self._nbapp.log("%s seems to use %s as features" % (model_name, feature_cols))
 
         self.models[model_name]["train"] = {}
         self.models[model_name]["train"]["features"] = feature_cols
-        self.models[model_name]["train"]["labels"] = feature_cols
+        self.models[model_name]["train"]["labels"] = label_cols
 
         # run perf. test on features
-    def get_col_names(self, call_or_name_node):
-        """try to get columns from the node"""
-        if not self.is_node_df(call_or_name_node):
+    def get_series_name(self, call_or_name_node):
+        series_name_expr = Attribute(value=call_or_name_node, attr="name")
+        series_name_return = self._execute_code(astor.to_source(series_name_expr), "TEST")
+        
+        try:
+            return [eval(series_name_return)]
+        except:
             return None
 
+    def get_col_names(self, call_or_name_node):
+        """try to get columns from the node"""
+        #if not self.is_node_df(call_or_name_node):
+        #    return None
+
         colnames_expression = Call(
-                func = Name(id="list", ctx=Load()),
-                args = [Attribute(value = call_or_name_node, attr="columns")], keywords=[])
+            func=Name(id="list", ctx=Load()),
+            args=[Attribute(value=call_or_name_node, attr="columns")], keywords=[])
         colnames_return = self._execute_code(astor.to_source(colnames_expression), "TEST")
 
         try:
             return eval(colnames_return)
         except:
             return None
-    def is_node_df(self, call_or_name_node): 
 
+    def is_node_df(self, call_or_name_node):
+        """does call or name refer to dataframe type in kernel?"""
         if "DataFrame" in self.pandas_alias.func_mapping:
             df_alias = parse(self.pandas_alias.func_mapping["DataFrame"])
         else:
             # TODO: we need to rewrite the alias module to handle this better.
-            #       this is absolutely a dumb hack, and I expect it to break 
+            #       this is absolutely a dumb hack, and I expect it to break
             #       quickly.
 
             mod_aliases = list(self.pandas_alias.module_aliases)
-            mod_aliases.sort(key = lambda x: len(x), reverse=True)
+            mod_aliases.sort(key=lambda x: len(x), reverse=True)
             df_alias = parse(mod_aliases[0]+".DataFrame")
 
         is_df_expr = Expr(
-                value = Call(
-                    func = Name(id="isinstance", ctx=Load()),
-                    args = [call_or_name_node, df_alias], keywords = []))
+            value=Call(
+                func=Name(id="isinstance", ctx=Load()),
+                args=[call_or_name_node, df_alias], keywords=[]))
         is_df = self._execute_code(astor.to_source(is_df_expr), "TEST")
         return is_df == "True"
 
-    def resolve_data(self, node):
-        """given a node, find nearest df variable"""
-        if self.graph.is_dataframe(node):
+    def is_node_series(self, node):
+        """does node resolve to a pd.Series type?"""
+        if "Series" in self.pandas_alias.func_mapping:
+            series_alias = parse(self.pandas_alias.func_mapping["Series"])
+        else:
+            # TODO: we need to rewrite the alias module to handle this better.
+            #       this is absolutely a dumb hack, and I expect it to break
+            #       quickly.
+
+            mod_aliases = list(self.pandas_alias.module_aliases)
+            mod_aliases.sort(key=lambda x: len(x), reverse=True)
+            series_alias = parse(mod_aliases[0]+".Series")
+
+        # TODO: might be better to do just a simple string comparison, avoids
+        #       import issue
+
+        # experiment suggests it works, but other issues (subclasses etc) remain
+
+        is_series_expr = Expr(
+            value=Call(
+                func=Name(id="isinstance", ctx=Load()),
+                args=[node, series_alias], keywords=[]))
+        is_series = self._execute_code(astor.to_source(is_series_expr), "TEST")
+        return is_series == "True"
+
+    def resolve_data(self, node, permitted_types={DATAFRAME_TYPE, SERIES_TYPE}):
+        """
+        given a node, find nearest upstream variable with type in permitted_type
+
+        """
+        if self.graph.get_type(node) in permitted_types:
             return node
         queue = self.graph.get_parents(node)
-        
+
         while queue:
             parent = queue.pop()
-            if self.graph.is_dataframe(parent):
+            if self.graph.get_type(parent) in permitted_types:
                 return parent
             queue.extend(self.graph.get_parents(parent))
         return None
 
-    def is_df_func(self, attr_node):
-        """is this attribute accessing a function that could return a nondataframe typed value?"""
-        if not self.graph.is_dataframe(attr_node.value):
-            return False
-        # Check against a list of df methods
-        if attr_node.attr in df_funcs + index_funcs:
-            return False
-        return True
-class Aliases(object):
+    def resolve_type_flow(self, source, dest):
+        """given knowledge of source node, can we tell what type dest is?"""
+        # if a call to one of the ambiguous functions, try to resolve 
+        if self.graph.get_type(source) == MAYBE_TYPE:
+            if self.is_node_df(dest): 
+                self.graph.set_type(source,  DATAFRAME_TYPE)
+                return DATAFRAME_TYPE
+            if self.is_node_series(dest): 
+                self.graph.set_type(source, SERIES_TYPE)
+                return SERIES_TYPE
+            return MAYBE_TYPE
+        if isinstance(dest, Attribute):
+            if dest.attr in other_funcs:
+                return OTHER_TYPE
+            if dest.attr in ambig_funcs:
+                if self.is_node_df(dest): return DATAFRAME_TYPE
+                if self.is_node_series(dest): return SERIES_TYPE
+                return MAYBE_TYPE
+            if dest.attr in series_funcs:
+                return SERIES_TYPE
 
+        
+        return self.graph.get_type(source)
+
+class Aliases:
+    """
+    store, parse and handle aliases for modules, submodules and function imports
+    """
     def __init__(self, module_name):
 
         self.name = module_name
@@ -253,9 +323,14 @@ class Aliases(object):
         self.functions = set()
 
     def import_module_as(self, alias_name):
+        """handle node of type "import <modulename> as <alias_name>"""
         self.module_aliases.add(alias_name)
 
-    def import_func(self, func_name, alias_name = None):
+    def import_func(self, func_name, alias_name=None):
+        """
+        handle node representing "from <module> import func" or 
+        "from <module> import func as aliasfunc"
+        """
         if not alias_name:
             self.func_mapping[func_name] = func_name
             self.functions.add(func_name)
@@ -264,22 +339,25 @@ class Aliases(object):
             self.functions.add(alias_name)
 
     def import_glob(self, module):
+        """
+        handle statements like "from <module> import *" and "import <module>.*"
+        """
         # TODO
-        pass 
+        pass
 
     def _check_submod(self, modulename):
         """
         check if calling a submodule we care about
         should return true for case where pandas is in import table and
         module is just pandas
-        
-        in normal case return true for things like pandas.Dataframe 
+
+        in normal case return true for things like pandas.Dataframe
         """
         return self.name in modulename
 
     def add_import(self, alias_node):
         """
-        take an alias node from an import stmnt ("name","asname") and 
+        take an alias node from an import stmnt ("name","asname") and
         add to space if imported module a submod of this alias space
         """
         if self._check_submod(alias_node.name):
@@ -290,7 +368,7 @@ class Aliases(object):
 
     def add_importfrom(self, module_name, alias_node):
         """
-        take an import from statement, and add mapping if 
+        take an import from statement, and add mapping if
         module_name is a submodule of this alias space
         """
         if self._check_submod(module_name):
@@ -309,7 +387,7 @@ class Aliases(object):
         return None
 
 class CellVisitor(NodeVisitor):
-
+    # pylint: disable=invalid-name
     """
     visit the AST of the code in the cell
     connect data introduction, flow, and sinks
@@ -342,10 +420,10 @@ class CellVisitor(NodeVisitor):
         in visiting assign, check if the RHS either is tagged (TODO) or
         intros new data
         """
-        self.generic_visit(node) # visit children BEFORE completing this 
-        # a call node is newdata, and this is nearest assign 
+        self.generic_visit(node) # visit children BEFORE completing this
+        # a call node is newdata, and this is nearest assign
         if self.unfinished_call:
-            if self.env.is_newdata_call(self.unfinished_call): 
+            if self.env.is_newdata_call(self.unfinished_call):
                 self.env.make_newdata(self.unfinished_call, node)
             elif self.env.is_model_call(self.unfinished_call):
                 self.env.make_new_model(self.unfinished_call, node)
@@ -353,12 +431,13 @@ class CellVisitor(NodeVisitor):
 
         if node.value in self.nodes:
             for trgt in node.targets:
-                self.env.graph.link(node.value, trgt)
+                self.env.graph.link(node.value, trgt, 
+                                    dest_type=self.env.resolve_type_flow(node.value, trgt))
                 self.nodes.add(trgt)
         if node.value not in self.nodes:
             for trgt in node.targets:
                 self.nodes.discard(trgt)
-                self.env.graph.remove_name(trgt) 
+                self.env.graph.remove_name(trgt)
 
     #def visit_Delete(self, node):
     def visit_Call(self, node):
@@ -368,13 +447,14 @@ class CellVisitor(NodeVisitor):
             self.env.graph.link(node.func, node)
             self.nodes.add(node)
         for arg in node.args:
-            if arg in self.nodes: 
-                self.env.graph.link(arg, node)
+            if arg in self.nodes:
+                self.env.graph.link(arg, node,
+                                    dest_type=self.env.resolve_type_flow(arg, node))
                 self.nodes.add(node)
-        
-        # TODO: this could be potentially an issue if someone 
-        #       does something goofy like 
-        #    
+
+        # TODO: this could be potentially an issue if someone
+        #       does something goofy like
+        #
         #       lr = LinearRegression().fit(read_csv(), read_csv())
 
         if self.env.is_newdata_call(node):
@@ -385,34 +465,39 @@ class CellVisitor(NodeVisitor):
             self.unfinished_call = node
         if isinstance(node.func, Attribute) and node.func.attr == "fit":
             self.env.add_train(node.func, node.args)
-            
+
     def visit_Attribute(self, node):
+        """if attribute references tagged object, extend"""
         self.generic_visit(node)
         if node.value in self.nodes: # referencing a tagged element
             self.nodes.add(node)
-            self.env.graph.link(node.value, node, preserve_df = self.env.is_df_func(node))
+            self.env.graph.link(node.value, node, dest_type=self.env.resolve_type_flow(node.value, node))
 
     def visit_Name(self, node):
         """is name referencing a var we care about?"""
-        if self.env.graph.find_by_name(node):
-            self.env.graph.link(self.env.graph.find_by_name(node), node)
+        name_node = self.env.graph.find_by_name(node)
+        if name_node:
+            self.env.graph.link(name_node, node, dest_type=self.env.resolve_type_flow(name_node, node))
             self.nodes.add(node)
 
     def visit_Subscript(self, node):
+        """
+        visit a subscript node, extend analysis if subscripted object is 
+        part of graph.
+        """
         self.generic_visit(node)
         if node.value in self.nodes:
             self.nodes.add(node)
-            self.env.graph.link(node.value, node)
-        
-            if isinstance(node.value, Attribute) and node.value.attr in index_funcs:
-                if self.env.is_node_df(node): 
-                    self.env.graph._df_nodes.add(node)
-                    self.env.graph._df_nodes.add(node.value)
-        # TODO: pickup here tomorrow -- if subscript encloses a pd indexing function, 
-        # test if the subscript is a dataframe instance
+            self.env.graph.link(node.value, node,
+                                dest_type=self.env.resolve_type_flow(node.value, node))
+
+#            if isinstance(node.value, Attribute) and node.value.attr in index_funcs:
+#                if self.env.is_node_df(node):
+#                    self.env.graph._df_nodes.add(node)
+#                    self.env.graph._df_nodes.add(node.value)
 
 #    def visit_Expr(self, node):
-        
+
     # TODO: function definitions, attributes
 
 class Graph:
@@ -423,35 +508,29 @@ class Graph:
 
         self.edges = {}
         self.reverse_edges = {} # not super efficient representation, but w/e
-        self.nodes = set()
-        self.active_nodes = set()
-        self.entry_points = set()
+        self.entry_points = set() # aka root nodes
         self._name_register = {}
-    
-        self._df_nodes = set() # nodes which resolve to a dataframe type
 
+        self._type_register = {} # maps nodes to dataframe, series, or unknown type
 
     def _register_name(self, maybe_name):
-        if type(maybe_name) == Name:
+        if isinstance(maybe_name, Name):
             if maybe_name.id not in self._name_register:
                 self._name_register[maybe_name.id] = maybe_name
 
-    def link(self, source, dest, preserve_df = True):
+    def link(self, source, dest, dest_type=None):
         """
         create link between source and dest nodes
+
+        dest_type (optional) the type of the destination node, default None
         """
 
-        self.active_nodes.add(source)
-        self.active_nodes.add(dest)
-        self.nodes.add(source)
-
         self._register_name(dest)
+        self._type_register[dest] = dest_type
 
         if source not in self.edges:
             self.edges[source] = [dest]
         else:
-            if preserve_df and source in self._df_nodes:
-                self._df_nodes.add(dest)
             self.edges[source].append(dest)
 
         if dest not in self.reverse_edges:
@@ -459,40 +538,37 @@ class Graph:
         else:
             self.reverse_edges[dest].append(source)
 
-        self.nodes.add(source)
-        self.nodes.add(dest)
-
-    def root_node(self, node, is_df = True):
+    def root_node(self, node, is_df=True):
         """add root node"""
         self.edges[node] = []
-        self.nodes.add(node)
 
-        self.active_nodes.add(node)
         self.entry_points.add(node)
-        
-        if is_df: self._df_nodes.add(node)
 
-    def find_by_name(self, name_node):        
+        if is_df: self._type_register[node] = DATAFRAME_TYPE
+        else: self._type_register[node] = None
+
+    def find_by_name(self, name_node):
         """find the nodes associated with name"""
         if name_node.id in self._name_register:
             return self._name_register[name_node.id]
-        else:
-            return None
+        return None
 
     def remove_name(self, name_node):
+        """remove name from name tracking (if call to del name or redefinition happens)"""
         if name_node.id in self._name_register:
             del self._name_register[name_node.id]
-
-    def is_dataframe(self, node):
-        """will node resolve to a dataframe type object?"""
-        if node not in self.nodes:
-            raise Exception("node is not tracked, so cannot say if is dataframe or not")
-        return node in self._df_nodes
 
     def get_parents(self, node):
         """return the parents of node, raises keyerror if node has no parents"""
         return self.reverse_edges[node]
-
+    def get_type(self, node):
+        """return type (dataframe, series, or none) of node"""
+        if node not in self._type_register:
+            return None
+        return self._type_register[node]
+    def set_type(self, node, type_name):
+        """set a nodes type, if node was not in graph, node is added to graph"""
+        self._type_register[node] = type_name
 def get_call(assign_node):
     """search down until we find the root call node"""
     last_call = None
@@ -500,18 +576,18 @@ def get_call(assign_node):
 
     while len(queue) > 0:
         node = queue.pop()
-        if type(node) == Call:
+        if isinstance(node, Call):
             last_call = node
         if not hasattr(node, "_fields"):
             continue
         for field in node._fields:
             if isinstance(getattr(node, field), list):
                 for elt in getattr(node, field):
-                    if type(elt) != str:
+                    if not isinstance(elt, str):
                         queue.insert(0, elt)
-            elif not isinstance(getattr(node, field),str):
+            elif not isinstance(getattr(node, field), str):
                 queue.insert(0, getattr(node, field))
-            # TODO make more precise by chekcing if subtype of AST node 
+            # TODO make more precise by chekcing if subtype of AST node
     return last_call
 
 

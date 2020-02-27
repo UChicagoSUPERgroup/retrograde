@@ -95,14 +95,13 @@ class TestKernelHooks(unittest.TestCase):
             """lr = lm.LinearRegression()\n"""+\
             """lr.fit(df.iloc[:,2:5].to_numpy(), df.iloc[:,5].to_numpy())"""
 
-        expected_models = [{"lr": 
-                {"type" : "LinearRegression",
-                 "train_cols" : ["age", "grade", "height"],
-                 "test_cols" : ["score"],
-                 "avail_cols" : ["age", "gender", "grade", "height", "score"], 
-                }}]
+        expected_models = {"lr": 
+                {"train" : {
+                    "features" : ["age", "grade", "height"],
+                    "labels" : ["score"]}
+                }}
  
-        resp = self.env._execute_code(model_cell, "TEST") # need to execute code this way to avoid issues with message queueing
+        self.env._execute_code(model_cell, "TEST") # need to execute code this way to avoid issues with message queueing
         self.env.cell_exec(model_cell, "TEST")
         
         self.assertEqual(self.env.models, expected_models)
