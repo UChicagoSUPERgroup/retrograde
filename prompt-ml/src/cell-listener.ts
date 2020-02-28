@@ -10,6 +10,10 @@ import {
   Cell,
 } from "@jupyterlab/cells";
 
+import {
+  INotebookTracker,
+} from "@jupyterlab/notebook";
+
 import { IObservableList } from "@jupyterlab/observables";
 import { ServerConnection } from "@jupyterlab/services";
 
@@ -21,9 +25,14 @@ export class Listener {
    This listens on a notebook and records changes to cells on execution
   */
   private client: CodeCellClient;
-  constructor(client: CodeCellClient) {
+  private tracker : INotebookTracker;
+
+  constructor(client: CodeCellClient, tracker : INotebookTracker) {
+
+    this.tracker = tracker;
     this.client = client;
     this.init();
+
   }
 
   private async init() {
@@ -36,6 +45,7 @@ export class Listener {
     var cell: Cell;
     var contents: string;
     var id: string;
+    var k_id: string;
 //    var notebook: Notebook;
 
     NotebookActions.executed.connect(
@@ -49,13 +59,14 @@ export class Listener {
           console.log("sent ", cell);
           // todo: cell is cyclic, so cannot turn into string
           contents = cell.model.value.text;
-          id = cell.model.id;
+	  id = cell.model.id;
+          k_id = this.tracker.currentWidget.session.kernel.id;
           //todo: should add url/kernel id to differentiate
           this.client.request(
             "exec", "POST", 
             JSON.stringify({
                 contents, 
-                id}),
+                id, k_id}),
             ServerConnection.defaultSettings);
         }
       })

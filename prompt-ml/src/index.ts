@@ -21,7 +21,7 @@ const extension: JupyterFrontEndPlugin<void> = {
   requires: [INotebookTracker],
   activate: (app: JupyterFrontEnd, tracker : INotebookTracker) => {
     const client = new CodeCellClient();
-    const listener = new Listener(client);
+    const listener = new Listener(client, tracker);
     console.log("init listener", listener);
   }
 }
