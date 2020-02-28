@@ -47,6 +47,7 @@ export class Listener {
     var id: string;
     var k_id: string;
 //    var notebook: Notebook;
+//    var resp: string;
 
     NotebookActions.executed.connect(
       (signal: any, bunch: object) => {
@@ -65,9 +66,10 @@ export class Listener {
           this.client.request(
             "exec", "POST", 
             JSON.stringify({
-                contents, 
-                id, k_id}),
-            ServerConnection.defaultSettings);
+                "contents" : contents, 
+                "cell_id" : id, "kernel" : k_id}),
+	        ServerConnection.defaultSettings).
+	    then(function(msg : string) { console.log(msg) });
         }
       })
   }
