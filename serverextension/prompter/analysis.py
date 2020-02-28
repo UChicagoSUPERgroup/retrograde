@@ -6,7 +6,7 @@ from queue import Empty
 from ast import NodeVisitor, Call, Name, Attribute, Expr, Load, Str
 from ast import parse, walk, iter_child_nodes
 import astor
-
+from timeit import default_timer as timer
 from .config import other_funcs, ambig_funcs, series_funcs
 
 #from code import InteractiveInterpreter
@@ -23,16 +23,17 @@ class AnalysisEnvironment:
     TODO: should add ability to execute in parallel, in order to be able to run
           tests DS isn't thinking of
     """
-    def __init__(self, nbapp):
+    def __init__(self, nbapp, kernel_id):
         """
         nbapp = the notebook application object
         """
         self.pandas_alias = Aliases("pandas") # handle imports and functions
-        self.sklearn_alias = Aliases("sklearn")
+#        self.sklearn_alias = Aliases("sklearn")
 
         self.entry_points = {} # new data introduced into notebook
         self.graph = Graph() # connections
         self.active_names = set()
+        self._kernel_id = kernel_id
 
         self._read_funcs = ["read_csv", "read_fwf", "read_json", "read_html",
                             "read_clipboard", "read_excel", "read_hdf",
@@ -58,8 +59,6 @@ class AnalysisEnvironment:
         visitor = CellVisitor(self)
         visitor.visit(cell_code)
 
-        # TODO: need hooks to check if kernel access needed
-
     def _add_entry(self, call_node, targets):
         """add an entry point"""
         source = as_string(call_node.args[0])
@@ -76,9 +75,13 @@ class AnalysisEnvironment:
                 target = target.value # assumes target is attribute type
             self.entry_points[target.id] = {"source" : source, "format" : fmt}
 
-    def _execute_code(self, code, kernel_id, timeout=1):
+    def _execute_code(self, code, kernel_id=None, timeout=1):
 
-        kernel = self._nbapp.get_kernel(kernel_id)
+        if not kernel_id: kernel_id = self._kernel_id
+
+        start_time = timer()
+
+        kernel = self._nbapp.kernel_manager.get_kernel(kernel_id)
         client = kernel.client()
         msg_id = client.execute(code)
 
@@ -107,6 +110,8 @@ class AnalysisEnvironment:
             out = '\n'.join(temp['traceback']) # Put error into nice format
         else:
             out = ''
+        end_time = timer()
+        self._nbapp.log("Code execution taking %s seconds" % (end_time - start_time))
         return out
 
     def make_newdata(self, call_node, assign_node):
@@ -141,7 +146,7 @@ class AnalysisEnvironment:
                 func=Name(id="hasattr", ctx=Load()),
                 args=[call_node, Str("fit")], keywords=[]))
 
-        resp = self._execute_code(astor.to_source(expr), "TEST")
+        resp = self._execute_code(astor.to_source(expr))
         return resp == "True"
 
     def make_new_model(self, call_node, assign_node):
@@ -204,7 +209,7 @@ class AnalysisEnvironment:
         # run perf. test on features
     def get_series_name(self, call_or_name_node):
         series_name_expr = Attribute(value=call_or_name_node, attr="name")
-        series_name_return = self._execute_code(astor.to_source(series_name_expr), "TEST")
+        series_name_return = self._execute_code(astor.to_source(series_name_expr))
         
         try:
             return [eval(series_name_return)]
@@ -219,7 +224,7 @@ class AnalysisEnvironment:
         colnames_expression = Call(
             func=Name(id="list", ctx=Load()),
             args=[Attribute(value=call_or_name_node, attr="columns")], keywords=[])
-        colnames_return = self._execute_code(astor.to_source(colnames_expression), "TEST")
+        colnames_return = self._execute_code(astor.to_source(colnames_expression))
 
         try:
             return eval(colnames_return)
@@ -243,7 +248,7 @@ class AnalysisEnvironment:
             value=Call(
                 func=Name(id="isinstance", ctx=Load()),
                 args=[call_or_name_node, df_alias], keywords=[]))
-        is_df = self._execute_code(astor.to_source(is_df_expr), "TEST")
+        is_df = self._execute_code(astor.to_source(is_df_expr))
         return is_df == "True"
 
     def is_node_series(self, node):
@@ -268,7 +273,7 @@ class AnalysisEnvironment:
             value=Call(
                 func=Name(id="isinstance", ctx=Load()),
                 args=[node, series_alias], keywords=[]))
-        is_series = self._execute_code(astor.to_source(is_series_expr), "TEST")
+        is_series = self._execute_code(astor.to_source(is_series_expr))
         return is_series == "True"
 
     def resolve_data(self, node, permitted_types={DATAFRAME_TYPE, SERIES_TYPE}):
