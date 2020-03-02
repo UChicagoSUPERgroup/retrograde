@@ -27,11 +27,11 @@ class AnalysisManager:
         cell_id = request["cell_id"]
         code = request["contents"]
 
-        self._nb.log.info("Analyzing cell {0} with kernel {1}".format(cell_id, kernel_id))
+        self._nb.log.info("[MANAGER] Analyzing cell {0} with kernel {1}".format(cell_id, kernel_id))
 
         if kernel_id not in self.analyses:
 
-            self._nb.log.info("Starting new analysis environment for kernel {0}".format(kernel_id))
+            self._nb.log.info("[MANAGER] Starting new analysis environment for kernel {0}".format(kernel_id))
             self.analyses[kernel_id] = AnalysisEnvironment(self._nb, kernel_id)
         
         env = self.analyses[kernel_id]
@@ -39,7 +39,7 @@ class AnalysisManager:
         try:
             env.cell_exec(code, kernel_id)
         except Exception as e:
-            self._nb.log.error("Analysis environment encountered exception {0}".format(str(e)))
+            self._nb.log.error("[MANAGER] Analysis environment encountered exception {0}".format(str(e)))
 
         response = self.make_response(kernel_id, cell_id)
 

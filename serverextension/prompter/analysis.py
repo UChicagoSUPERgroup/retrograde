@@ -28,7 +28,7 @@ class AnalysisEnvironment:
         nbapp = the notebook application object
         """
         self.pandas_alias = Aliases("pandas") # handle imports and functions
-#        self.sklearn_alias = Aliases("sklearn")
+        self.sklearn_alias = Aliases("sklearn")
 
         self.entry_points = {} # new data introduced into notebook
         self.graph = Graph() # connections
@@ -75,6 +75,15 @@ class AnalysisEnvironment:
                 target = target.value # assumes target is attribute type
             self.entry_points[target.id] = {"source" : source, "format" : fmt}
 
+    def _wait_for_clear(self, client):
+        """let's try polling the iopub channel until nothing queued up to execute"""
+        while True:
+            self._nbapp.log.debug("[ANALYSIS] waiting for channel to clear")
+            try:
+                io_msg_content = client.get_iopub_msg(timeout=1)['content']
+                self._nbapp.log.debug("[ANALYSIS] io_msg {0}".format(io_msg_content))
+            except Empty:
+                return True
     def _execute_code(self, code, kernel_id=None, timeout=1):
 
         if not kernel_id: kernel_id = self._kernel_id
@@ -83,8 +92,14 @@ class AnalysisEnvironment:
 
         kernel = self._nbapp.kernel_manager.get_kernel(kernel_id)
         client = kernel.client()
-        msg_id = client.execute(code)
+        self._nbapp.log.debug("[ANALYSIS] waiting for ready")
 
+        self._nbapp.log.debug("[ANALYSIS] executing code on {0}".format(kernel_id))
+#        self._nbapp.log.debug("[ANALYSIS] {0}".format(dir(kernel)))
+
+        self._wait_for_clear(client)
+
+        msg_id = client.execute(code)
         reply = client.get_shell_msg(msg_id)
         # using loop from https://github.com/abalter/polyglottus/blob/master/simple_kernel.py
 
@@ -111,7 +126,7 @@ class AnalysisEnvironment:
         else:
             out = ''
         end_time = timer()
-        self._nbapp.log("Code execution taking %s seconds" % (end_time - start_time))
+        self._nbapp.log.debug("[ANALYSIS] Code execution taking %s seconds" % (end_time - start_time))
         return out
 
     def make_newdata(self, call_node, assign_node):
@@ -172,19 +187,19 @@ class AnalysisEnvironment:
         """
 
         model_name = func_node.value.id
-        self._nbapp.log("Retrieved model %s" % model_name)
+        self._nbapp.log.debug("[ANALYSIS] Retrieved model %s" % model_name)
 
         if model_name not in self.models:
-            self._nbapp.log("%s not a registered model" % model_name)
+            self._nbapp.log.debug("[ANALYSIS] %s not a registered model" % model_name)
             return
 
         # id labels
         label_call_or_name = self.resolve_data(args[1])
-        self._nbapp.log("model %s has %s as labels" % (model_name, label_call_or_name))
+        self._nbapp.log.debug("[ANALYSIS] model %s has %s as labels" % (model_name, label_call_or_name))
 
         # id features
         feature_call_or_name = self.resolve_data(args[0])
-        self._nbapp.log("model %s has %s as features" % (model_name, feature_call_or_name))
+        self._nbapp.log.debug("[ANALYSIS] model %s has %s as features" % (model_name, feature_call_or_name))
 
         # get label column names
         label_cols = None
@@ -192,7 +207,7 @@ class AnalysisEnvironment:
             label_cols = self.get_col_names(label_call_or_name)
         elif self.graph.get_type(label_call_or_name) == SERIES_TYPE:
             label_cols = self.get_series_name(label_call_or_name)
-        self._nbapp.log("%s seems to use %s as labels" % (model_name, label_cols))
+        self._nbapp.log.debug("[ANALYSIS] %s seems to use %s as labels" % (model_name, label_cols))
 
         # get feature column names
         feature_cols = None
@@ -200,7 +215,7 @@ class AnalysisEnvironment:
             feature_cols = self.get_col_names(feature_call_or_name)
         elif self.graph.get_type(feature_call_or_name) == SERIES_TYPE:
             feature_cols = self.get_series_name(feature_call_or_name)
-        self._nbapp.log("%s seems to use %s as features" % (model_name, feature_cols))
+        self._nbapp.log.debug("[ANALYSIS] %s seems to use %s as features" % (model_name, feature_cols))
 
         self.models[model_name]["train"] = {}
         self.models[model_name]["train"]["features"] = feature_cols
