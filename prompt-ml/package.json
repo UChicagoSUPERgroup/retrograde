@@ -33,7 +33,8 @@
   "dependencies": {
     "@jupyterlab/application": "^1.0.0",
     "@jupyterlab/cells": "^1.2.2",
-    "@jupyterlab/notebook": "^1.2.2"
+    "@jupyterlab/notebook": "^1.2.2",
+    "@lumino/signaling": "^1.3.5"
   },
   "devDependencies": {
     "rimraf": "^2.6.1",

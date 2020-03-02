@@ -14,6 +14,7 @@ import {
   INotebookTracker,
 } from "@jupyterlab/notebook";
 
+import { ISignal, Signal } from '@lumino/signaling';
 import { IObservableList } from "@jupyterlab/observables";
 import { ServerConnection } from "@jupyterlab/services";
 
@@ -26,6 +27,8 @@ export class Listener {
   */
   private client: CodeCellClient;
   private tracker : INotebookTracker;
+  private _dataSignal : Signal<this, string> = new Signal<this, string>(this);
+  private _modelSignal : Signal<this, string>  = new Signal<this, string>(this);
 
   constructor(client: CodeCellClient, tracker : INotebookTracker) {
 
@@ -34,6 +37,13 @@ export class Listener {
     this.init();
 
   }
+
+  get datasignal(): ISignal<this, string> {
+    return this._dataSignal;
+  }
+  get modelsignal(): ISignal<this, string> {
+    return this._modelSignal;
+  } 
 
   private async init() {
     this.listen();
@@ -58,7 +68,6 @@ export class Listener {
         if (cell instanceof CodeCell) {
 
           console.log("sent ", cell);
-          // todo: cell is cyclic, so cannot turn into string
           contents = cell.model.value.text;
 	  id = cell.model.id;
           k_id = this.tracker.currentWidget.session.kernel.id;
@@ -69,7 +78,9 @@ export class Listener {
                 "contents" : contents, 
                 "cell_id" : id, "kernel" : k_id}),
 	        ServerConnection.defaultSettings).
-	    then(function(msg : string) { console.log(msg) });
+	    then(value => { 
+              if ("data" in value) { this._dataSignal.emit(value["data"]); };
+              if ("model" in value) { this._modelSignal.emit(value["model"]); }});
         }
       })
   }
