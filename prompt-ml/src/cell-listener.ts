@@ -27,8 +27,8 @@ export class Listener {
   */
   private client: CodeCellClient;
   private tracker : INotebookTracker;
-  private _dataSignal : Signal<this, string> = new Signal<this, string>(this);
-  private _modelSignal : Signal<this, string>  = new Signal<this, string>(this);
+  private _dataSignal : Signal<this, any> = new Signal<this, any>(this);
+  private _modelSignal : Signal<this, any>  = new Signal<this, any>(this);
 
   constructor(client: CodeCellClient, tracker : INotebookTracker) {
 
@@ -79,8 +79,10 @@ export class Listener {
                 "cell_id" : id, "kernel" : k_id}),
 	        ServerConnection.defaultSettings).
 	    then(value => { 
-              if ("data" in value) { this._dataSignal.emit(value["data"]); };
-              if ("model" in value) { this._modelSignal.emit(value["model"]); }});
+              let obj = JSON.parse(value);
+              console.log("[prompt-ml] received", obj);
+              if ("data" in obj) { this._dataSignal.emit(obj["data"]); };
+              if ("model" in obj) { this._modelSignal.emit(obj["model"]); }});
         }
       })
   }

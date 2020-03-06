@@ -10,6 +10,10 @@ import {
   Listener,
 } from "./cell-listener";
 
+import {
+  Prompter,
+} from "./notifier";
+
 import { CodeCellClient } from "./client";
 
 /**
@@ -23,6 +27,8 @@ const extension: JupyterFrontEndPlugin<void> = {
     const client = new CodeCellClient();
     const listener = new Listener(client, tracker);
     console.log("init listener", listener);
+    const prompter = new Prompter(listener, tracker);
+    console.log("init prompter", prompter);
   }
 }
 
