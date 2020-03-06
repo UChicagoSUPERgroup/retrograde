@@ -4,6 +4,7 @@ data relationships between variables
 """
 from queue import Empty
 from ast import NodeVisitor, Call, Name, Attribute, Expr, Load, Str
+from ast import Subscript, List, Index, ExtSlice
 from ast import parse, walk, iter_child_nodes
 import astor
 from timeit import default_timer as timer
@@ -42,14 +43,18 @@ class AnalysisEnvironment:
                             "read_spss", "read_pickle", "read_sql",
                             "read_gbq"]
         self._nbapp = nbapp
+        self.client = None
 #        self._session = InteractiveInterpreter()
         self.models = {}
 
-    def cell_exec(self, code, notebook):
+    def cell_exec(self, code, notebook, cell_id):
         """
         execute a cell and propagate the analysis
         """
         cell_code = parse(code)
+
+        old_models = set(self.models.keys())
+        old_data = set(self.entry_points.keys())
 
         # add parent data to each node
         for node in walk(cell_code):
@@ -58,6 +63,14 @@ class AnalysisEnvironment:
 
         visitor = CellVisitor(self)
         visitor.visit(cell_code)
+
+        new_models = set(self.models.keys())
+        new_data = set(self.entry_points.keys())
+
+        for model in (new_models - old_models):
+            self.models[model]["cell"] = cell_id
+        for data in (new_data - old_data):
+            self.entry_points[data]["cell"] = cell_id
 
     def _add_entry(self, call_node, targets):
         """add an entry point"""
@@ -84,25 +97,35 @@ class AnalysisEnvironment:
                 self._nbapp.log.debug("[ANALYSIS] io_msg {0}".format(io_msg_content))
             except Empty:
                 return True
-    def _execute_code(self, code, kernel_id=None, timeout=1):
+
+    def _execute_code(self, code, client=None, kernel_id=None, timeout=1):
 
         if not kernel_id: kernel_id = self._kernel_id
 
         start_time = timer()
 
-        kernel = self._nbapp.kernel_manager.get_kernel(kernel_id)
-        client = kernel.client()
-        self._nbapp.log.debug("[ANALYSIS] waiting for ready")
+        if not client: client = self.client # client initially defined as None
 
-        self._nbapp.log.debug("[ANALYSIS] executing code on {0}".format(kernel_id))
+        if (not client) or (kernel_id != self._kernel_id):
+            self._nbapp.log.debug("[ANALYSIS] creating new client for {0}".format(code))
+            kernel = self._nbapp.kernel_manager.get_kernel(kernel_id)
+            client = kernel.client()
+
+            client.start_channels()
+            client.wait_for_ready()
+
+            self.client = client # want to associate kernel id with client
+            self._kernel_id = kernel_id
+#        self._nbapp.log.debug("[ANALYSIS] acquiring lock for {0}".format(kernel_id))
 #        self._nbapp.log.debug("[ANALYSIS] {0}".format(dir(kernel)))
-
-        self._wait_for_clear(client)
+        self._nbapp.web_app.kernel_locks[kernel_id].acquire()
 
         msg_id = client.execute(code)
+        self._nbapp.log.debug("[ANALYSIS] code execution on {0}".format(kernel_id))
         reply = client.get_shell_msg(msg_id)
         # using loop from https://github.com/abalter/polyglottus/blob/master/simple_kernel.py
-
+        
+#        self._nbapp.log.debug("[ANALYSIS] reply id {0} for {1}".format(reply, kernel_id))
         io_msg_content = client.get_iopub_msg(timeout=timeout)['content']
 
         if 'execution_state' in io_msg_content and io_msg_content['execution_state'] == 'idle':
@@ -117,6 +140,9 @@ class AnalysisEnvironment:
                     break
             except Empty:
                 break
+
+        self._nbapp.web_app.kernel_locks[kernel_id].release()
+
         if 'data' in temp: # Indicates completed operation
             out = temp['data']['text/plain']
         elif 'name' in temp and temp['name'] == "stdout": # indicates output
@@ -203,6 +229,7 @@ class AnalysisEnvironment:
 
         # get label column names
         label_cols = None
+
         if self.graph.get_type(label_call_or_name) == DATAFRAME_TYPE:
             label_cols = self.get_col_names(label_call_or_name)
         elif self.graph.get_type(label_call_or_name) == SERIES_TYPE:
@@ -223,6 +250,7 @@ class AnalysisEnvironment:
 
         # run perf. test on features
     def get_series_name(self, call_or_name_node):
+
         series_name_expr = Attribute(value=call_or_name_node, attr="name")
         series_name_return = self._execute_code(astor.to_source(series_name_expr))
         
@@ -327,7 +355,11 @@ class AnalysisEnvironment:
                 return MAYBE_TYPE
             if dest.attr in series_funcs:
                 return SERIES_TYPE
-
+        if isinstance(dest, Subscript):
+           if self.graph.get_type(source) == DATAFRAME_TYPE:
+               if isinstance(dest.slice, Index):
+                   if isinstance(dest.slice.value, Str):
+                       return SERIES_TYPE
         
         return self.graph.get_type(source)
 
@@ -626,4 +658,6 @@ def as_string(name_or_attrib):
         return full
     if isinstance(name_or_attrib, Name):
         return name_or_attrib.id
+    if isinstance(name_or_attrib, Str):
+        return name_or_attrib.s
     return ""

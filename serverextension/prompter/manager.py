@@ -2,6 +2,7 @@
 we need a global session manager which handles
 routing of code analyses and handles failures
 """
+import sys
 
 from prompter.storage import DbHandler
 from prompter.analysis import AnalysisEnvironment
@@ -37,9 +38,9 @@ class AnalysisManager:
         env = self.analyses[kernel_id]
 
         try:
-            env.cell_exec(code, kernel_id)
-        except Exception as e:
-            self._nb.log.error("[MANAGER] Analysis environment encountered exception {0}".format(str(e)))
+            env.cell_exec(code, kernel_id, cell_id)
+        except RuntimeError as e:
+            self._nb.log.error("[MANAGER] Analysis environment encountered exception {0}, call back {1}".format(e, sys.exc_info()[0]))
 
         response = self.make_response(kernel_id, cell_id)
 
