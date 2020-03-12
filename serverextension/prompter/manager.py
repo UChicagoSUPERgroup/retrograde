@@ -24,6 +24,9 @@ class AnalysisManager:
         """
         handle a request (json object with "content", "id", and "kernel" fields)
         """
+        if request["type"] != "execute":
+            print(request)
+            return
         kernel_id = request["kernel"]
         cell_id = request["cell_id"]
         code = request["contents"]

@@ -31,14 +31,14 @@
     "watch": "tsc -w"
   },
   "dependencies": {
-    "@jupyterlab/application": "^1.0.0",
-    "@jupyterlab/cells": "^1.2.2",
-    "@jupyterlab/notebook": "^1.2.2",
+    "@jupyterlab/application": "^2.0.2",
+    "@jupyterlab/cells": "^2.0",
+    "@jupyterlab/notebook": "^2.0",
     "@lumino/signaling": "^1.3.5"
   },
   "devDependencies": {
     "rimraf": "^2.6.1",
-    "typescript": "~3.5.2"
+    "typescript": "^3.8.3"
   },
   "sideEffects": [
     "style/*.css"

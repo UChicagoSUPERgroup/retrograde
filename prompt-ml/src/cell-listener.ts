@@ -18,7 +18,7 @@ import { ISignal, Signal } from '@lumino/signaling';
 import { IObservableList } from "@jupyterlab/observables";
 import { ServerConnection } from "@jupyterlab/services";
 
-import { PromiseDelegate } from "@phosphor/coreutils";
+import { PromiseDelegate } from "@lumino/coreutils";
 import { CodeCellClient } from "./client";
 
 export class Listener {
@@ -69,12 +69,13 @@ export class Listener {
 
           console.log("sent ", cell);
           contents = cell.model.value.text;
-	  id = cell.model.id;
-          k_id = this.tracker.currentWidget.session.kernel.id;
+	      id = cell.model.id;
+          k_id = this.tracker.currentWidget.sessionContext.session.kernel.id;
           //todo: should add url/kernel id to differentiate
           this.client.request(
             "exec", "POST", 
             JSON.stringify({
+                "type" : "execute",
                 "contents" : contents, 
                 "cell_id" : id, "kernel" : k_id}),
 	        ServerConnection.defaultSettings).

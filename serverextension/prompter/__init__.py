@@ -38,7 +38,7 @@ def _jupyter_server_extension_paths():
     return [{"module" : "prompter"}]
 
 def load_jupyter_server_extension(app):
-   
+    print("LOADING SERVER EXTENSIONS") 
     global MANAGER
     MANAGER = AnalysisManager(app)
      
@@ -47,7 +47,7 @@ def load_jupyter_server_extension(app):
     handlers = [(url_path_join(base_url, x[0]), x[1]) for x in handlers]
     app.web_app.add_handlers(".*", handlers)
     # override kernel handler
-
+    
 #    print(app.web_app.wildcard_router.rules)
     replace_handler(default_handlers[-1][0], TSChannelHandler, app.web_app)
 

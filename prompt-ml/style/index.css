@@ -1,0 +1,13 @@
+.jp-PromptArea-child {
+  flex-direction: column;
+}
+
+textarea {
+  width: 70%;
+  height: auto;
+}
+
+.jp-prompt-input-button {
+  background-color: var(--jp-warn-color0);
+  border-radius: 12px;
+}
