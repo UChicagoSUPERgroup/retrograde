@@ -24,6 +24,8 @@ class AnalysisManager:
         """
         handle a request (json object with "content", "id", and "kernel" fields)
         """
+        self._nb.log.debug("[MANAGER] received {0}".format(request))
+
         if request["type"] != "execute":
             print(request)
             return

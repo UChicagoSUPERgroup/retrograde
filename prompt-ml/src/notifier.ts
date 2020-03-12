@@ -85,17 +85,25 @@ export class Prompter {
   }
 
   private _form_onclick_factory(input_area : HTMLTextAreaElement, 
-                                cell : string, additional_info? : any) : () => void{
-    
+                                cell : string, prompt_div : HTMLElement, 
+                                min_div : HTMLElement,
+                                additional_info? : any) : () => void{
+   
+          var output : any = {
+            "cell" : cell,
+          };
+          if (additional_info) { 
+            output = { ...output, ...additional_info};
+            console.log("[PROMPT-ML tried to add ",additional_info," output is ",output);
+          }
+ 
         let new_data_form = function() {
             var client : CodeCellClient = new CodeCellClient();
-            var output = {
-                "input" : input_area.value,
-                "cell" : cell,
-            };
-            if (additional_info) { output = { ...output, ...additional_info}};
+            output["input"] = input_area.value;
+            console.log("[PROMPT-ML] sending ", output);
             client.request("exec", "POST", JSON.stringify(output),
                 ServerConnection.defaultSettings); 
+            _minimizeForm(prompt_div, min_div);
         }
 
         return new_data_form;
@@ -138,6 +146,13 @@ export class Prompter {
 	prompt_child.appendChild(this._makeDiv("p-Widget jp-OutputPrompt jp-OutputArea-prompt"));
 	let prompt_final = this._makeDiv("p-Widget jp-RenderedText jp-prompt-area");
 
+    // minimized view
+    let min_child = this._makeDiv("p-Widget p-panel jp-PromptArea-child");
+    let bar = document.createElement("hr");
+    min_child.appendChild(bar);
+    min_child.style.display = "none";
+    prompt_area.appendChild(min_child); 
+
     prompt_final.appendChild(question_text);
 	prompt_child.appendChild(prompt_final);
 	prompt_area.appendChild(prompt_child);
@@ -152,9 +167,8 @@ export class Prompter {
     let button = document.createElement("button");
     button.innerText = "Submit";
     button.className = "jp-prompt-input-button";
-    button.onclick = this._form_onclick_factory(input_field, cell, additional_info);
+    button.onclick = this._form_onclick_factory(input_field, cell, prompt_child, min_child, additional_info);
     prompt_child.appendChild(button);
-//    button.onclick = 
 
     return prompt_container;
   }
@@ -190,5 +204,20 @@ export class Prompter {
 
     return prompt_container;
   }
+}
+
+function _minimizeForm(prompt_div : HTMLElement, min_div : HTMLElement) {
+
+  prompt_div.style.display = "none";
+  min_div.style.display = "block" 
+
+  min_div.onclick = function() { _maximizeForm(prompt_div, min_div) };
+}
+ 
+function _maximizeForm(prompt_div : HTMLElement, min_div : HTMLElement) {
+
+  prompt_div.style.display = "block";
+  min_div.style.display = "none";
+
 }
 
