@@ -3,8 +3,8 @@ analysis.py creates a running environment for dynamically tracking
 data relationships between variables
 """
 from queue import Empty
-from ast import NodeVisitor, Call, Name, Attribute, Expr, Load, Str
-from ast import Subscript, List, Index, ExtSlice
+from ast import NodeVisitor, Call, Name, Attribute, Expr, Load, Str, Num
+from ast import Subscript, List, Index, ExtSlice, keyword, NameConstant
 from ast import parse, walk, iter_child_nodes
 import astor
 from timeit import default_timer as timer
@@ -142,7 +142,6 @@ class AnalysisEnvironment:
                 break
 
         self._nbapp.web_app.kernel_locks[kernel_id].release()
-
         if 'data' in temp: # Indicates completed operation
             out = temp['data']['text/plain']
         elif 'name' in temp and temp['name'] == "stdout": # indicates output
@@ -158,7 +157,59 @@ class AnalysisEnvironment:
     def make_newdata(self, call_node, assign_node):
         """got to assign at top of new data, fill in entry point"""
         self._add_entry(call_node, assign_node.targets)
+#        self.entry_points["info"] = self._data_checks(assign_node.targets)
+#        self._nbapp.log.debug("[ANALYSIS] info = {0}".format(self.entry_points["info"])) 
 
+    def new_data_checks(self, targets):
+        for target in targets:
+            tgt_type = self.graph.get_type(target)
+            self._nbapp.log.debug("[ANALYSIS] target type "+tgt_type)
+
+            while not isinstance(target, Name):
+                target = target.value
+            self.entry_points[target.id]["imbalance"] = {}
+
+            if tgt_type == DATAFRAME_TYPE:
+                cols = self.get_col_names(target)
+                self.entry_points[target.id]["imbalance"] = self.data_imbalance(target, cols)
+                        
+            elif tgt_type == SERIES_TYPE:
+                pass # TODO: IDK if we should do this for series
+               
+    def data_imbalance(self, obj, colnames):
+        output = {}
+        for col in colnames:
+            top_counts_expr = Call(Attribute(
+                                value=Call(
+                                    func=Attribute(
+                                        value=Subscript(value=obj, slice=Index(value=Str(s=col))),
+                                        attr="value_counts"),
+                                    args=[], keywords=[keyword(arg="normalize", value=NameConstant(value=True))]),
+                                attr="head"),args=[Num(n=10)],keywords=[])
+            low_counts_expr = Call(Attribute(
+                                value=Call(
+                                    func=Attribute(
+                                        value=Subscript(value=obj, slice=Index(value=Str(s=col))),
+                                        attr="value_counts"),
+                                    args=[], keywords=[keyword(arg="normalize", value=NameConstant(value=True))]),
+                                attr="tail"),args=[Num(n=10)],keywords=[])
+ 
+            list_expr = List(elts=[top_counts_expr, low_counts_expr])
+            concat_call_expr = Call(
+                                func=Attribute(value=Name(id="pd"), attr="concat"),
+                                args=[list_expr], keywords=[])
+            value_counts_expr = Call(
+                                 func=Attribute(
+                                   value=concat_call_expr,
+                                   attr="to_dict"),
+                                 args=[], keywords=[])
+            resp = self._execute_code(astor.to_source(value_counts_expr))
+            output[col] = eval(resp)
+
+        return output 
+#    def data_null(self, obj, colnames):
+        
+#    def data_corr(self, obj, colnames):     
     def is_newdata_call(self, call_node):
         """is this call node a pd read function"""
         func = call_node.func
@@ -268,7 +319,6 @@ class AnalysisEnvironment:
             func=Name(id="list", ctx=Load()),
             args=[Attribute(value=call_or_name_node, attr="columns")], keywords=[])
         colnames_return = self._execute_code(astor.to_source(colnames_expression))
-
         try:
             return eval(colnames_return)
         except:
@@ -474,9 +524,12 @@ class CellVisitor(NodeVisitor):
         """
         self.generic_visit(node) # visit children BEFORE completing this
         # a call node is newdata, and this is nearest assign
+        new_data = False
+
         if self.unfinished_call:
             if self.env.is_newdata_call(self.unfinished_call):
                 self.env.make_newdata(self.unfinished_call, node)
+                new_data = True
             elif self.env.is_model_call(self.unfinished_call):
                 self.env.make_new_model(self.unfinished_call, node)
             self.unfinished_call = None
@@ -490,6 +543,9 @@ class CellVisitor(NodeVisitor):
             for trgt in node.targets:
                 self.nodes.discard(trgt)
                 self.env.graph.remove_name(trgt)
+
+        if new_data:
+            self.env.new_data_checks(node.targets)
 
     #def visit_Delete(self, node):
     def visit_Call(self, node):

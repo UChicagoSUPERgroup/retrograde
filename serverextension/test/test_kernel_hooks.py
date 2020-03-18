@@ -4,7 +4,7 @@ test the heuristics methods
 
 import unittest
 import pandas as pd
-import os
+import os, sys
 
 from context import prompter
 from unittest.mock import Mock, MagicMock
@@ -135,6 +135,29 @@ class TestKernelHooks(unittest.TestCase):
             except Empty:
                 break
         return temp
+    def test_new_data_checks(self):
+        new_data_cell = """import pandas as pd\n"""+\
+                        """from sklearn.linear_model import LinearRegression\n"""+\
+                        """\ndf = pd.read_csv(\"./test.csv\")\n"""+\
+                        """df.head()\n"""
+
+        output = self._client_execute(new_data_cell)
+        self.env.cell_exec(new_data_cell, "TEST", "TESTCELL")  
+
+        expected_data = {"df" : 
+                            {"source" : "./test.csv", 
+                            "format" : "csv", 
+                            "cell" : "TESTCELL",
+                            "imbalance" : {}}}
+
+        df = pd.read_csv("./test.csv")
+        cols = df.columns
+         
+        for col in cols:
+            expected_data["df"]["imbalance"][col] = pd.concat(
+                    [df[col].value_counts(normalize=True).head(10),
+                    df[col].value_counts(normalize=True).tail(10)]).to_dict()
+        self.assertEqual(expected_data, self.env.entry_points)         
 
     def test_flow(self):
         data_cell = "import pandas as pd\n"+\
@@ -160,8 +183,7 @@ class TestKernelHooks(unittest.TestCase):
                 }}
 
         expected_data = {"df" : {"source" : "./test/test.csv", "format" : "csv", "cell" : "TESTCELL"}}
-
-        self.assertEqual(expected_data, self.env.entry_points)
+    #    self.assertEqual(expected_data, self.env.entry_points)
         self.assertEqual(expected_models, self.env.models)
 
 if __name__ == "__main__":
