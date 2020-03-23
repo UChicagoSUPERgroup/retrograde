@@ -4,6 +4,7 @@ notebook application and tracking development of particular cells over time
 """
 import sqlite3
 import os
+from datetime import datetime
 
 from .config import DB_DIR, DB_NAME
 
@@ -31,11 +32,11 @@ class DbHandler(object):
         add the tables to the new database
         """
         self._cursor.execute("""
-            CREATE TABLE cells(id TEXT PRIMARY KEY, contents TEXT, num_exec INT, last_exec TIMESTAMP)
+            CREATE TABLE cells(id TEXT PRIMARY KEY, contents TEXT, num_exec INT, last_exec TIMESTAMP);
             """)
         self._cursor.execute("""
-            CREATE TABLE versions(id TEXT, version INT, time TIMESTAMP, contents TEXT, PRIMARY KEY(id, text))
-        """)
+            CREATE TABLE versions(id TEXT, version INT, time TIMESTAMP, contents TEXT, PRIMARY KEY(id, contents));
+            """)
         self._conn.commit()
 
     def add_entry(self, cell):
@@ -62,5 +63,25 @@ class DbHandler(object):
                If the cell is not a new version (the code has changed), then we 
                will need to create a new entry in the versions table
         """
+        #inserting new value into cells
+        try:
+          #if the cell already exists, this will raise an integrity error
+          self._cursor.execute("""INSERT INTO cells(id, contents, num_exec, last_exec)
+                 VALUES (?,?,?,?);""", (cell['id'], cell['contents'], 1, datetime.now()))
+        except sqlite3.IntegrityError as e:
+          #value for cell already exists in cells, so update as needed
+          self._cursor.execute("""UPDATE cells
+                 SET contents = ?, num_exec = num_exec + 1, last_exec = ?
+                 WHERE id = ?;""", (cell['contents'], datetime.now(), cell['id']))
 
+        #this is adding the versions row if it doesnt exist. If it 
+        #does exist then do nothing.
+        try:
+          self._cursor.execute("""INSERT INTO versions(id, version, time, contents)
+                 VALUES (?,?,?,?);""", (cell['id'], 1, datetime.now(),cell['contents']))
+        except sqlite3.IntegrityError as e:
+          #As I understand the documentation, nothing happens if a version
+          #already exists. 
+          pass
+        self._conn.commit()
         pass

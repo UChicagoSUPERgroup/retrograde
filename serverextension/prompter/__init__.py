@@ -22,16 +22,19 @@ from prompter.handler import TSChannelHandler
 #
 # IDK what either of them do
 
+#Alek, Moved this into global scope in order to deal with 
+#Init causing the app to crash. 
+db = DbHandler()
+
 class CodeExecHandler(APIHandler):
     """handles transactions from notebook js app and server backend"""
     
     def post(self):
-
 #        print(tornado.escape.json_decode(self.request.body))
         resp_body = MANAGER.handle_request(tornado.escape.json_decode(self.request.body))
         self.set_status(200)
         self.set_default_headers()
-#        self.db.add_entry(tornado.escape.json_decode(self.request.body))
+        self.db.add_entry(tornado.escape.json_decode(self.request.body))
         self.finish(resp_body)
 
 def _jupyter_server_extension_paths():

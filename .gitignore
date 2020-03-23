@@ -14,3 +14,4 @@ pyvenv.cfg
 package-lock.json
 **/yarn.lock
 **/tsconfig.tsbuildinfo
+venv/
