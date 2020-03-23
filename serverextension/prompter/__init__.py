@@ -17,19 +17,23 @@ from prompter.analysis import AnalysisEnvironment
 #
 # IDK what either of them do
 
+#Alek, Moved this into global scope in order to deal with 
+#Init causing the app to crash. 
+db = DbHandler()
+
 class CodeExecHandler(APIHandler):
     """handles transactions from notebook js app and server backend"""
     
-    def __init__(self):
-        super().__init__()
-#        self.db = DbHandler()
+   #def __init__(self):
+   #    super().__init__()
+   #     self.db = DbHandler()
 
     def get(self):
         self.finish("hello")
 
     def post(self):
         print(tornado.escape.json_decode(self.request.body))
-#        self.db.add_entry(tornado.escape.json_decode(self.request.body))
+        db.add_entry(tornado.escape.json_decode(self.request.body))
         self.finish("done")
 
 def _jupyter_server_extension_paths():
