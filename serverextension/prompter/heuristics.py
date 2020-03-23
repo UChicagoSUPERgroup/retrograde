@@ -5,21 +5,22 @@ documented
 
 import pandas as pd
 
-class RuleTester(object):
+class Heuristics:
     
     """
     Tests a set of rules using the database handled by the
     handler object. The handler argument should be of type DbHandler
     """
 
-    def __init__(self, dbhandler):
-        self._db = dbhandler
-        self._rules = []
-        self._tables = ["cells", "versions"]
- 
-    def add_rule(self, rule):
-        """Add a rule to be tested. the rule should be a function that returns a boolean value"""
-        self._rules.append(rule)
+    def __init__(self, dbhandler, analysis_environment):
 
-    def test(self):
-        """For each cell in the database, return how many rules are true"""
+        self._db = dbhandler
+        self._env = analysis_environment
+
+        self.data_watch = DatasetRules()
+
+    def process_cell(self, cell_code, notebook):
+        
+        self._db.add_entry(cell_code)
+        self._env.cell_exec(cell_code)
+

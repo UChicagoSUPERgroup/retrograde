@@ -62,7 +62,7 @@ To install the back end plugin from the top level directory, while in the virtua
 
 ```bash
 cd ./serverextension
-python3 setup.py install
+python3 setup.py sdist bdist_wheel
 pip3 install -U -I dist/prompter-0.1-py3-none-any.whl
 jupyter serverextension enable --py prompter --sys-prefix --debug
 jupyter serverextension list

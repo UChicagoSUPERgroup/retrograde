@@ -10,6 +10,11 @@ import {
   Cell,
 } from "@jupyterlab/cells";
 
+import {
+  INotebookTracker,
+} from "@jupyterlab/notebook";
+
+import { ISignal, Signal } from '@lumino/signaling';
 import { IObservableList } from "@jupyterlab/observables";
 import { ServerConnection } from "@jupyterlab/services";
 
@@ -21,10 +26,24 @@ export class Listener {
    This listens on a notebook and records changes to cells on execution
   */
   private client: CodeCellClient;
-  constructor(client: CodeCellClient) {
+  private tracker : INotebookTracker;
+  private _dataSignal : Signal<this, any> = new Signal<this, any>(this);
+  private _modelSignal : Signal<this, any>  = new Signal<this, any>(this);
+
+  constructor(client: CodeCellClient, tracker : INotebookTracker) {
+
+    this.tracker = tracker;
     this.client = client;
     this.init();
+
   }
+
+  get datasignal(): ISignal<this, string> {
+    return this._dataSignal;
+  }
+  get modelsignal(): ISignal<this, string> {
+    return this._modelSignal;
+  } 
 
   private async init() {
     this.listen();
@@ -36,7 +55,9 @@ export class Listener {
     var cell: Cell;
     var contents: string;
     var id: string;
+    var k_id: string;
 //    var notebook: Notebook;
+//    var resp: string;
 
     NotebookActions.executed.connect(
       (signal: any, bunch: object) => {
@@ -47,16 +68,21 @@ export class Listener {
         if (cell instanceof CodeCell) {
 
           console.log("sent ", cell);
-          // todo: cell is cyclic, so cannot turn into string
           contents = cell.model.value.text;
-          id = cell.model.id;
-
+	  id = cell.model.id;
+          k_id = this.tracker.currentWidget.session.kernel.id;
+          //todo: should add url/kernel id to differentiate
           this.client.request(
             "exec", "POST", 
             JSON.stringify({
-                contents, 
-                id}),
-            ServerConnection.defaultSettings);
+                "contents" : contents, 
+                "cell_id" : id, "kernel" : k_id}),
+	        ServerConnection.defaultSettings).
+	    then(value => { 
+              let obj = JSON.parse(value);
+              console.log("[prompt-ml] received", obj);
+              if ("data" in obj) { this._dataSignal.emit(obj["data"]); };
+              if ("model" in obj) { this._modelSignal.emit(obj["model"]); }});
         }
       })
   }
