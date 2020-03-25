@@ -5,7 +5,7 @@ data relationships between variables
 from queue import Empty
 from ast import NodeVisitor, Call, Name, Attribute, Expr, Load, Str, Num
 from ast import Subscript, List, Index, ExtSlice, keyword, NameConstant
-from ast import parse, walk, iter_child_nodes
+from ast import parse, walk, iter_child_nodes, NodeTransformer, copy_location
 import astor
 from timeit import default_timer as timer
 from .config import other_funcs, ambig_funcs, series_funcs
@@ -300,6 +300,37 @@ class AnalysisEnvironment:
         self.models[model_name]["train"]["labels"] = label_cols
 
         # run perf. test on features
+        if self.is_clf(func_node.value):
+            self.models[model_name]["train"]["perf"] = self.model_perf_clf(func_node, args)
+            
+    def is_clf(self, name_node):
+        """return the type of classifier func_node is"""
+        blank_snippet = parse(clf_test_snippet)
+        name_mapping = {"REPLACE_NAME" : name_node}
+        snippet = SnippetVisitor(name_mapping).visit(blank_snippet)
+        
+        output = self._execute_code(astor.to_source(snippet))
+        return output == "True"
+
+    def model_perf_clf(self, func_node, args):
+        """return fp, fn, tp, tn, and subsets w/ high fp or fn if func_node is clf"""
+        blank_snippet = parse(make_df_snippet)
+        name_mapping = {
+            "REPLACE_MODEL" : func_node.value,
+            "REPLACE_X" : args[0],
+            "REPLACE_Y" : args[1],
+            "DF_ALIAS" : parse(self.get_df_alias()).body[0].value}
+        make_df_exp = SnippetVisitor(name_mapping).visit(blank_snippet)
+       
+        full_src = astor.to_source(make_df_exp) + clf_fp_fn_snippet + clf_scan_snippet
+        output = self._execute_code(full_src)
+        self._nbapp.log.debug("[ANALYSIS] model perf output = {0}".format(output))
+
+        return eval(output)
+          
+    def model_perf_reg(self, func_node, args):
+        """same as model_perf_clf, but when outcome is cts""" 
+        pass
     def get_series_name(self, call_or_name_node):
 
         series_name_expr = Attribute(value=call_or_name_node, attr="name")
@@ -324,10 +355,10 @@ class AnalysisEnvironment:
         except:
             return None
 
-    def is_node_df(self, call_or_name_node):
-        """does call or name refer to dataframe type in kernel?"""
+    def get_df_alias(self):
+        """get the name by which dataframe objects are instantiated in kernel"""
         if "DataFrame" in self.pandas_alias.func_mapping:
-            df_alias = parse(self.pandas_alias.func_mapping["DataFrame"])
+            return self.pandas_alias.func_mapping["DataFrame"]
         else:
             # TODO: we need to rewrite the alias module to handle this better.
             #       this is absolutely a dumb hack, and I expect it to break
@@ -335,8 +366,12 @@ class AnalysisEnvironment:
 
             mod_aliases = list(self.pandas_alias.module_aliases)
             mod_aliases.sort(key=lambda x: len(x), reverse=True)
-            df_alias = parse(mod_aliases[0]+".DataFrame")
 
+            return mod_aliases[0]+".DataFrame"
+
+    def is_node_df(self, call_or_name_node):
+        """does call or name refer to dataframe type in kernel?"""
+        df_alias = parse(self.get_df_alias())
         is_df_expr = Expr(
             value=Call(
                 func=Name(id="isinstance", ctx=Load()),
@@ -698,7 +733,6 @@ def get_call(assign_node):
             # TODO make more precise by chekcing if subtype of AST node
     return last_call
 
-
 def as_string(name_or_attrib):
     """print as string name or attribute"""
     if isinstance(name_or_attrib, Attribute):
@@ -717,3 +751,14 @@ def as_string(name_or_attrib):
     if isinstance(name_or_attrib, Str):
         return name_or_attrib.s
     return ""
+
+class SnippetVisitor(NodeTransformer):
+    """visit a snippet, replace names with mapped dict"""
+    def __init__(self, name_map):
+        super().__init__()
+        self.map = name_map
+    
+    def visit_Name(self, node):
+        if node.id in self.map:
+            return copy_location(self.map[node.id], node)
+        return node

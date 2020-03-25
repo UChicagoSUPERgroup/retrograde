@@ -100,3 +100,47 @@ series_funcs = [
     "nunique",
     "memory_usage",
 ]
+
+make_df_snippet = """\n
+prompt_ml_pred = REPLACE_MODEL.predict(REPLACE_X)\n
+prompt_ml_df = DF_ALIAS(REPLACE_X)\n
+prompt_ml_df["predicted"] = prompt_ml_pred\n
+prompt_ml_df["actual"] = REPLACE_Y\n
+"""
+
+clf_fp_fn_snippet =\
+"""
+def prompt_ml_get_rates(df, col, val):\n
+    output = {"fp" : None, "fn": None, "tp":None, "tn" : None}\n
+    subset = df[df[col] == val]\n
+    outcomes = df["predicted"].unique() # assume that binary clf\n
+
+    output["fp"] = float(sum(subset["predicted"] == outcomes[0] and subset["actual"] == outcomes[1]))/len(subset)\n
+    output["fn"] = float(sum(subset["predicted"] == outcomes[1] and subset["actual"] == outcomes[0]))/len(subset)\n
+    output["tp"] = float(sum(subset["predicted"] == outcomes[0] and subset["actual"] == outcomes[0]))/len(subset)\n
+    output["tn"] = float(sum(subset["predicted"] == outcomes[1] and subset["actual"] == outcomes[1]))/len(subset)\n
+
+    return output
+"""
+
+clf_scan_snippet = """\n
+prompt_ml_cols = [c for c in prompt_ml_df.columns if c not in ["actual", "predicted"]]\n
+prompt_ml_cat_columns = []\n
+for c in prompt_ml_cols:\n
+    if len(prompt_ml_df[c].unique()) < 6:\n
+        prompt_ml_cat_columns.append(c)
+
+prompt_ml_output = {}
+for col in prompt_ml_cat_columns:
+    prompt_ml_output[col] = {}
+    for val in prompt_ml_df[col].unique():
+        prompt_ml_output[col][val] = prompt_ml_get_rates(prompt_ml_df, col, val)
+
+prompt_ml_output 
+"""
+
+clf_test_snippet =\
+"""
+from sklearn.base import ClassifierMixin\n
+isinstance(REPLACE_NAME, ClassifierMixin)\n
+""" 
