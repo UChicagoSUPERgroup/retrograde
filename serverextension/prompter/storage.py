@@ -67,18 +67,18 @@ class DbHandler(object):
         try:
           #if the cell already exists, this will raise an integrity error
           self._cursor.execute("""INSERT INTO cells(id, contents, num_exec, last_exec)
-                 VALUES (?,?,?,?);""", (cell['id'], cell['contents'], 1, datetime.now()))
+                 VALUES (?,?,?,?);""", (cell['cell_id'], cell['contents'], 1, datetime.now()))
         except sqlite3.IntegrityError as e:
           #value for cell already exists in cells, so update as needed
           self._cursor.execute("""UPDATE cells
                  SET contents = ?, num_exec = num_exec + 1, last_exec = ?
-                 WHERE id = ?;""", (cell['contents'], datetime.now(), cell['id']))
+                 WHERE id = ?;""", (cell['contents'], datetime.now(), cell['cell_id']))
 
         #this is adding the versions row if it doesnt exist. If it 
         #does exist then do nothing.
         try:
           self._cursor.execute("""INSERT INTO versions(id, version, time, contents)
-                 VALUES (?,?,?,?);""", (cell['id'], 1, datetime.now(),cell['contents']))
+                 VALUES (?,?,?,?);""", (cell['cell_id'], 1, datetime.now(),cell['contents']))
         except sqlite3.IntegrityError as e:
           #As I understand the documentation, nothing happens if a version
           #already exists. 
