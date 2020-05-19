@@ -115,10 +115,10 @@ def prompt_ml_get_rates(df, col, val):\n
     subset = df[df[col] == val]\n
     outcomes = df["predicted"].unique() # assume that binary clf\n
 
-    output["fp"] = float(sum(subset["predicted"] == outcomes[0] and subset["actual"] == outcomes[1]))/len(subset)\n
-    output["fn"] = float(sum(subset["predicted"] == outcomes[1] and subset["actual"] == outcomes[0]))/len(subset)\n
-    output["tp"] = float(sum(subset["predicted"] == outcomes[0] and subset["actual"] == outcomes[0]))/len(subset)\n
-    output["tn"] = float(sum(subset["predicted"] == outcomes[1] and subset["actual"] == outcomes[1]))/len(subset)\n
+    output["fp"] = float(sum((subset["predicted"] == outcomes[0]) & (subset["actual"] == outcomes[1])))/len(subset)\n
+    output["fn"] = float(sum((subset["predicted"] == outcomes[1]) & (subset["actual"] == outcomes[0])))/len(subset)\n
+    output["tp"] = float(sum((subset["predicted"] == outcomes[0]) & (subset["actual"] == outcomes[0])))/len(subset)\n
+    output["tn"] = float(sum((subset["predicted"] == outcomes[1]) & (subset["actual"] == outcomes[1])))/len(subset)\n
 
     return output
 """

@@ -32,10 +32,20 @@ class DbHandler(object):
         add the tables to the new database
         """
         self._cursor.execute("""
-            CREATE TABLE cells(id TEXT PRIMARY KEY, contents TEXT, num_exec INT, last_exec TIMESTAMP);
+            CREATE TABLE cells(kernel TEXT, id TEXT PRIMARY KEY, contents TEXT, num_exec INT, last_exec TIMESTAMP);
             """)
         self._cursor.execute("""
-            CREATE TABLE versions(id TEXT, version INT, time TIMESTAMP, contents TEXT, PRIMARY KEY(id, contents));
+            CREATE TABLE versions(kernel TEXT, id TEXT, version INT, time TIMESTAMP, contents TEXT, PRIMARY KEY(id, contents));
+            """)
+
+        # the table w/ the data entities in it
+        # TODO: start here (needed to implement other methods for getting changes etc working
+        self._cursor.execute("""
+            CREATE TABLE data(kernel TEXT, cell TEXT, type TEXT, version INT, source TEXT, 
+            """)
+        # columns for each data entry
+        self._cursor.execute("""
+            CREATE TABLE columns
             """)
         self._conn.commit()
 
@@ -67,21 +77,34 @@ class DbHandler(object):
         try:
           #if the cell already exists, this will raise an integrity error
           self._cursor.execute("""INSERT INTO cells(id, contents, num_exec, last_exec)
-                 VALUES (?,?,?,?);""", (cell['id'], cell['contents'], 1, datetime.now()))
+                 VALUES (?,?,?,?);""", (cell['cell_id'], cell['contents'], 1, datetime.now()))
         except sqlite3.IntegrityError as e:
           #value for cell already exists in cells, so update as needed
           self._cursor.execute("""UPDATE cells
                  SET contents = ?, num_exec = num_exec + 1, last_exec = ?
-                 WHERE id = ?;""", (cell['contents'], datetime.now(), cell['id']))
+                 WHERE id = ?;""", (cell['contents'], datetime.now(), cell['cell_id']))
 
         #this is adding the versions row if it doesnt exist. If it 
         #does exist then do nothing.
         try:
           self._cursor.execute("""INSERT INTO versions(id, version, time, contents)
-                 VALUES (?,?,?,?);""", (cell['id'], 1, datetime.now(),cell['contents']))
+                 VALUES (?,?,?,?);""", (cell['cell_id'], 1, datetime.now(),cell['contents']))
         except sqlite3.IntegrityError as e:
           #As I understand the documentation, nothing happens if a version
           #already exists. 
           pass
         self._conn.commit()
         pass
+
+    def find_data(name, info, kernel_id):
+        """look up if data entry exists, return if exists, None if not"""
+        # TODO
+    def add_data(name, info, kernel_id):
+        """add data to data entry table"""
+        # TODO
+    def find_model(name, info, kernel_id):
+        """look up if model entry exists, return if exists, None if not"""
+        # TODO
+    def add_model(name, info, kernel_id):
+        """add model to model entry table"""
+        # TODO

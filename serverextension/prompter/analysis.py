@@ -6,9 +6,12 @@ from queue import Empty
 from ast import NodeVisitor, Call, Name, Attribute, Expr, Load, Str, Num
 from ast import Subscript, List, Index, ExtSlice, keyword, NameConstant
 from ast import parse, walk, iter_child_nodes, NodeTransformer, copy_location
+#from nbconvert.preprocessers import DeadKernelError
+
 import astor
 from timeit import default_timer as timer
 from .config import other_funcs, ambig_funcs, series_funcs
+from .config import make_df_snippet, clf_fp_fn_snippet, clf_scan_snippet, clf_test_snippet
 
 #from code import InteractiveInterpreter
 
@@ -91,15 +94,15 @@ class AnalysisEnvironment:
     def _wait_for_clear(self, client):
         """let's try polling the iopub channel until nothing queued up to execute"""
         while True:
-            self._nbapp.log.debug("[ANALYSIS] waiting for channel to clear")
             try:
-                io_msg_content = client.get_iopub_msg(timeout=1)['content']
-                self._nbapp.log.debug("[ANALYSIS] io_msg {0}".format(io_msg_content))
+                io_msg = client.iopub_channel.get_msg(timeout=0.25)
+                if io_msg["msg_type"] == "status":
+                    if io_msg["content"]["execution_state"] == "idle":
+                        return
             except Empty:
-                return True
+                return
 
     def _execute_code(self, code, client=None, kernel_id=None, timeout=1):
-
         if not kernel_id: kernel_id = self._kernel_id
 
         start_time = timer()
@@ -119,40 +122,17 @@ class AnalysisEnvironment:
 #        self._nbapp.log.debug("[ANALYSIS] acquiring lock for {0}".format(kernel_id))
 #        self._nbapp.log.debug("[ANALYSIS] {0}".format(dir(kernel)))
         self._nbapp.web_app.kernel_locks[kernel_id].acquire()
-
-        msg_id = client.execute(code)
-        self._nbapp.log.debug("[ANALYSIS] code execution on {0}".format(kernel_id))
-        reply = client.get_shell_msg(msg_id)
-        # using loop from https://github.com/abalter/polyglottus/blob/master/simple_kernel.py
         
-#        self._nbapp.log.debug("[ANALYSIS] reply id {0} for {1}".format(reply, kernel_id))
-        io_msg_content = client.get_iopub_msg(timeout=timeout)['content']
+        kernel = self._nbapp.kernel_manager.get_kernel(kernel_id)
+        self._wait_for_clear(client)
+        output = run_code(client, kernel, code, self._nbapp.log)
 
-        if 'execution_state' in io_msg_content and io_msg_content['execution_state'] == 'idle':
-            return "no output"
-
-        while True:
-            temp = io_msg_content
-            try:
-                io_msg_content = client.get_iopub_msg(timeout=timeout)['content']
-                if 'execution_state' in io_msg_content and\
-                        io_msg_content['execution_state'] == 'idle':
-                    break
-            except Empty:
-                break
-
+        self._nbapp.log.debug("[ANALYSIS] {0}\n{1}".format(kernel_id, output))
         self._nbapp.web_app.kernel_locks[kernel_id].release()
-        if 'data' in temp: # Indicates completed operation
-            out = temp['data']['text/plain']
-        elif 'name' in temp and temp['name'] == "stdout": # indicates output
-            out = temp['text']
-        elif 'traceback' in temp: # Indicates error
-            out = '\n'.join(temp['traceback']) # Put error into nice format
-        else:
-            out = ''
         end_time = timer()
-        self._nbapp.log.debug("[ANALYSIS] Code execution taking %s seconds" % (end_time - start_time))
-        return out
+#        self._nbapp.log.debug("[ANALYSIS] Code execution taking %s seconds" % (end_time - start_time))
+        self._nbapp.log.debug("[ANALYSIS] Executed {0}, output {1}".format(code, output))
+        return output
 
     def make_newdata(self, call_node, assign_node):
         """got to assign at top of new data, fill in entry point"""
@@ -301,6 +281,7 @@ class AnalysisEnvironment:
 
         # run perf. test on features
         if self.is_clf(func_node.value):
+            self._nbapp.log.debug("[ANALYSIS] {0} is a classifier, running performance metrics".format(model_name))
             self.models[model_name]["train"]["perf"] = self.model_perf_clf(func_node, args)
             
     def is_clf(self, name_node):
@@ -308,7 +289,7 @@ class AnalysisEnvironment:
         blank_snippet = parse(clf_test_snippet)
         name_mapping = {"REPLACE_NAME" : name_node}
         snippet = SnippetVisitor(name_mapping).visit(blank_snippet)
-        
+        self._nbapp.log.debug("[ANALYSIS] executing snippet {0}".format(astor.to_source(snippet)))
         output = self._execute_code(astor.to_source(snippet))
         return output == "True"
 
@@ -576,9 +557,10 @@ class CellVisitor(NodeVisitor):
                 self.nodes.add(trgt)
         if node.value not in self.nodes:
             for trgt in node.targets:
-                self.nodes.discard(trgt)
-                self.env.graph.remove_name(trgt)
-
+                if isinstance(trgt, Name):
+                    self.nodes.discard(trgt)
+                    self.env.graph.remove_name(trgt)
+                # if target is subscript, then assigning non-df value
         if new_data:
             self.env.new_data_checks(node.targets)
 
@@ -752,6 +734,106 @@ def as_string(name_or_attrib):
         return name_or_attrib.s
     return ""
 
+def poll_client(client): # poll all channels to get client state
+    output = {"io": None, "shell" : None, "stdin" : None}
+    try:
+        output["io"] = client.get_iopub_msg(timeout=0.25)
+    except Empty:
+        pass
+    try:
+        output["shell"] = client.get_shell_msg(timeout=0.25)
+    except Empty:
+        pass
+    try:
+        output["stdin"] = client.get_stdin_msg(timeout=0.25)
+    except Empty:
+        pass
+    return output
+        
+
+# TODO: look and see if all failed executions are caused by execution when busy
+def run_code(client, mgr, code, log, shell_timeout=1, poll_timeout=1):
+
+    """
+    run the code
+    taken from https://github.com/jupyter/nbconvert/blob/f072d782ddbbf6fe77d6c5867e3ac6459d4384cd/nbconvert/preprocessors/execute.py#L524
+    """
+    io_msg = None
+    try:
+        io_msg = client.iopub_channel.get_msg(timeout=0.25)
+        log.debug("[RUN_CODE] iopub msg before execute {0}".format(io_msg))
+    except Empty:
+        log.debug("[RUN_CODE] no iopub msg before execute")
+        pass 
+    request_msg_id = client.execute(code)
+
+    log.debug("[RUN_CODE] execution request {0}".format(request_msg_id))
+    log.debug("[RUN_CODE] code to run {0}".format(code))
+ 
+    more_output = True
+    polling_exec_reply = True
+
+    shell_deadline = timer() + shell_timeout
+    poll_deadline = timer() + poll_timeout
+
+    content = ""
+
+    while more_output or polling_exec_reply:
+        if polling_exec_reply:
+            if timer() >= shell_deadline:
+                log.error("[RUN_CODE] timeout waiting for execute reply {0} seconds".format(shell_timeout))
+                mgr.interrupt_kernel()
+                polling_exec_reply = False
+                continue
+
+            timeout = min(timer() + 1, shell_deadline)
+            
+            try:
+                shell_msg = client.shell_channel.get_msg(timeout=timeout)
+                log.debug("[RUN_CODE] received shell msg {0}".format(shell_msg))
+                if shell_msg["parent_header"].get("msg_id") == request_msg_id:
+                    polling_exec_reply = False 
+            except Empty:
+                if not client.is_alive():
+                    log.error("[RUN_CODE] kernel died while completing request")
+                    raise DeadKernelError("kernel died")  
+        if more_output: 
+            try:
+                timeout = poll_timeout
+                if polling_exec_reply:
+                    # set deadline to be under timeout
+                    timeout = min(timer() + 1, poll_deadline)
+                msg = client.iopub_channel.get_msg(timeout=timeout)
+            except Empty:
+                if polling_exec_reply:
+                    continue
+                else:
+                    log.warning("[RUN_CODE] timeout waiting for iopub")
+                    more_output = False
+                    continue
+            log.debug("[RUN_CODE] received iopub msg {0}".format(msg))
+            if msg["parent_header"].get("msg_id") != request_msg_id:
+                continue
+            content+=process_msg(msg)
+            if msg["msg_type"] == "status" and msg["content"]["execution_state"] == "idle":
+                more_output = False
+    return content
+
+def process_msg(msg):
+
+    msg_type = msg["header"]["msg_type"]
+    content = msg["content"]
+
+    if msg_type == "execute_result":
+        return content["data"]["text/plain"]
+    if "traceback" in content:
+        raise KernelException(content["traceback"])
+    return ""
+
+class KernelException(RuntimeError):
+    def __init__(self, traceback):
+        RuntimeError.__init__(self, "Kernel encountered exception with traceback {0}".format(traceback))
+
 class SnippetVisitor(NodeTransformer):
     """visit a snippet, replace names with mapped dict"""
     def __init__(self, name_map):
@@ -762,3 +844,6 @@ class SnippetVisitor(NodeTransformer):
         if node.id in self.map:
             return copy_location(self.map[node.id], node)
         return node
+
+class DeadKernelError(RuntimeError):
+    pass

@@ -8,6 +8,7 @@ import os, sys
 
 from context import prompter
 from unittest.mock import Mock, MagicMock
+from threading import RLock
 from jupyter_client.manager import start_new_kernel
 from _queue import Empty
 
@@ -24,9 +25,9 @@ class TestKernelHooks(unittest.TestCase):
         nbapp.kernel_manager = self.kernel_manager
         nbapp.kernel_manager.get_kernel = MagicMock(return_value = self.kernel_manager)
 
-        nbapp.web_app.kernel_locks = {"TEST" : Mock()}
-        nbapp.web_app.kernel_locks["TEST"].lock = MagicMock()
-        nbapp.web_app.kernel_locks["TEST"].release = MagicMock()
+        nbapp.web_app.kernel_locks = {"TEST" : RLock()}
+#        nbapp.web_app.kernel_locks["TEST"].lock = MagicMock()
+#        nbapp.web_app.kernel_locks["TEST"].release = MagicMock()
 
         nbapp.log.debug = print
         nbapp.log.info = print
@@ -119,22 +120,9 @@ class TestKernelHooks(unittest.TestCase):
 
     def _client_execute(self, code):
         """execute code in external client to simulate nb execution"""
-        msg_id = self.client.execute(code)
-#        reply = self.client.get_shell_msg(msg_id, timeout=1)
-        io_msg_content = self.client.get_iopub_msg(timeout=2)["content"]
+        output = prompter.run_code(self.client, self.kernel_manager, code, self.env._nbapp.log) 
+        return output
 
-        if "execution_state" in io_msg_content and io_msg_content["execution_state"] == "idle":
-            return "no output"
-        while True:
-            temp = io_msg_content
-            try:
-                io_msg_content = self.client.get_iopub_msg(timeout=2)["content"]
-                if "execution_state" in io_msg_content and\
-                    io_msg_content["execution_state"] == "idle":
-                    break
-            except Empty:
-                break
-        return temp
     def test_new_data_checks(self):
         new_data_cell = """import pandas as pd\n"""+\
                         """from sklearn.linear_model import LinearRegression\n"""+\
@@ -186,5 +174,31 @@ class TestKernelHooks(unittest.TestCase):
     #    self.assertEqual(expected_data, self.env.entry_points)
         self.assertEqual(expected_models, self.env.models)
 
+    def test_clf_perf(self):
+        
+        data_cell = "import pandas as pd\n"+\
+                     "from sklearn.linear_model import LogisticRegression\n"+\
+                     "df = pd.read_csv(\"./test/test.csv\")\n"+\
+                     "df[\"sex\"] = df[\"sex\"] == \"Male\"\n"+\
+                     "df.head()"
+        model_cell = "X = df[[\"age\", \"juv_fel_count\", \"priors_count.1\", \"sex\"]].to_numpy()\n"+\
+                     "y = df[\"two_year_recid\"].to_numpy()\n"+\
+                     "lr = LogisticRegression()\n"+\
+                     "lr.fit(X, y)"
+        output = self._client_execute(data_cell)
+        self.env.cell_exec(data_cell, "TEST", "TESTCELL")
+
+        output = self._client_execute(model_cell)
+        output = self._client_execute("""print(lr)\n""")
+        self.env.cell_exec(model_cell, "TEST", "TESTCELL")
+        expected_values = {"sex" : { 1: 0, 0: 1}} 
+        expected_models = {"lr": 
+                {"train" : {
+                    "features" : ["age", "juv_fel_count", "priors_count.1", "sex"],
+                    "labels" : ["two_year_recid"],
+                    "perf" : expected_values,},  
+                 "cell" : "TESTCELL",
+                }}
+        self.assertEqual(expected_models, self.env.models)
 if __name__ == "__main__":
     unittest.main()

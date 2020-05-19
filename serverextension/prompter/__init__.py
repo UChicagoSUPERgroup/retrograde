@@ -13,7 +13,7 @@ from notebook.services.kernels.handlers import default_handlers
 from tornado.routing import Rule, PathMatches
 
 from prompter.storage import DbHandler
-from prompter.analysis import AnalysisEnvironment
+from prompter.analysis import AnalysisEnvironment, run_code
 from prompter.manager import AnalysisManager
 from prompter.handler import TSChannelHandler
 
@@ -34,7 +34,7 @@ class CodeExecHandler(APIHandler):
         resp_body = MANAGER.handle_request(tornado.escape.json_decode(self.request.body))
         self.set_status(200)
         self.set_default_headers()
-        self.db.add_entry(tornado.escape.json_decode(self.request.body))
+#        self.db.add_entry(tornado.escape.json_decode(self.request.body))
         self.finish(resp_body)
 
 def _jupyter_server_extension_paths():
