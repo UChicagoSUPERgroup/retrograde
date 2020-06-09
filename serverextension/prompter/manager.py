@@ -83,7 +83,7 @@ class AnalysisManager:
                 self.db.add_data(name, info, kernel_id)
         return new_data_response
 
-    def new_models(self, kernel_id, cell_id) 
+    def new_models(self, kernel_id, cell_id):
         """check if model is new, and if so register and send event"""
         env = self.analyses[kernel_id]
         new_model_response = {}

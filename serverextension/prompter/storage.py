@@ -41,11 +41,11 @@ class DbHandler(object):
         # the table w/ the data entities in it
         # TODO: start here (needed to implement other methods for getting changes etc working
         self._cursor.execute("""
-            CREATE TABLE data(kernel TEXT, cell TEXT, type TEXT, version INT, source TEXT, 
+            CREATE TABLE data(kernel TEXT, cell TEXT, version INT, source TEXT, name TEXT, PRIMARY KEY(name, version, source));
             """)
         # columns for each data entry
         self._cursor.execute("""
-            CREATE TABLE columns
+            CREATE TABLE columns(source TEXT, version INT, name TEXT, type TEXT, PRIMARY KEY(source, version, name));
             """)
         self._conn.commit()
 
@@ -96,15 +96,34 @@ class DbHandler(object):
         self._conn.commit()
         pass
 
-    def find_data(name, info, kernel_id):
+    def find_data(self, name, info, kernel_id):
         """look up if data entry exists, return if exists, None if not"""
-        # TODO
-    def add_data(name, info, kernel_id):
+        # note that will *not* compare columns
+        data_versions = self._cursor.execute("""
+            SELECT 
+                kernel,
+                source,
+                name,
+                version
+            FROM 
+                data 
+            WHERE kernel = ? AND name = ?"
+            ORDER BY version""", kernel_id, name).fetchall()
+
+        if data_versions == []: return None
+        return data_versions
+
+    def add_data(self, name, info, kernel_id):
         """add data to data entry table"""
-        # TODO
-    def find_model(name, info, kernel_id):
+        self._cursor.execute("""
+            INSERT INTO data(kernel, cell, version, source, name)
+            VALUES (?, ?, ?, ?, ?)""", (kernel_id, info))
+        self._cursor.execute("""
+            add columns
+            """)
+    def find_model(self, name, info, kernel_id):
         """look up if model entry exists, return if exists, None if not"""
         # TODO
-    def add_model(name, info, kernel_id):
+    def add_model(self, name, info, kernel_id):
         """add model to model entry table"""
         # TODO
