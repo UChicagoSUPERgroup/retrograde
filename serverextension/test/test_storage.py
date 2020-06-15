@@ -32,7 +32,7 @@ class TestDBMethods(unittest.TestCase):
             """)
         tables = self.cursor.fetchall() 
         
-        self.assertEqual(len(tables), 2)
+        self.assertEqual(len(tables), 4)
         table_names = [t[0] for t in tables]
 
         self.assertTrue("cells" in table_names)
@@ -40,8 +40,8 @@ class TestDBMethods(unittest.TestCase):
 
     #tests if changing text creates new version (key constant)
     def test_add_entry_versions(self):
-        self.db.add_entry({'contents': '1+1+1=2', 'id': 'some_key_1'})
-        self.db.add_entry({'contents': '1+1=4', 'id': 'some_key_1'})
+        self.db.add_entry({'contents': '1+1+1=2', 'cell_id': 'some_key_1'})
+        self.db.add_entry({'contents': '1+1=4', 'cell_id': 'some_key_1'})
         self.cursor.execute(
             """
             SELECT
@@ -60,8 +60,8 @@ class TestDBMethods(unittest.TestCase):
     #tests if identical executions increment num_exec
     #and create no new versions
     def test_add_entry_versions(self):
-        self.db.add_entry({'contents': 'hello friends', 'id': 'a_key_1'})
-        self.db.add_entry({'contents': 'hello friends', 'id': 'a_key_1'})
+        self.db.add_entry({'contents': 'hello friends', 'cell_id': 'a_key_1'})
+        self.db.add_entry({'contents': 'hello friends', 'cell_id': 'a_key_1'})
         self.cursor.execute(
             """
             SELECT
@@ -86,6 +86,53 @@ class TestDBMethods(unittest.TestCase):
             """)
         tables_versions = self.cursor.fetchall() 
         self.assertEqual(len(tables_versions), 1)
+
+    def test_add_data(self):
+        # test adding data
+        data = {
+            "kernel" : "TESTKERNEL-01234",
+            "cell" : "TESTCELL",
+            "source": "test.csv",
+            "name" : "test_df",
+            "columns" : {
+               "age" : {"type" : "int", "size" : 10},
+               "gender" : {"type" : "bool", "size" : 10},
+               "SAT" : {"type" : "int", "size" : 12},
+               "v1_stat" : {"type" : "obj", "size" : 32} 
+             }
+        }
+
+        self.db.add_data(data, 1)
+        self.cursor.execute(
+            """
+            SELECT 
+                *
+            FROM
+                data
+            """)
+
+        add_result = self.cursor.fetchall()
+        self.assertEqual(len(add_result), 1)
+         
+        col_result = self.cursor.execute(
+            """
+            SELECT
+                *
+            FROM
+                columns
+            WHERE
+                name = 'test_df' AND
+                version = 1 AND
+                source = 'test.csv'
+            """).fetchall()
+        self.assertEqual(len(col_result), 4)
+        test_names = [r[3] for r in col_result]
+
+        for col_name in data["columns"].keys():
+            self.assertTrue(col_name in test_names, "{0} not in {1}".format(col_name, test_names))
+
+#    def test_find_data(self):
+#    def test_update_data(self):
 
     def tearDown(self):
         if os.path.exists(self.TEST_DB_DIR+self.TEST_DB_NAME):

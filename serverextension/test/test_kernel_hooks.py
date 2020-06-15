@@ -25,7 +25,6 @@ class TestKernelHooks(unittest.TestCase):
         nbapp.kernel_manager = self.kernel_manager
         nbapp.kernel_manager.get_kernel = MagicMock(return_value = self.kernel_manager)
 
-        nbapp.web_app.kernel_locks = {"TEST" : RLock()}
 #        nbapp.web_app.kernel_locks["TEST"].lock = MagicMock()
 #        nbapp.web_app.kernel_locks["TEST"].release = MagicMock()
 
@@ -150,7 +149,7 @@ class TestKernelHooks(unittest.TestCase):
     def test_flow(self):
         data_cell = "import pandas as pd\n"+\
                      "from sklearn.linear_model import LinearRegression\n"+\
-                     "df = pd.read_csv(\"./test/test.csv\")\n"+\
+                     "df = pd.read_csv(\"./test_data/test.csv\")\n"+\
                      "df.head()"
         model_cell = "X = df[[\"age\", \"juv_fel_count\", \"priors_count.1\"]].to_numpy()\n"+\
                      "y = df[\"two_year_recid\"].to_numpy()\n"+\
@@ -170,7 +169,7 @@ class TestKernelHooks(unittest.TestCase):
                  "cell" : "TESTCELL",
                 }}
 
-        expected_data = {"df" : {"source" : "./test/test.csv", "format" : "csv", "cell" : "TESTCELL"}}
+        expected_data = {"df" : {"source" : "./test_data/test.csv", "format" : "csv", "cell" : "TESTCELL"}}
     #    self.assertEqual(expected_data, self.env.entry_points)
         self.assertEqual(expected_models, self.env.models)
 
@@ -178,7 +177,7 @@ class TestKernelHooks(unittest.TestCase):
         
         data_cell = "import pandas as pd\n"+\
                      "from sklearn.linear_model import LogisticRegression\n"+\
-                     "df = pd.read_csv(\"./test/test.csv\")\n"+\
+                     "df = pd.read_csv(\"./test_data/test.csv\")\n"+\
                      "df[\"sex\"] = df[\"sex\"] == \"Male\"\n"+\
                      "df.head()"
         model_cell = "X = df[[\"age\", \"juv_fel_count\", \"priors_count.1\", \"sex\"]].to_numpy()\n"+\

@@ -45,7 +45,13 @@ class DbHandler(object):
             """)
         # columns for each data entry
         self._cursor.execute("""
-            CREATE TABLE columns(source TEXT, version INT, name TEXT, type TEXT, PRIMARY KEY(source, version, name));
+            CREATE TABLE columns(source TEXT, 
+                                 version INT, 
+                                 name TEXT, 
+                                 col_name TEXT,
+                                 type TEXT,
+                                 size INT,
+                                 PRIMARY KEY(source, version, name, col_name));
             """)
         self._conn.commit()
 
@@ -108,19 +114,44 @@ class DbHandler(object):
             FROM 
                 data 
             WHERE kernel = ? AND name = ?"
-            ORDER BY version""", kernel_id, name).fetchall()
+            ORDER BY version""", (kernel_id, name)).fetchall()
 
         if data_versions == []: return None
         return data_versions
 
-    def add_data(self, name, info, kernel_id):
+    def add_data(self, data, version):
         """add data to data entry table"""
+        """data format is 
+            {"kernel" : kernel_id, 
+             "cell" : cell id, 
+             "source" : source filename, 
+             "name" : data var name, 
+             "columns" : column dict}
+            should not be called without checking whether data
+            already in database, via find_data
+        """
+
+        kernel = data["kernel"]
+        cell = data["cell"]
+        source = data["source"]
+        name = data["name"]
+
+        columns = data["columns"]
+
         self._cursor.execute("""
             INSERT INTO data(kernel, cell, version, source, name)
-            VALUES (?, ?, ?, ?, ?)""", (kernel_id, info))
-        self._cursor.execute("""
-            add columns
-            """)
+            VALUES (?, ?, ?, ?, ?)""", (kernel, cell, version, source, name))
+
+        cols = [(source, 
+                 version, 
+                 name, # nb notebook name
+                 col, # column's name
+                 columns[col]["type"], 
+                 columns[col]["size"]) for col in columns.keys()]
+        self._cursor.executemany("""
+            INSERT INTO columns VALUES (?, ?, ?, ?, ?, ?) 
+            """, cols)
+        self._conn.commit()
     def find_model(self, name, info, kernel_id):
         """look up if model entry exists, return if exists, None if not"""
         # TODO
