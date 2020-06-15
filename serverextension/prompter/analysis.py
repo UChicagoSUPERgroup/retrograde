@@ -121,14 +121,14 @@ class AnalysisEnvironment:
             self._kernel_id = kernel_id
 #        self._nbapp.log.debug("[ANALYSIS] acquiring lock for {0}".format(kernel_id))
 #        self._nbapp.log.debug("[ANALYSIS] {0}".format(dir(kernel)))
-        self._nbapp.web_app.kernel_locks[kernel_id].acquire()
+#        self._nbapp.web_app.kernel_locks[kernel_id].acquire()
         
         kernel = self._nbapp.kernel_manager.get_kernel(kernel_id)
         self._wait_for_clear(client)
         output = run_code(client, kernel, code, self._nbapp.log)
 
         self._nbapp.log.debug("[ANALYSIS] {0}\n{1}".format(kernel_id, output))
-        self._nbapp.web_app.kernel_locks[kernel_id].release()
+#        self._nbapp.web_app.kernel_locks[kernel_id].release()
         end_time = timer()
 #        self._nbapp.log.debug("[ANALYSIS] Code execution taking %s seconds" % (end_time - start_time))
         self._nbapp.log.debug("[ANALYSIS] Executed {0}, output {1}".format(code, output))
@@ -147,14 +147,14 @@ class AnalysisEnvironment:
 
             while not isinstance(target, Name):
                 target = target.value
-            self.entry_points[target.id]["imbalance"] = {}
+#            self.entry_points[target.id]["imbalance"] = {}
 
-            if tgt_type == DATAFRAME_TYPE:
-                cols = self.get_col_names(target)
-                self.entry_points[target.id]["imbalance"] = self.data_imbalance(target, cols)
+#            if tgt_type == DATAFRAME_TYPE:
+#                cols = self.get_col_names(target)
+#                self.entry_points[target.id]["imbalance"] = self.data_imbalance(target, cols)
                         
-            elif tgt_type == SERIES_TYPE:
-                pass # TODO: IDK if we should do this for series
+#            elif tgt_type == SERIES_TYPE:
+#                pass # TODO: IDK if we should do this for series
                
     def data_imbalance(self, obj, colnames):
         output = {}
