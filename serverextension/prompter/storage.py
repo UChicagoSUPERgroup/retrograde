@@ -24,6 +24,7 @@ class DbHandler(object):
                os.mkdir(db_path_resolved)
             self._conn = sqlite3.connect(db_path_resolved+dbname, 
                 detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
+            self._conn.row_factory = sqlite3.Row
             self._cursor = self._conn.cursor()
             self._init_db()
 
@@ -102,9 +103,13 @@ class DbHandler(object):
         self._conn.commit()
         pass
 
-    def find_data(self, name, info, kernel_id):
+    def find_data(self, data):
         """look up if data entry exists, return if exists, None if not"""
         # note that will *not* compare columns
+
+        source = data["source"]
+        name = data["name"] 
+ 
         data_versions = self._cursor.execute("""
             SELECT 
                 kernel,
@@ -113,8 +118,8 @@ class DbHandler(object):
                 version
             FROM 
                 data 
-            WHERE kernel = ? AND name = ?"
-            ORDER BY version""", (kernel_id, name)).fetchall()
+            WHERE source = ? AND name = ?
+            ORDER BY version""", (source, name)).fetchall()
 
         if data_versions == []: return None
         return data_versions

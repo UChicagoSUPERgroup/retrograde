@@ -131,8 +131,70 @@ class TestDBMethods(unittest.TestCase):
         for col_name in data["columns"].keys():
             self.assertTrue(col_name in test_names, "{0} not in {1}".format(col_name, test_names))
 
-#    def test_find_data(self):
-#    def test_update_data(self):
+    def test_find_data(self):
+        data = {
+            "kernel" : "TESTKERNEL-01234",
+            "cell" : "TESTCELL",
+            "source": "test.csv",
+            "name" : "test_df",
+            "columns" : {
+               "age" : {"type" : "int", "size" : 10},
+               "gender" : {"type" : "bool", "size" : 10},
+               "SAT" : {"type" : "int", "size" : 12},
+               "v1_stat" : {"type" : "obj", "size" : 32} 
+             }
+        }
+
+        self.db.add_data(data, 1)
+
+        self_result = self.db.find_data(data)
+        
+        self.assertEqual(len(self_result), 1)
+        self.assertEqual(self_result[0]["kernel"], "TESTKERNEL-01234")
+        self.assertEqual(self_result[0]["source"], "test.csv")
+        self.assertEqual(self_result[0]["version"], 1) 
+        
+    def test_update_data(self):
+        data = {
+            "kernel" : "TESTKERNEL-01234",
+            "cell" : "TESTCELL",
+            "source": "test.csv",
+            "name" : "test_df",
+            "columns" : {
+               "age" : {"type" : "int", "size" : 10},
+               "gender" : {"type" : "bool", "size" : 10},
+               "SAT" : {"type" : "int", "size" : 12},
+               "v1_stat" : {"type" : "obj", "size" : 32} 
+             }
+        }
+
+        self.db.add_data(data, 1)
+
+        new_data = {
+            "kernel" : "TESTKERNEL-01234",
+            "cell" : "TESTCELL-01",
+            "source": "test.csv",
+            "name" : "test_df",
+            "columns" : {
+               "age" : {"type" : "int", "size" : 10},
+               "gender" : {"type" : "bool", "size" : 10},
+               "SAT" : {"type" : "int", "size" : 12},
+               "v1_stat" : {"type" : "obj", "size" : 32},
+               "v2_stat" : {"type" : "float", "size" : 12}
+             }
+        }
+    
+        new_version = self.db.find_data(new_data)[0]["version"]
+        self.db.add_data(new_data, new_version + 1)
+
+        col_result = self.cursor.execute(
+            """
+            SELECT
+                *
+            FROM
+                columns
+            """).fetchall()
+        self.assertEqual(len(col_result), 9)
 
     def tearDown(self):
         if os.path.exists(self.TEST_DB_DIR+self.TEST_DB_NAME):
