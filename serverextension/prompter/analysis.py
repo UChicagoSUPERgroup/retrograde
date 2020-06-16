@@ -89,7 +89,11 @@ class AnalysisEnvironment:
         for target in targets:
             while not isinstance(target, Name):
                 target = target.value # assumes target is attribute type
-            self.entry_points[target.id] = {"source" : source, "format" : fmt}
+            self.entry_points[target.id] = {"source" : source, 
+                                            "format" : fmt, 
+                                            "name" : target.id, 
+                                            "kernel" : self._kernel_id,
+                                            "columns" : {}}
 
     def _wait_for_clear(self, client):
         """let's try polling the iopub channel until nothing queued up to execute"""
@@ -149,13 +153,35 @@ class AnalysisEnvironment:
                 target = target.value
 #            self.entry_points[target.id]["imbalance"] = {}
 
-#            if tgt_type == DATAFRAME_TYPE:
-#                cols = self.get_col_names(target)
+            if tgt_type == DATAFRAME_TYPE:
+                cols = self.get_col_names(target)
+                self.entry_points[target.id]["columns"] = {c : self.get_col_stats(target, c) for c in cols}
 #                self.entry_points[target.id]["imbalance"] = self.data_imbalance(target, cols)
                         
 #            elif tgt_type == SERIES_TYPE:
 #                pass # TODO: IDK if we should do this for series
-               
+    def get_col_stats(self, target, colname):
+        # size, type, 
+        col_ref_exp = Subscript(value=target,
+                                slice=Index(value=Str(s=colname)))
+        len_exp = Expr(
+                    value=Call(func=Name(id="print"),
+                               args=[Call(func=Name(id="len"),
+                                          args = [col_ref_exp],
+                                          keywords =[])],
+                               keywords=[]))
+        type_exp = Expr(  
+                    value=Call(func=Name(id="print"),
+                               args=[Attribute(value=col_ref_exp,
+                                     attr="dtypes")],
+                               keywords=[]))
+        output = {}
+        output["type"] = self._execute_code(astor.to_source(type_exp))
+        output["size"] = self._execute_code(astor.to_source(len_exp))
+#        output["size"] = int(output["size"])
+
+        return output 
+        
     def data_imbalance(self, obj, colnames):
         output = {}
         for col in colnames:

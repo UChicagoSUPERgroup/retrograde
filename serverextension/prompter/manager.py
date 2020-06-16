@@ -60,11 +60,11 @@ class AnalysisManager:
 
         resp = {"new" : {}, "changes" : {}}
 
-        resp["new"] = self.new_data(kernel_id, cell_id)
-        resp["new"].extend(self.new_models(kernel_id, cell_id))
+        resp["new"] = self.new_data(kernel_id)
+#        resp["new"].extend(self.new_models(kernel_id, cell_id))
 
-        resp["changes"] = self.changed_data(kernel_id, cell_id)
-        resp["changes"].extend(self.changed_models(kernel_id, cell_id)) 
+#        resp["changes"] = self.changed_data(kernel_id, cell_id)
+#        resp["changes"].extend(self.changed_models(kernel_id, cell_id)) 
 
         # TODO: probably makes more sense to do new/changed in one pass to 
         #       minimize number of db lookups (don't want to prematurely minimize,
@@ -72,15 +72,15 @@ class AnalysisManager:
 
         return resp
 
-    def new_data(self, kernel_id, cell_id): 
+    def new_data(self, kernel_id): 
         """ check if data in the env is new, and if so, register and send event"""
         env = self.analyses[kernel_id]
         new_data_response = {} 
         for name, info in env.entry_points.items():
-            data_entry = self.db.find_data(name, info, kernel_id)
+            data_entry = self.db.find_data(info)
             if not data_entry:
                 new_data_response[name] = info
-                self.db.add_data(name, info, kernel_id)
+                self.db.add_data(info, 1)
         return new_data_response
 
     def new_models(self, kernel_id, cell_id):
