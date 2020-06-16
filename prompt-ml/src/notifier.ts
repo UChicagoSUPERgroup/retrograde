@@ -27,10 +27,10 @@ export class Prompter {
   private _tracker : INotebookTracker;
   constructor(listener : Listener, tracker : INotebookTracker) {
     this._tracker = tracker;
-    listener.datasignal.connect(
+    listener.newsignal.connect(
       (sender : Listener, output : any) => {
         this._onDataNotify(output);});
-    listener.modelsignal.connect(
+    listener.changesignal.connect(
       (sender : Listener, output : any) => {
         this._onModelNotify(output);});
   }

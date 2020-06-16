@@ -27,8 +27,8 @@ export class Listener {
   */
   private client: CodeCellClient;
   private tracker : INotebookTracker;
-  private _dataSignal : Signal<this, any> = new Signal<this, any>(this);
-  private _modelSignal : Signal<this, any>  = new Signal<this, any>(this);
+  private _newSignal : Signal<this, any> = new Signal<this, any>(this);
+  private _changeSignal : Signal<this, any>  = new Signal<this, any>(this);
 
   constructor(client: CodeCellClient, tracker : INotebookTracker) {
 
@@ -38,11 +38,11 @@ export class Listener {
 
   }
 
-  get datasignal(): ISignal<this, string> {
-    return this._dataSignal;
+  get newsignal(): ISignal<this, string> {
+    return this._newSignal;
   }
-  get modelsignal(): ISignal<this, string> {
-    return this._modelSignal;
+  get changesignal(): ISignal<this, string> {
+    return this._changeSignal;
   } 
 
   private async init() {
@@ -82,8 +82,8 @@ export class Listener {
 	    then(value => { 
               let obj = JSON.parse(value);
               console.log("[prompt-ml] received", obj);
-              if ("data" in obj) { this._dataSignal.emit(obj["data"]); };
-              if ("model" in obj) { this._modelSignal.emit(obj["model"]); }});
+              if ("new" in obj) { this._newSignal.emit(obj["new"]); };
+              if ("model" in obj) { this._changeSignal.emit(obj["model"]); }});
         }
       })
   }
