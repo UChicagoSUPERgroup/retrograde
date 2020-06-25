@@ -54,6 +54,7 @@ class AnalysisEnvironment:
         """
         execute a cell and propagate the analysis
         """
+        main_cell_id = self.get_msg_id()
         cell_code = parse(code)
 
         old_models = set(self.models.keys())
@@ -95,6 +96,21 @@ class AnalysisEnvironment:
                                             "kernel" : self._kernel_id,
                                             "columns" : {}}
 
+    def get_msg_id(self):
+        if not self.client:
+            self.client = self._nbapp.kernel_manager.get_kernel(kernel_id)
+
+            self.client.start_channels()
+            self.client.wait_for_ready()
+
+        try:
+            io_msg = self.client.iopub_channel.get_msg(timeout=0.5)
+            if "parent_header" in io_msg and io_msg["parent_header"]["msg_type"] == "execute_request":
+                return io_msg["parent_header"]["msg_id"] 
+            self._nbapp.log.debug("[ANALYSIS] Could not identify central msg_id in {0}".format(io_msg))
+ 
+        except Empty:
+            return None
     def _wait_for_clear(self, client):
         """let's try polling the iopub channel until nothing queued up to execute"""
         while True:

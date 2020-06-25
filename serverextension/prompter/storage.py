@@ -18,6 +18,7 @@ class DbHandler(object):
 
             self._conn = sqlite3.connect(db_path_resolved+dbname, 
                 detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
+            self._conn.row_factory = sqlite3.Row
             self._cursor = self._conn.cursor()
         else:
             if not os.path.isdir(db_path_resolved):
@@ -36,7 +37,7 @@ class DbHandler(object):
             CREATE TABLE cells(kernel TEXT, id TEXT PRIMARY KEY, contents TEXT, num_exec INT, last_exec TIMESTAMP);
             """)
         self._cursor.execute("""
-            CREATE TABLE versions(kernel TEXT, id TEXT, version INT, time TIMESTAMP, contents TEXT, PRIMARY KEY(id, contents));
+            CREATE TABLE versions(kernel TEXT, id TEXT, version INT, time TIMESTAMP, contents TEXT, msg_id TEXT, PRIMARY KEY(id, contents));
             """)
 
         # the table w/ the data entities in it
@@ -53,6 +54,10 @@ class DbHandler(object):
                                  type TEXT,
                                  size INT,
                                  PRIMARY KEY(source, version, name, col_name));
+            """)
+
+        self._cursor.execute("""
+            CREATE TABLE namespaces(msg_id TEXT PRIMARY KEY, namespace BLOB)
             """)
         self._conn.commit()
 

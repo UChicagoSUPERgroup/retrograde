@@ -15,6 +15,8 @@ from tornado.routing import Rule, PathMatches
 from prompter.storage import DbHandler
 from prompter.analysis import AnalysisEnvironment, run_code
 from prompter.manager import AnalysisManager
+from prompter.forkingkernel import ForkingKernel
+
 #from prompter.handler import TSChannelHandler
 
 # all the examples I've seen require _jupyter_server_extension_paths
