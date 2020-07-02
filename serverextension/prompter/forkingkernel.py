@@ -58,7 +58,7 @@ class ForkingKernel(IPythonKernel):
 
     def _handle_ns(self):
         """render objects into serializable format as needed""" 
-        better_ns = {}
+        better_ns = {"_forking_kernel_dfs" : {}}
 
         boiler_plate_keys = [ # defs that are just part of kernel exec env
             "__name__", "__doc__", "__package__", "__loader__",
@@ -69,7 +69,7 @@ class ForkingKernel(IPythonKernel):
             if k in boiler_plate_keys:
                 continue
             if type(v) == pd.DataFrame:
-                better_ns[k] = dill.dumps(v)
+                better_ns["_forking_kernel_dfs"][k] = dill.dumps(v)
             elif not dill.detect.badobjects(v):
                 better_ns[k] = v
             else:

@@ -10,6 +10,7 @@ from ast import parse, walk, iter_child_nodes, NodeTransformer, copy_location
 
 import astor
 from timeit import default_timer as timer
+from jupyter_client.manager import start_new_kernel
 from .config import other_funcs, ambig_funcs, series_funcs
 from .config import make_df_snippet, clf_fp_fn_snippet, clf_scan_snippet, clf_test_snippet
 
@@ -47,14 +48,28 @@ class AnalysisEnvironment:
                             "read_gbq"]
         self._nbapp = nbapp
         self.client = None
-#        self._session = InteractiveInterpreter()
         self.models = {}
+
+    def fork(self, msg_id, db):
+        """
+        spawn a kernel with the namespace of the main kernel just after msg id
+        """
+        self._nbapp.log.debug("[FORK] spawning new kernel with msg id {0}".format(msg_id))
+        km, kc = start_new_kernel()
+        ns_loading_code = NAMESPACE_CODE.format(msg_id, db.dir) 
+
+        self._nbapp.log.debug("[FORK] reconstructing namespace for {0}".format(msg_id))
+
+        output = run_code(kc, km, ns_loading_code, self._nbapp.log)
+        self._nbapp.log.debug("[FORK] reconstructed namespace, output {0}".format(output))
+
+        return km, kc 
 
     def cell_exec(self, code, notebook, cell_id):
         """
         execute a cell and propagate the analysis
         """
-        main_cell_id = self.get_msg_id()
+        main_cell_id = self.get_msg_id(notebook)
         cell_code = parse(code)
 
         old_models = set(self.models.keys())
@@ -96,9 +111,10 @@ class AnalysisEnvironment:
                                             "kernel" : self._kernel_id,
                                             "columns" : {}}
 
-    def get_msg_id(self):
+    def get_msg_id(self, kernel_id):
         if not self.client:
-            self.client = self._nbapp.kernel_manager.get_kernel(kernel_id)
+            kernel = self._nbapp.kernel_manager.get_kernel(kernel_id)
+            self.client = kernel.client()
 
             self.client.start_channels()
             self.client.wait_for_ready()
@@ -111,6 +127,7 @@ class AnalysisEnvironment:
  
         except Empty:
             return None
+
     def _wait_for_clear(self, client):
         """let's try polling the iopub channel until nothing queued up to execute"""
         while True:
