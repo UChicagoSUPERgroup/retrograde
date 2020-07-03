@@ -4,7 +4,7 @@ notebook application and tracking development of particular cells over time
 """
 import sqlite3
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from .config import DB_DIR, DB_NAME
 
@@ -37,7 +37,7 @@ class DbHandler(object):
             CREATE TABLE cells(kernel TEXT, id TEXT PRIMARY KEY, contents TEXT, num_exec INT, last_exec TIMESTAMP);
             """)
         self._cursor.execute("""
-            CREATE TABLE versions(kernel TEXT, id TEXT, version INT, time TIMESTAMP, contents TEXT, msg_id TEXT, PRIMARY KEY(id, contents));
+            CREATE TABLE versions(kernel TEXT, id TEXT, version INT, time TIMESTAMP, contents TEXT, exec_ct INT, PRIMARY KEY(id, contents));
             """)
 
         # the table w/ the data entities in it
@@ -57,7 +57,7 @@ class DbHandler(object):
             """)
 
         self._cursor.execute("""
-            CREATE TABLE namespaces(msg_id TEXT PRIMARY KEY, namespace BLOB)
+            CREATE TABLE namespaces(msg_id TEXT PRIMARY KEY, exec_num INT, time TIMESTAMP, code TEXT, namespace BLOB)
             """)
         self._conn.commit()
 
@@ -99,8 +99,8 @@ class DbHandler(object):
         #this is adding the versions row if it doesnt exist. If it 
         #does exist then do nothing.
         try:
-          self._cursor.execute("""INSERT INTO versions(id, version, time, contents)
-                 VALUES (?,?,?,?);""", (cell['cell_id'], 1, datetime.now(),cell['contents']))
+          self._cursor.execute("""INSERT INTO versions(id, version, time, contents, exec_ct)
+                 VALUES (?,?,?,?,?);""", (cell['cell_id'], 1, datetime.now(),cell['contents'], cell["exec_ct"]))
         except sqlite3.IntegrityError as e:
           #As I understand the documentation, nothing happens if a version
           #already exists. 
@@ -108,6 +108,24 @@ class DbHandler(object):
         self._conn.commit()
         pass
 
+    def recover_ns(self, msg_id):
+        """return the namespace under the msg_id entry"""
+        return self._cursor.execute("""
+                SELECT namespace FROM namespaces WHERE msg_id = ? 
+            """, (msg_id,)).fetchall()[0]
+
+    def link_cell_to_ns(self, exec_ct, time, delta=timedelta(seconds=5)):
+        """given an entry in the versions table, find matching namespace entry"""
+        results = self._cursor.execute("""
+            SELECT * FROM namespaces WHERE exec_num = ? AND time BETWEEN ? AND ? 
+        """, (exec_ct, time - delta, time + delta)).fetchall()
+        
+        if len(results) == 0:
+            return None
+        if len(results) == 1:
+            return results[0]        
+        else:
+            raise sqlite3.IntegrityError("Multiple namespaces in range")  
     def find_data(self, data):
         """look up if data entry exists, return if exists, None if not"""
         # note that will *not* compare columns
@@ -156,7 +174,7 @@ class DbHandler(object):
                  version, 
                  name, # nb notebook name
                  col, # column's name
-                 columns[col]["type"], 
+                 str(columns[col]["type"]), 
                  columns[col]["size"]) for col in columns.keys()]
         self._cursor.executemany("""
             INSERT INTO columns VALUES (?, ?, ?, ?, ?, ?) 

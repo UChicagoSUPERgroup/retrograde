@@ -9,7 +9,10 @@ from ast import parse, walk, iter_child_nodes, NodeTransformer, copy_location
 #from nbconvert.preprocessers import DeadKernelError
 
 import astor
+import dill
+
 from timeit import default_timer as timer
+from datetime import datetime
 from jupyter_client.manager import start_new_kernel
 from .config import other_funcs, ambig_funcs, series_funcs
 from .config import make_df_snippet, clf_fp_fn_snippet, clf_scan_snippet, clf_test_snippet
@@ -25,13 +28,15 @@ class AnalysisEnvironment:
     """
     Analysis environment tracks relevant variables in execution
 
-    TODO: should add ability to execute in parallel, in order to be able to run
-          tests DS isn't thinking of
     """
-    def __init__(self, nbapp, kernel_id):
+    def __init__(self, nbapp, kernel_id, db):
         """
-        nbapp = the notebook application object
+        nbapp: the notebook application object, needed for access to logging and (maybe) kernel stuff? TODO: check to see whether we just need this for logging
+        
+        kernel_id: the kernel this analysis environment is for
+        db: the DbHandler object for reading to/from past code executions and significant entities
         """
+        self.db = db
         self.pandas_alias = Aliases("pandas") # handle imports and functions
         self.sklearn_alias = Aliases("sklearn")
 
@@ -50,6 +55,8 @@ class AnalysisEnvironment:
         self.client = None
         self.models = {}
 
+        self.exec_count = 0
+
     def fork(self, msg_id, db):
         """
         spawn a kernel with the namespace of the main kernel just after msg id
@@ -59,8 +66,9 @@ class AnalysisEnvironment:
         ns_loading_code = NAMESPACE_CODE.format(msg_id, db.dir) 
 
         self._nbapp.log.debug("[FORK] reconstructing namespace for {0}".format(msg_id))
-
+        
         output = run_code(kc, km, ns_loading_code, self._nbapp.log)
+
         self._nbapp.log.debug("[FORK] reconstructed namespace, output {0}".format(output))
 
         return km, kc 
@@ -68,8 +76,11 @@ class AnalysisEnvironment:
     def cell_exec(self, code, notebook, cell_id):
         """
         execute a cell and propagate the analysis
+        
+        returns the msg id of the code execution msg to the main kernel
         """
-        main_cell_id = self.get_msg_id(notebook)
+        self.exec_count += 1
+
         cell_code = parse(code)
 
         old_models = set(self.models.keys())
@@ -162,7 +173,9 @@ class AnalysisEnvironment:
         
         kernel = self._nbapp.kernel_manager.get_kernel(kernel_id)
         self._wait_for_clear(client)
+
         output = run_code(client, kernel, code, self._nbapp.log)
+        self.exec_count += 1
 
         self._nbapp.log.debug("[ANALYSIS] {0}\n{1}".format(kernel_id, output))
 #        self._nbapp.web_app.kernel_locks[kernel_id].release()
@@ -187,27 +200,28 @@ class AnalysisEnvironment:
 #            self.entry_points[target.id]["imbalance"] = {}
 
             if tgt_type == DATAFRAME_TYPE:
-                cols = self.get_col_names(target)
-                self.entry_points[target.id]["columns"] = {c : self.get_col_stats(target, c) for c in cols}
+                if isinstance(target, Name):
+
+                    ns_entry = self.db.link_cell_to_ns(self.exec_count, datetime.now())
+                    ns = dill.loads(ns_entry["namespace"])
+ 
+                    df_obj = dill.loads(ns["_forking_kernel_dfs"][target.id])
+
+                    for c in df_obj.columns:
+                        self.entry_points[target.id]["columns"][c] = {}
+                        self.entry_points[target.id]["columns"][c]["size"] = len(df_obj[c])
+                        self.entry_points[target.id]["columns"][c]["type"] = str(df_obj[c].dtypes)
+
+                else:
+
+                    cols = self.get_col_names_callnode(target)
+                    self.entry_points[target.id]["columns"] = {c : self.get_col_stats(target, c) for c in cols}
 #                self.entry_points[target.id]["imbalance"] = self.data_imbalance(target, cols)
                         
 #            elif tgt_type == SERIES_TYPE:
 #                pass # TODO: IDK if we should do this for series
     def get_col_stats(self, target, colname):
-        # size, type, 
-        col_ref_exp = Subscript(value=target,
-                                slice=Index(value=Str(s=colname)))
-        len_exp = Expr(
-                    value=Call(func=Name(id="print"),
-                               args=[Call(func=Name(id="len"),
-                                          args = [col_ref_exp],
-                                          keywords =[])],
-                               keywords=[]))
-        type_exp = Expr(  
-                    value=Call(func=Name(id="print"),
-                               args=[Attribute(value=col_ref_exp,
-                                     attr="dtypes")],
-                               keywords=[]))
+    
         output = {}
         output["type"] = self._execute_code(astor.to_source(type_exp))
         output["size"] = self._execute_code(astor.to_source(len_exp))
@@ -381,14 +395,14 @@ class AnalysisEnvironment:
         except:
             return None
 
-    def get_col_names(self, call_or_name_node):
-        """try to get columns from the node"""
+    def get_col_names_callnode(self, call_node):
+        """try to get columns from the node by running code in the kernel"""
         #if not self.is_node_df(call_or_name_node):
         #    return None
 
         colnames_expression = Call(
             func=Name(id="list", ctx=Load()),
-            args=[Attribute(value=call_or_name_node, attr="columns")], keywords=[])
+            args=[Attribute(value=call_node, attr="columns")], keywords=[])
         colnames_return = self._execute_code(astor.to_source(colnames_expression))
         try:
             return eval(colnames_return)

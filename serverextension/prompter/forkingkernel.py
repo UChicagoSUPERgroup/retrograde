@@ -12,6 +12,7 @@ import dill
 
 import pandas as pd
 
+from datetime import datetime
 from ipykernel.kernelbase import Kernel
 from ipykernel.ipkernel import IPythonKernel
 from inspect import ismodule
@@ -50,9 +51,10 @@ class ForkingKernel(IPythonKernel):
         result = self._cursor.execute("""
             SELECT name FROM sqlite_master WHERE type='table' AND name='namespaces'
         """).fetchall()
+
         if len(result) == 0:
             self._cursor.execute("""
-                CREATE TABLE namespaces(msg_id TEXT PRIMARY KEY, namespace BLOB)
+                CREATE TABLE namespaces(msg_id TEXT PRIMARY KEY, exec_num INT, time TIMESTAMP, code TEXT, namespace BLOB)
                 """)
             self._conn.commit()
 
@@ -77,21 +79,25 @@ class ForkingKernel(IPythonKernel):
                     "[FORKINGKERNEL] could not pickle {0}, problem items {1}".format(k, dill.detect.baditems(v)))
         return better_ns
  
-    def _cache_ns(self):
-      
+    def _cache_ns(self, code):
+     
+        # code is the code being executed on this call (useful for debugging)
+ 
         msg_id = self._parent_header["msg_id"]
+        exec_ct = self.shell.execution_count - 1 # this is prior to this running
+        curr_time = datetime.now()  
 #        print(dill.detect.baditems(locals())) # In testing, only object not pickleable is kernel object, which is fine
 #        bad_items = dill.detect.baditems(self.shell.user_ns)
 #        censored_ns = {k : v for k,v in self.shell.user_ns.items() if v not in bad_items}
         relevant_ns = self._handle_ns() 
         ns = sqlite3.Binary(dill.dumps(relevant_ns))
         self._cursor.execute("""
-            INSERT INTO namespaces(msg_id, namespace) VALUES (?, ?)""", (msg_id, ns))
+            INSERT INTO namespaces(msg_id, exec_num, time, code, namespace) VALUES (?, ?, ?, ?, ?)""", (msg_id, exec_ct, curr_time, code, ns))
         self._conn.commit()
  
     def do_execute(self, code, silent, store_history=True, 
                    user_expressions=None, allow_stdin=False):
         result = super().do_execute(code, silent, store_history=store_history,
                                     user_expressions=user_expressions, allow_stdin=allow_stdin)
-        self._cache_ns()
+        self._cache_ns(code)
         return result

@@ -33,16 +33,17 @@ class AnalysisManager:
         cell_id = request["cell_id"]
         code = request["contents"]
 
-        self.db.add_entry(request)  
 
         self._nb.log.info("[MANAGER] Analyzing cell {0} with kernel {1}".format(cell_id, kernel_id))
 
         if kernel_id not in self.analyses:
 
             self._nb.log.info("[MANAGER] Starting new analysis environment for kernel {0}".format(kernel_id))
-            self.analyses[kernel_id] = AnalysisEnvironment(self._nb, kernel_id)
+            self.analyses[kernel_id] = AnalysisEnvironment(self._nb, kernel_id, self.db)
         
         env = self.analyses[kernel_id]
+        request["exec_ct"] = env.exec_count + 1
+        self.db.add_entry(request) 
 
         try:
             env.cell_exec(code, kernel_id, cell_id)
