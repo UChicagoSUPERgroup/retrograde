@@ -71,6 +71,7 @@ export class Listener {
           contents = cell.model.value.text;
 	      id = cell.model.id;
           k_id = this.tracker.currentWidget.sessionContext.session.kernel.id;
+          console.log(this.tracker.currentWidget.content.contentFactory);
           //todo: should add url/kernel id to differentiate
           this.client.request(
             "exec", "POST", 
@@ -87,7 +88,8 @@ export class Listener {
         }
       })
   }
-
+  
+  
   private _ready = new PromiseDelegate<void>();
 }
 export class CellListen {

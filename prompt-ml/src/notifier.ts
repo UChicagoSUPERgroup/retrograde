@@ -1,11 +1,31 @@
 import {
+  JupyterFrontEnd
+} from "@jupyterlab/application"
+
+import {
+  Widget
+} from "@lumino/widgets"
+
+import {
   INotebookTracker,
-  Notebook, 
+  Notebook,
+  NotebookPanel,
 } from "@jupyterlab/notebook";
 
 import { 
-  Cell,
+  Cell, CodeCell,
 } from "@jupyterlab/cells";
+
+import {
+  IOutputAreaModel,
+} from "@jupyterlab/outputarea";
+
+import {
+//  ExecutionCount,
+//  IMimeBundle,
+//  OutputMetadata,
+  IExecuteResult
+} from "@jupyterlab/nbformat" 
 
 import {
   Listener,
@@ -25,7 +45,7 @@ export class Prompter {
    * new data or a new model
    */
   private _tracker : INotebookTracker;
-  constructor(listener : Listener, tracker : INotebookTracker) {
+  constructor(listener : Listener, tracker : INotebookTracker, app : JupyterFrontEnd, factory : NotebookPanel.IContentFactory) {
     this._tracker = tracker;
     listener.newsignal.connect(
       (sender : Listener, output : any) => {
@@ -33,6 +53,28 @@ export class Prompter {
     listener.changesignal.connect(
       (sender : Listener, output : any) => {
         this._onModelNotify(output);});
+
+
+    // list widgets
+    app.restored.then( function() {
+
+      let widgets = app.shell.widgets("main");
+      let widget : Widget | undefined;
+      let panel : NotebookPanel;
+
+      while (true) {
+        widget = widgets.next();
+        if (widget == undefined) { break; }
+        if (widget.constructor.name == "NotebookPanel") { break; }
+        console.log("widget ", widget.constructor.name); // is a NotebookPanel
+      }
+
+      panel = widget as NotebookPanel;
+      console.log(panel.content.contentFactory.constructor.name); 
+//      panel.content.contentFactory = new CellFactory();
+    }) 
+
+     // next want to override widget cell factory to produce our own
   }
    
   private _onDataNotify(data_object : any) {
@@ -48,8 +90,30 @@ export class Prompter {
         // get cell
         var cell : Cell = this._getCell(data["cell"], this._tracker);
 
+
         if (cell == null) { return; };
 	    if (data["source"] == "") { return; };
+
+        var outputmodel : IOutputAreaModel = (cell as CodeCell).model.outputs;
+       
+        const n : number = outputmodel.length;
+ 
+        for (var i : number = 0; i < n; i++) {
+          console.log("output model content: ", outputmodel.get(i));
+/*          let new_output : IExecuteResult = new AddedOutput(outputmodel.get(i).executionCount, 
+                                                            outputmodel.get(i).data,
+                                                            outputmodel.get(i).metadata);*/
+
+          var new_output = {output_type : "execute_result", 
+                            execution_count : outputmodel.get(i).executionCount,
+                            data : outputmodel.get(i).data,
+                            metadata : outputmodel.get(i).metadata};
+                            
+          outputmodel.add((new_output as IExecuteResult));  // this worked, so going to refine technique now
+        }
+
+
+        //let test_output = IExecuteResult // todo: implement non-blocking type of output, write that in s.t. it gets rendered
 
         //let prompt_container = this._makeDiv("p-Widget p-Panel jp-prompt-Wrapper");
         //let collapser_holder = this._makeDiv("p-Widget jp-Collapser jp-OutputCollapser jp-prompt-collapser");
@@ -220,4 +284,33 @@ function _maximizeForm(prompt_div : HTMLElement, min_div : HTMLElement) {
   min_div.style.display = "none";
 
 }
+/*
+class AddedOutput implements IExecuteResult {
 
+  output_type : "execute_result";
+  execution_count : ExecutionCount;
+  data : IMimeBundle;
+  metadata : OutputMetadata;
+
+  constructor(cell_count : ExecutionCount, 
+              data? : IMimeBundle,
+              metadata? : OutputMetadata) {
+    this.execution_count = cell_count;
+    
+    if (!data) {
+    } 
+
+    this.data["text/html"] += "<div> Hello world </div>";
+
+    if (!metadata) {
+    }
+  }
+}
+/*
+class CellFactory extends NotebookPanel.ContentFactory {
+  createCodeCell(options : CodeCell.IOptions, parent : StaticNotebook) : CodeCell {
+    console.log("created code cell")
+    return super.createCodeCell(options, parent);
+  }
+  
+}*/
