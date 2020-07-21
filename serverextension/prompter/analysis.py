@@ -6,6 +6,8 @@ from queue import Empty
 from ast import NodeVisitor, Call, Name, Attribute, Expr, Load, Str, Num
 from ast import Subscript, List, Index, ExtSlice, keyword, NameConstant
 from ast import parse, walk, iter_child_nodes, NodeTransformer, copy_location
+
+from random import choice
 #from nbconvert.preprocessers import DeadKernelError
 
 import astor
@@ -14,8 +16,12 @@ import dill
 from timeit import default_timer as timer
 from datetime import datetime
 from jupyter_client.manager import start_new_kernel
+
 from .config import other_funcs, ambig_funcs, series_funcs
 from .config import make_df_snippet, clf_fp_fn_snippet, clf_scan_snippet, clf_test_snippet
+from .sim_functions import check_sex
+from .storage import load_dfs
+from .sortilege import wands
 
 #from code import InteractiveInterpreter
 
@@ -73,6 +79,81 @@ class AnalysisEnvironment:
 
         return km, kc 
 
+    def sortilege(self, kernel_id, cell_id):
+        """
+        run the sortilege analyses, and return a list of options
+        formatted as {"type" : <wands | cups | swords | pentacles>,
+                      if "wands" 
+                        "op" : <sum | mean>, "num_col" <numeric column name>,
+                        "cat_col" : <categorical column name>
+                        "rank" : <where the variation ranks relative to other variances>
+                        "total" : <total variances>
+                      }
+        """
+        df = self.find_dataframe(kernel_id, cell_id)
+        if df is None: return None
+
+        output = wands(df)
+         
+        return output
+ 
+    def colsim(self, kernel_id, cell_id):
+        """
+        see if any columns in the data resemble sensitive categories
+        return a list of options and list of weights
+        
+        options is a list of tuples w/ column and category, weights is
+        similarity score
+        """
+        df = self.find_dataframe(kernel_id, cell_id)
+
+        if df is None: return None
+        
+        cols = df.columns
+        categories = {"sex" : check_sex, "race" : check_race} # each value is function that takes colname and df as inputs
+        
+        options = []
+        weights = []
+
+        for c in cols:
+            for cat, cat_fn in categories.items():
+                options.append((c, cat))
+                weights.append(cat_fn(c, df))
+        return options, weights
+ 
+    def find_dataframe(self, kernel_id, cell_id):
+        """
+        find the nearest/most recent dataframe variable
+        """
+        self._nbapp.log.debug(
+            "[ANALYSIS] looking for dataframes for cell {0} and kernel {1}".format(cell_id, kernel_id))
+        cell_code = self.db.get_code(kernel_id, cell_id)
+         
+        if not cell_code: 
+            self._nbapp.log.debug(
+                "[ANALYSIS] could not recover cell code")
+            return None
+        
+        cell_tree = parse(cell_code)
+        visitor = NearestDataframeFinder(self)
+        visitor.visit(cell_tree)
+
+        curr_ns = self.db.recent_ns()
+        curr_df = load_dfs(curr_ns)
+
+        if len(curr_df.keys()) == 0:
+            return None # nothing to be done since introspection not possible
+
+        if len(visitor.names) == 0 and len(curr_df.keys()) > 0:
+            poss_choices = list(curr_df.keys())
+        else:        
+            poss_choices = [var_name for var_name in visitor.names if var_name in curr_df.keys()]
+
+        var_name = choice(poss_choices)
+        self._nbapp.log.debug(
+            "[ANALYSIS] found dataframe {0} for cell {1}".format(var_name, cell_id))
+        return curr_df[var_name]       
+ 
     def cell_exec(self, code, notebook, cell_id):
         """
         execute a cell and propagate the analysis
@@ -220,6 +301,15 @@ class AnalysisEnvironment:
                         
 #            elif tgt_type == SERIES_TYPE:
 #                pass # TODO: IDK if we should do this for series
+    def get_col_names(self, obj):
+        if isinstance(obj, Name):
+            ns_entry = self.db.link_cell_to_ns(self.exec_count, datetime.now())  # TODO: may need smarter lookup for this 
+            ns = dill.loads(ns_entry["namespace"])
+            df_obj = dill.loads(ns["_forking_kernel_dfs"][target.id])
+            return df_obj.columns
+        else:
+            return self.get_col_names_callnode(obj)
+
     def get_col_stats(self, target, colname):
     
         output = {}
@@ -767,6 +857,7 @@ class Graph:
     def set_type(self, node, type_name):
         """set a nodes type, if node was not in graph, node is added to graph"""
         self._type_register[node] = type_name
+
 def get_call(assign_node):
     """search down until we find the root call node"""
     last_call = None
@@ -917,6 +1008,28 @@ class SnippetVisitor(NodeTransformer):
         if node.id in self.map:
             return copy_location(self.map[node.id], node)
         return node
+class NearestDataframeFinder(NodeVisitor):
 
+    def __init__(self, env):
+        super().__init__()
+        self.env = env
+        self.names = set()
+
+    def visit_Name(self, node):
+
+        q = [node]
+        
+        while len(q) > 0:
+
+            path_node = q.pop(0)
+
+            if self.env.graph.get_type(path_node) == DATAFRAME_TYPE:
+                if isinstance(path_node, Name): self.names.add(path_node.id)
+            else:
+                try:
+                    q.extend(self.env.graph.get_parents(path_node))
+                except KeyError:
+                    pass
+        self.generic_visit(node)
 class DeadKernelError(RuntimeError):
     pass

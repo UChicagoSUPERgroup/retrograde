@@ -4,6 +4,8 @@ notebook application and tracking development of particular cells over time
 """
 import sqlite3
 import os
+import dill
+
 from datetime import datetime, timedelta
 
 from .config import DB_DIR, DB_NAME
@@ -60,6 +62,13 @@ class DbHandler(object):
             CREATE TABLE namespaces(msg_id TEXT PRIMARY KEY, exec_num INT, time TIMESTAMP, code TEXT, namespace BLOB)
             """)
         self._conn.commit()
+    def get_code(self, kernel_id, cell_id):
+        """return the contents of the cell, none if does not exist"""
+        result = self._cursor.execute(
+            """SELECT contents FROM cells WHERE id = ? AND kernel = ?""", (cell_id, kernel_id)).fetchall()
+        if len(result) != 0:
+            return result[0]["contents"]
+        return None
 
     def add_entry(self, cell):
         """
@@ -88,13 +97,13 @@ class DbHandler(object):
         #inserting new value into cells
         try:
           #if the cell already exists, this will raise an integrity error
-          self._cursor.execute("""INSERT INTO cells(id, contents, num_exec, last_exec)
-                 VALUES (?,?,?,?);""", (cell['cell_id'], cell['contents'], 1, datetime.now()))
+          self._cursor.execute("""INSERT INTO cells(id, contents, num_exec, last_exec, kernel)
+                 VALUES (?,?,?,?,?);""", (cell['cell_id'], cell['contents'], 1, datetime.now(), cell["kernel"]))
         except sqlite3.IntegrityError as e:
           #value for cell already exists in cells, so update as needed
           self._cursor.execute("""UPDATE cells
-                 SET contents = ?, num_exec = num_exec + 1, last_exec = ?
-                 WHERE id = ?;""", (cell['contents'], datetime.now(), cell['cell_id']))
+                 SET contents = ?, num_exec = num_exec + 1, last_exec = ?, kernel = ?
+                 WHERE id = ?;""", (cell['contents'], datetime.now(), cell["kernel"], cell['cell_id']))
 
         #this is adding the versions row if it doesnt exist. If it 
         #does exist then do nothing.
@@ -114,6 +123,11 @@ class DbHandler(object):
                 SELECT namespace FROM namespaces WHERE msg_id = ? 
             """, (msg_id,)).fetchall()[0]
 
+    def recent_ns(self):
+        """return the most recently logged namespace"""
+        return self._cursor.execute("""
+            SELECT * FROM namespaces ORDER BY time DESC LIMIT 1
+        """).fetchall()[0]
     def link_cell_to_ns(self, exec_ct, time, delta=timedelta(seconds=5)):
         """given an entry in the versions table, find matching namespace entry"""
         results = self._cursor.execute("""
@@ -186,3 +200,7 @@ class DbHandler(object):
     def add_model(self, name, info, kernel_id):
         """add model to model entry table"""
         # TODO
+
+def load_dfs(ns):
+    ns_dict = dill.loads(ns["namespace"])
+    return {k : dill.loads(v) for k,v in ns_dict["_forking_kernel_dfs"].items()}

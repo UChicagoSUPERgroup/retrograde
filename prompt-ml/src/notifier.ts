@@ -1,11 +1,11 @@
 import {
   JupyterFrontEnd
 } from "@jupyterlab/application"
-
+/*
 import {
   Widget
 } from "@lumino/widgets"
-
+*/
 import {
   INotebookTracker,
   Notebook,
@@ -23,14 +23,14 @@ import {
 import {
 //  ExecutionCount,
 //  IMimeBundle,
-//  OutputMetadata,
+  OutputMetadata,
   IExecuteResult
 } from "@jupyterlab/nbformat" 
 
 import {
   Listener,
 } from "./cell-listener";
-
+/*
 import {
   CodeCellClient
 } from "./client";
@@ -38,7 +38,7 @@ import {
 import {
   ServerConnection
 } from "@jupyterlab/services";
-
+*/
 export class Prompter {
   /*
    * This generates prompts for notebook cells on notification of 
@@ -47,37 +47,55 @@ export class Prompter {
   private _tracker : INotebookTracker;
   constructor(listener : Listener, tracker : INotebookTracker, app : JupyterFrontEnd, factory : NotebookPanel.IContentFactory) {
     this._tracker = tracker;
-    listener.newsignal.connect(
-      (sender : Listener, output : any) => {
-        this._onDataNotify(output);});
-    listener.changesignal.connect(
-      (sender : Listener, output : any) => {
-        this._onModelNotify(output);});
-
-
-    // list widgets
-    app.restored.then( function() {
-
-      let widgets = app.shell.widgets("main");
-      let widget : Widget | undefined;
-      let panel : NotebookPanel;
-
-      while (true) {
-        widget = widgets.next();
-        if (widget == undefined) { break; }
-        if (widget.constructor.name == "NotebookPanel") { break; }
-        console.log("widget ", widget.constructor.name); // is a NotebookPanel
-      }
-
-      panel = widget as NotebookPanel;
-      console.log(panel.content.contentFactory.constructor.name); 
-//      panel.content.contentFactory = new CellFactory();
-    }) 
-
-     // next want to override widget cell factory to produce our own
+    listener.infoSignal.connect(
+        (sender : Listener, output : any) => {
+          this._onInfo(output)});
   }
-   
-  private _onDataNotify(data_object : any) {
+  
+  private appendMsg(cell : Cell, msg : string) {
+    var outputmodel : IOutputAreaModel = (cell as CodeCell).model.outputs;
+    if (outputmodel.length > 0) {
+      var new_output = {output_type : "execute_result",
+                        execution_count : outputmodel.get(0).executionCount,
+                        data : {"text/html" : msg},
+                        metadata : (outputmodel.get(0).metadata as OutputMetadata)}; 
+      outputmodel.add((new_output as IExecuteResult)); 
+    } else {
+      let blank_metadata : OutputMetadata;
+      var new_output = {output_type : "execute_result",
+                        execution_count : (cell as CodeCell).model.executionCount, 
+                        data : {"text/html" : msg},
+                        metadata : blank_metadata}
+      outputmodel.add((new_output as IExecuteResult)); 
+    } 
+  } 
+  private _onInfo(info_object : any) {
+    var cell : Cell = this._getCell(info_object["cell"], this._tracker);
+    
+    if (info_object["type"] == "resemble") {
+      let msg : string = "<div>Column <b>"+info_object["column"]+"</b> resembles "+info_object["category"] +"</div>";
+      this.appendMsg(cell, msg); 
+    }
+    if (info_object["type"] == "wands") { // categorical variance
+      let msg : string = "<div> The "+info_object["op"] + " of column <b>";
+      msg += info_object["num_col"] + "</b> has variance of " + info_object["var"];
+      msg += " with <b>" + info_object["cat_col"] + "</b></div>";
+      msg += "<div> This means that is "+info_object["rank"]+" out of " + info_object["total"] + "</div>";
+      this.appendMsg(cell, msg); 
+    }
+    if (info_object["type"] == "cups") {// correlation
+      let msg : string = "<div><b>"+info_object["col_a"] +"</b> is has a correlation of "+info_object["strength"];
+      msg += " with <b>"+info_object["col_b"] + "</b></div>";
+      msg += "<div>This means that it is the "+info_object["rank"] + " out of " +info_object["total"] +"</div>";
+      this.appendMsg(cell, msg);
+    }
+    if (info_object["type"] == "pentacles") { // extreme values
+    }
+    if (info_object["type"] == "swords") { // undefined
+    }
+  } 
+
+/*  private _onDataNotify(data_object : any) {
 
     var data_entries : any = Object.keys(data_object); // each key a data variable
 
@@ -94,24 +112,23 @@ export class Prompter {
         if (cell == null) { return; };
 	    if (data["source"] == "") { return; };
 
-        var outputmodel : IOutputAreaModel = (cell as CodeCell).model.outputs;
+//        var outputmodel : IOutputAreaModel = (cell as CodeCell).model.outputs;
        
-        const n : number = outputmodel.length;
- 
-        for (var i : number = 0; i < n; i++) {
-          console.log("output model content: ", outputmodel.get(i));
+ //       const n : number = outputmodel.length;
+        this.appendMessage(cell, "<div>Hello world</div>"); 
+//        for (var i : number = 0; i < n; i++) {
+//          console.log("output model content: ", outputmodel.get(i));
 /*          let new_output : IExecuteResult = new AddedOutput(outputmodel.get(i).executionCount, 
                                                             outputmodel.get(i).data,
                                                             outputmodel.get(i).metadata);*/
 
-          var new_output = {output_type : "execute_result", 
-                            execution_count : outputmodel.get(i).executionCount,
-                            data : outputmodel.get(i).data,
-                            metadata : outputmodel.get(i).metadata};
+//          var new_output = {output_type : "execute_result", 
+//                            execution_count : outputmodel.get(i).executionCount,
+//                            data : outputmodel.get(i).data,
+//                            metadata : outputmodel.get(i).metadata};
                             
-          outputmodel.add((new_output as IExecuteResult));  // this worked, so going to refine technique now
-        }
-
+//          outputmodel.add((new_output as IExecuteResult));  // this worked, so going to refine technique now
+//        }
 
         //let test_output = IExecuteResult // todo: implement non-blocking type of output, write that in s.t. it gets rendered
 
@@ -134,7 +151,7 @@ export class Prompter {
         //console.log("[PROMPTML] cell node type", cell.node.className);
     	//console.log("[PROMPTML] cell has children ", cell.node.children);
 
-
+/*
         let text = this._newDataText();
 
         let additional_info = { 
@@ -147,7 +164,8 @@ export class Prompter {
       }
     }
   }
-
+*/
+/*
   private _form_onclick_factory(input_area : HTMLTextAreaElement, 
                                 cell : string, prompt_div : HTMLElement, 
                                 min_div : HTMLElement,
@@ -172,17 +190,19 @@ export class Prompter {
 
         return new_data_form;
   }
-
+*/
+/*
   private _makeDiv(classnames : string) {
     let elt = document.createElement("div");
     elt.className = classnames;
     return elt;
   }
-
+*/
+/*
   private _onModelNotify(models : any) {
     // var cell : Cell = this._getCell(models["cell"], this._tracker);
   }
-
+*/
   private _getCell(id : string, tracker : INotebookTracker) : Cell {
 
     var nb : Notebook = tracker.currentWidget.content;
@@ -195,7 +215,7 @@ export class Prompter {
 
     return null;
   }
-
+/*
   private _makeForm(question_text : HTMLElement, cell : string, additional_info? : any) : HTMLElement {
     // make a form with text input
     let prompt_container = this._makeDiv("p-Widget p-Panel jp-prompt-Wrapper");
@@ -236,7 +256,8 @@ export class Prompter {
 
     return prompt_container;
   }
-
+*/
+/*
   private _newDataText() {
 
     var prompt_container = this._makeDiv("p-Widget jp-Cell");
@@ -268,8 +289,9 @@ export class Prompter {
 
     return prompt_container;
   }
+*/
 }
-
+/*
 function _minimizeForm(prompt_div : HTMLElement, min_div : HTMLElement) {
 
   prompt_div.style.display = "none";
@@ -284,33 +306,4 @@ function _maximizeForm(prompt_div : HTMLElement, min_div : HTMLElement) {
   min_div.style.display = "none";
 
 }
-/*
-class AddedOutput implements IExecuteResult {
-
-  output_type : "execute_result";
-  execution_count : ExecutionCount;
-  data : IMimeBundle;
-  metadata : OutputMetadata;
-
-  constructor(cell_count : ExecutionCount, 
-              data? : IMimeBundle,
-              metadata? : OutputMetadata) {
-    this.execution_count = cell_count;
-    
-    if (!data) {
-    } 
-
-    this.data["text/html"] += "<div> Hello world </div>";
-
-    if (!metadata) {
-    }
-  }
-}
-/*
-class CellFactory extends NotebookPanel.ContentFactory {
-  createCodeCell(options : CodeCell.IOptions, parent : StaticNotebook) : CodeCell {
-    console.log("created code cell")
-    return super.createCodeCell(options, parent);
-  }
-  
-}*/
+*/

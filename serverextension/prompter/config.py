@@ -164,3 +164,5 @@ def _make_namespace(msg_id, db_path):
 
 _make_namespace({0}, {1})
 """ 
+
+MODE = "SORT" # the sorts of responses the plugin should provide. options are "SORT" for sortilege, "SIM" for column similarity, and None
