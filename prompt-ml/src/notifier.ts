@@ -1,11 +1,11 @@
 import {
   JupyterFrontEnd
 } from "@jupyterlab/application"
-/*
+
 import {
   Widget
 } from "@lumino/widgets"
-*/
+
 import {
   INotebookTracker,
   Notebook,
@@ -17,7 +17,7 @@ import {
 } from "@jupyterlab/cells";
 
 import {
-  IOutputAreaModel,
+  IOutputAreaModel, OutputPrompt
 } from "@jupyterlab/outputarea";
 
 import {
@@ -68,7 +68,36 @@ export class Prompter {
                         metadata : blank_metadata}
       outputmodel.add((new_output as IExecuteResult)); 
     } 
+    
+    // get the OutputPrompt and overwrite
+    this._overwritePrompt(cell);
+
   } 
+  private _overwritePrompt(cell : Cell) {
+    // overwrite the output prompt for the additional commentary
+    var cell_iter = cell.children();
+    cell_iter.next();
+    cell_iter.next();
+    
+    let outputarea : Widget = cell_iter.next();
+ 
+    if (outputarea != undefined) {
+
+      var output_iter = outputarea.children();
+      output_iter.next();
+      outputarea = output_iter.next(); 
+
+      var prompt_iter = outputarea.children();
+      prompt_iter.next();
+
+      let output_result = prompt_iter.next();
+      let output_prompt : OutputPrompt = (output_result.children().next() as OutputPrompt);
+      
+      if (output_prompt.executionCount == (cell as CodeCell).model.executionCount) {
+          output_prompt.node.textContent = "[!]:"; 
+      }
+    }
+  }
   private _onInfo(info_object : any) {
     var cell : Cell = this._getCell(info_object["cell"], this._tracker);
     
@@ -77,24 +106,154 @@ export class Prompter {
       this.appendMsg(cell, msg); 
     }
     if (info_object["type"] == "wands") { // categorical variance
-      let msg : string = "<div> The "+info_object["op"] + " of column <b>";
-      msg += info_object["num_col"] + "</b> has variance of " + info_object["var"];
-      msg += " with <b>" + info_object["cat_col"] + "</b></div>";
-      msg += "<div> This means that is "+info_object["rank"]+" out of " + info_object["total"] + "</div>";
+      let msg : string = this._makeWandsMsg(info_object["op"], 
+                                            info_object["num_col"],
+                                            info_object["var"], 
+                                            info_object["cat_col"],
+                                            info_object["rank"],
+                                            info_object["total"]).outerHTML;
       this.appendMsg(cell, msg); 
     }
     if (info_object["type"] == "cups") {// correlation
-      let msg : string = "<div><b>"+info_object["col_a"] +"</b> is has a correlation of "+info_object["strength"];
-      msg += " with <b>"+info_object["col_b"] + "</b></div>";
-      msg += "<div>This means that it is the "+info_object["rank"] + " out of " +info_object["total"] +"</div>";
+      let msg : string = this._makeCupsMsg(info_object["col_a"], info_object["col_b"],
+                                           info_object["strength"], info_object["rank"]).outerHTML;
       this.appendMsg(cell, msg);
     }
     if (info_object["type"] == "pentacles") { // extreme values
+      let msg : string = this._makePentaclesMsg(info_object["col"],
+                                                info_object["strength"],
+                                                info_object["element"],
+                                                info_object["rank"]).outerHTML;
+     
+      this.appendMsg(cell, msg);
     }
     if (info_object["type"] == "swords") { // undefined
+      let msg : string = this._makeSwordsMsg(info_object["col"], info_object["strength"],
+                                             info_object["rank"]).outerHTML;
+      this.appendMsg(cell, msg);
     }
   } 
+  
+  private _makeContainer(df_name? : string)  : [HTMLDivElement, HTMLDivElement] {
+    /* 
+    the template for prompt containers returns top level container and element that 
+    the notification should be put into
+    */
+    let elt : HTMLDivElement = document.createElement("div");
+    elt.className = "jp-PromptArea";  
 
+    let spacer = document.createElement("div");
+    spacer.className = "jp-PromptArea-spacer";
+
+    let area : HTMLDivElement = document.createElement("div");
+    area.className = "jp-PromptArea-Prompt";
+
+    let heading = document.createElement("h1");
+    
+    if (df_name) {
+      heading.innerText = "A fact about "+df_name;
+    } else { heading.innerText = "A fact about the data"; }
+   
+    area.appendChild(heading);
+ 
+    elt.appendChild(spacer);
+    elt.appendChild(area);
+ 
+    return [elt, area]; 
+  }
+ 
+  private _makeWandsMsg(op : string, num_col : string, variance : string, 
+                        cat_col : string, rank : number, total : number) {
+    let var_line_1 = document.createElement("p");
+    let var_line_2 = document.createElement("p");
+    let var_line_3 = document.createElement("p");
+
+    var_line_1.innerHTML = "The <b>"+op+"</b> of <b>"+num_col+"</b> broken down by ";
+    var_line_1.innerHTML += "<b>"+cat_col +"</b> has variance "+variance.slice(0,5);
+
+    var_line_2.innerHTML = "There are "+ (rank - 1).toString() + " combinations of variables with higher variance";
+    
+    let link = document.createElement("a");
+    link.href = "https://en.wikipedia.org/wiki/Variance";
+
+    link.innerText = "What is variance?";
+    var_line_3.appendChild(link);
+    
+    var [body, area] = this._makeContainer();
+    area.appendChild(var_line_1);
+    area.appendChild(var_line_2);
+    area.appendChild(var_line_3);
+
+    return body;     
+  }
+
+  private _makeCupsMsg(col_a : string, col_b : string, strength : string, rank : number) {
+
+    let var_line_1 = document.createElement("p");
+    let var_line_2 = document.createElement("p");
+    let var_line_3 = document.createElement("p");
+
+    var_line_1.innerHTML = "<b>"+col_a+"</b> has a correlation with <b>"+col_b+"</b>";
+    var_line_1.innerHTML += " with a strength of "+strength.slice(0,5);
+    var_line_2.innerHTML = "There are "+ (rank - 1).toString() + " combinations of variables with higher correlation strength";
+    
+    let link = document.createElement("a");
+    link.href = "https://en.wikipedia.org/wiki/Pearson_correlation_coefficient";
+
+    link.innerText = "What is correlation?";
+    var_line_3.appendChild(link);
+    
+    let [body, area] = this._makeContainer();
+    area.appendChild(var_line_1);
+    area.appendChild(var_line_2);
+    area.appendChild(var_line_3);
+
+    return body;     
+  }
+
+  private _makePentaclesMsg(col : string, strength : string, 
+                            element : string, rank : number) {
+
+    let var_line_1 = document.createElement("p");
+    let var_line_2 = document.createElement("p");
+    let var_line_3 = document.createElement("p");
+
+    var_line_1.innerHTML = "<b>"+col+"</b> contains the value <b>"+element+"</b>";
+    var_line_1.innerHTML += " which is "+strength.slice(0,5)+" standard deviations out from the column mean";
+    var_line_2.innerHTML = "There are "+ (rank - 1).toString() + " other variables with more extreme outliers";
+    
+    let link = document.createElement("a");
+    link.href = "https://en.wikipedia.org/wiki/Standard_score";
+
+    link.innerText = "What is an outlier?";
+    var_line_3.appendChild(link);
+    
+    let [body, area] = this._makeContainer();
+    area.appendChild(var_line_1);
+    area.appendChild(var_line_2);
+    area.appendChild(var_line_3);
+
+    return body;     
+  }
+
+  private _makeSwordsMsg(col : string, strength : string, rank : number) {
+
+    let var_line_1 = document.createElement("p");
+    let var_line_2 = document.createElement("p");
+
+    let prop : number = parseFloat(strength);
+    let pct : number = prop*100;
+
+    var_line_1.innerHTML = pct.toString().slice(0,5)+"% of entries in <b>"+col+"</b> are null";
+
+    var_line_2.innerHTML = "There are "+ (rank - 1).toString() + " other variables with more null entries";
+    
+    let [body, area] = this._makeContainer();
+    area.appendChild(var_line_1);
+    area.appendChild(var_line_2);
+
+    return body;
+  }
 /*  private _onDataNotify(data_object : any) {
 
     var data_entries : any = Object.keys(data_object); // each key a data variable
