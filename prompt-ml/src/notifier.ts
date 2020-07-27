@@ -102,7 +102,7 @@ export class Prompter {
             output["input"] = input_area.value;
             console.log("[PROMPT-ML] sending ", output);
             client.request("exec", "POST", JSON.stringify(output),
-                ServerConnection.defaultSettings); 
+                ServerConnection.makeSettings()); 
             _minimizeForm(prompt_div, min_div);
         }
 
