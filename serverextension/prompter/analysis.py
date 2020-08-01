@@ -21,7 +21,7 @@ from .config import other_funcs, ambig_funcs, series_funcs
 from .config import make_df_snippet, clf_fp_fn_snippet, clf_scan_snippet, clf_test_snippet
 from .sim_functions import check_sex
 from .storage import load_dfs
-from .sortilege import wands
+from .sortilege import wands, swords, cups, pentacles
 
 #from code import InteractiveInterpreter
 
@@ -93,8 +93,11 @@ class AnalysisEnvironment:
         df = self.find_dataframe(kernel_id, cell_id)
         if df is None: return None
 
-        output = wands(df)
-         
+        output = wands(df)[:13]
+        output += cups(df)[:13]
+        output += swords(df)[:13]
+        output += pentacles(df)[:13]
+ 
         return output
  
     def colsim(self, kernel_id, cell_id):
