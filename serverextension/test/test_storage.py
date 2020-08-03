@@ -32,7 +32,7 @@ class TestDBMethods(unittest.TestCase):
             """)
         tables = self.cursor.fetchall() 
         
-        self.assertEqual(len(tables), 4)
+        self.assertEqual(len(tables), 5, "found tables {0}".format(tables))
         table_names = [t[0] for t in tables]
 
         self.assertTrue("cells" in table_names)
@@ -40,8 +40,8 @@ class TestDBMethods(unittest.TestCase):
 
     #tests if changing text creates new version (key constant)
     def test_add_entry_versions(self):
-        self.db.add_entry({'contents': '1+1+1=2', 'cell_id': 'some_key_1'})
-        self.db.add_entry({'contents': '1+1=4', 'cell_id': 'some_key_1'})
+        self.db.add_entry({"kernel" : "TEST-1234", 'contents': '1+1+1=2', 'cell_id': 'some_key_1', "exec_ct" : 1})
+        self.db.add_entry({"kernel" : "TEST-1234", 'contents': '1+1=4', 'cell_id': 'some_key_1', "exec_ct" : 2})
         self.cursor.execute(
             """
             SELECT
@@ -60,8 +60,8 @@ class TestDBMethods(unittest.TestCase):
     #tests if identical executions increment num_exec
     #and create no new versions
     def test_add_entry_versions(self):
-        self.db.add_entry({'contents': 'hello friends', 'cell_id': 'a_key_1'})
-        self.db.add_entry({'contents': 'hello friends', 'cell_id': 'a_key_1'})
+        self.db.add_entry({"kernel" : "TEST-1234", 'contents': 'hello friends', 'cell_id': 'a_key_1', "exec_ct" : 1})
+        self.db.add_entry({"kernel" : "TEST-1234", 'contents': 'hello friends', 'cell_id': 'a_key_1', "exec_ct" : 2})
         self.cursor.execute(
             """
             SELECT
@@ -129,7 +129,7 @@ class TestDBMethods(unittest.TestCase):
         test_names = [r[3] for r in col_result]
 
         for col_name in data["columns"].keys():
-            self.assertTrue(col_name in test_names, "{0} not in {1}".format(col_name, test_names))
+            self.assertTrue(col_name in test_names, "{0} not in {1}\nraw = {2}".format(col_name, test_names, col_result))
 
     def test_find_data(self):
         data = {
