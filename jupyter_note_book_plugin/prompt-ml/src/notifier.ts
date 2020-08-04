@@ -1,16 +1,36 @@
 import {
+  JupyterFrontEnd
+} from "@jupyterlab/application"
+
+import {
+  Widget
+} from "@lumino/widgets"
+
+import {
   INotebookTracker,
-  Notebook, 
+  Notebook,
+  NotebookPanel,
 } from "@jupyterlab/notebook";
 
 import { 
-  Cell,
+  Cell, CodeCell,
 } from "@jupyterlab/cells";
+
+import {
+  IOutputAreaModel, OutputPrompt
+} from "@jupyterlab/outputarea";
+
+import {
+//  ExecutionCount,
+//  IMimeBundle,
+  OutputMetadata,
+  IExecuteResult
+} from "@jupyterlab/nbformat" 
 
 import {
   Listener,
 } from "./cell-listener";
-
+/*
 import {
   CodeCellClient
 } from "./client";
@@ -18,24 +38,223 @@ import {
 import {
   ServerConnection
 } from "@jupyterlab/services";
-
+*/
 export class Prompter {
   /*
    * This generates prompts for notebook cells on notification of 
    * new data or a new model
    */
   private _tracker : INotebookTracker;
-  constructor(listener : Listener, tracker : INotebookTracker) {
+  constructor(listener : Listener, tracker : INotebookTracker, app : JupyterFrontEnd, factory : NotebookPanel.IContentFactory) {
     this._tracker = tracker;
-    listener.newsignal.connect(
-      (sender : Listener, output : any) => {
-        this._onDataNotify(output);});
-    listener.changesignal.connect(
-      (sender : Listener, output : any) => {
-        this._onModelNotify(output);});
+    listener.infoSignal.connect(
+        (sender : Listener, output : any) => {
+          this._onInfo(output)});
   }
+  
+  private appendMsg(cell : Cell, msg : string) {
+    var outputmodel : IOutputAreaModel = (cell as CodeCell).model.outputs;
+    if (outputmodel.length > 0) {
+      var new_output = {output_type : "execute_result",
+                        execution_count : outputmodel.get(0).executionCount,
+                        data : {"text/html" : msg},
+                        metadata : (outputmodel.get(0).metadata as OutputMetadata)}; 
+      outputmodel.add((new_output as IExecuteResult)); 
+    } else {
+      let blank_metadata : OutputMetadata;
+      var new_output = {output_type : "execute_result",
+                        execution_count : (cell as CodeCell).model.executionCount, 
+                        data : {"text/html" : msg},
+                        metadata : blank_metadata}
+      outputmodel.add((new_output as IExecuteResult)); 
+    } 
+    
+    // get the OutputPrompt and overwrite
+    this._overwritePrompt(cell);
+
+  } 
+  private _overwritePrompt(cell : Cell) {
+    // overwrite the output prompt for the additional commentary
+    var cell_iter = cell.children();
+    cell_iter.next();
+    cell_iter.next();
+    
+    let outputarea : Widget = cell_iter.next();
+ 
+    if (outputarea != undefined) {
+
+      var output_iter = outputarea.children();
+      output_iter.next();
+      outputarea = output_iter.next(); 
+
+      var prompt_iter = outputarea.children();
+      prompt_iter.next();
+
+      let output_result = prompt_iter.next();
+      let output_prompt : OutputPrompt = (output_result.children().next() as OutputPrompt);
+      
+      if (output_prompt.executionCount == (cell as CodeCell).model.executionCount) {
+          output_prompt.node.textContent = "[!]:"; 
+      }
+    }
+  }
+  private _onInfo(info_object : any) {
+    var cell : Cell = this._getCell(info_object["cell"], this._tracker);
+    
+    if (info_object["type"] == "resemble") {
+      let msg : string = "<div>Column <b>"+info_object["column"]+"</b> resembles "+info_object["category"] +"</div>";
+      this.appendMsg(cell, msg); 
+    }
+    if (info_object["type"] == "wands") { // categorical variance
+      let msg : string = this._makeWandsMsg(info_object["op"], 
+                                            info_object["num_col"],
+                                            info_object["var"], 
+                                            info_object["cat_col"],
+                                            info_object["rank"],
+                                            info_object["total"]).outerHTML;
+      this.appendMsg(cell, msg); 
+    }
+    if (info_object["type"] == "cups") {// correlation
+      let msg : string = this._makeCupsMsg(info_object["col_a"], info_object["col_b"],
+                                           info_object["strength"], info_object["rank"]).outerHTML;
+      this.appendMsg(cell, msg);
+    }
+    if (info_object["type"] == "pentacles") { // extreme values
+      let msg : string = this._makePentaclesMsg(info_object["col"],
+                                                info_object["strength"],
+                                                info_object["element"],
+                                                info_object["rank"]).outerHTML;
+     
+      this.appendMsg(cell, msg);
+    }
+    if (info_object["type"] == "swords") { // undefined
+      let msg : string = this._makeSwordsMsg(info_object["col"], info_object["strength"],
+                                             info_object["rank"]).outerHTML;
+      this.appendMsg(cell, msg);
+    }
+  } 
+  
+  private _makeContainer(df_name? : string)  : [HTMLDivElement, HTMLDivElement] {
+    /* 
+    the template for prompt containers returns top level container and element that 
+    the notification should be put into
+    */
+    let elt : HTMLDivElement = document.createElement("div");
+    elt.className = "jp-PromptArea";  
+
+    let spacer = document.createElement("div");
+    spacer.className = "jp-PromptArea-spacer";
+
+    let area : HTMLDivElement = document.createElement("div");
+    area.className = "jp-PromptArea-Prompt";
+
+    let heading = document.createElement("h1");
+    
+    if (df_name) {
+      heading.innerText = "A fact about "+df_name;
+    } else { heading.innerText = "A fact about the data"; }
    
-  private _onDataNotify(data_object : any) {
+    area.appendChild(heading);
+ 
+    elt.appendChild(spacer);
+    elt.appendChild(area);
+ 
+    return [elt, area]; 
+  }
+ 
+  private _makeWandsMsg(op : string, num_col : string, variance : string, 
+                        cat_col : string, rank : number, total : number) {
+    let var_line_1 = document.createElement("p");
+    let var_line_2 = document.createElement("p");
+    let var_line_3 = document.createElement("p");
+
+    var_line_1.innerHTML = "The <b>"+op+"</b> of <b>"+num_col+"</b> broken down by ";
+    var_line_1.innerHTML += "<b>"+cat_col +"</b> has variance "+variance.slice(0,5);
+
+    var_line_2.innerHTML = "There are "+ (rank - 1).toString() + " combinations of variables with higher variance";
+    
+    let link = document.createElement("a");
+    link.href = "https://en.wikipedia.org/wiki/Variance";
+
+    link.innerText = "What is variance?";
+    var_line_3.appendChild(link);
+    
+    var [body, area] = this._makeContainer();
+    area.appendChild(var_line_1);
+    area.appendChild(var_line_2);
+    area.appendChild(var_line_3);
+
+    return body;     
+  }
+
+  private _makeCupsMsg(col_a : string, col_b : string, strength : string, rank : number) {
+
+    let var_line_1 = document.createElement("p");
+    let var_line_2 = document.createElement("p");
+    let var_line_3 = document.createElement("p");
+
+    var_line_1.innerHTML = "<b>"+col_a+"</b> has a correlation with <b>"+col_b+"</b>";
+    var_line_1.innerHTML += " with a strength of "+strength.slice(0,5);
+    var_line_2.innerHTML = "There are "+ (rank - 1).toString() + " combinations of variables with higher correlation strength";
+    
+    let link = document.createElement("a");
+    link.href = "https://en.wikipedia.org/wiki/Pearson_correlation_coefficient";
+
+    link.innerText = "What is correlation?";
+    var_line_3.appendChild(link);
+    
+    let [body, area] = this._makeContainer();
+    area.appendChild(var_line_1);
+    area.appendChild(var_line_2);
+    area.appendChild(var_line_3);
+
+    return body;     
+  }
+
+  private _makePentaclesMsg(col : string, strength : string, 
+                            element : string, rank : number) {
+
+    let var_line_1 = document.createElement("p");
+    let var_line_2 = document.createElement("p");
+    let var_line_3 = document.createElement("p");
+
+    var_line_1.innerHTML = "<b>"+col+"</b> contains the value <b>"+element+"</b>";
+    var_line_1.innerHTML += " which is "+strength.slice(0,5)+" standard deviations out from the column mean";
+    var_line_2.innerHTML = "There are "+ (rank - 1).toString() + " other variables with more extreme outliers";
+    
+    let link = document.createElement("a");
+    link.href = "https://en.wikipedia.org/wiki/Standard_score";
+
+    link.innerText = "What is an outlier?";
+    var_line_3.appendChild(link);
+    
+    let [body, area] = this._makeContainer();
+    area.appendChild(var_line_1);
+    area.appendChild(var_line_2);
+    area.appendChild(var_line_3);
+
+    return body;     
+  }
+
+  private _makeSwordsMsg(col : string, strength : string, rank : number) {
+
+    let var_line_1 = document.createElement("p");
+    let var_line_2 = document.createElement("p");
+
+    let prop : number = parseFloat(strength);
+    let pct : number = prop*100;
+
+    var_line_1.innerHTML = pct.toString().slice(0,5)+"% of entries in <b>"+col+"</b> are null";
+
+    var_line_2.innerHTML = "There are "+ (rank - 1).toString() + " other variables with more null entries";
+    
+    let [body, area] = this._makeContainer();
+    area.appendChild(var_line_1);
+    area.appendChild(var_line_2);
+
+    return body;
+  }
+/*  private _onDataNotify(data_object : any) {
 
     var data_entries : any = Object.keys(data_object); // each key a data variable
 
@@ -48,8 +267,29 @@ export class Prompter {
         // get cell
         var cell : Cell = this._getCell(data["cell"], this._tracker);
 
+
         if (cell == null) { return; };
 	    if (data["source"] == "") { return; };
+
+//        var outputmodel : IOutputAreaModel = (cell as CodeCell).model.outputs;
+       
+ //       const n : number = outputmodel.length;
+        this.appendMessage(cell, "<div>Hello world</div>"); 
+//        for (var i : number = 0; i < n; i++) {
+//          console.log("output model content: ", outputmodel.get(i));
+/*          let new_output : IExecuteResult = new AddedOutput(outputmodel.get(i).executionCount, 
+                                                            outputmodel.get(i).data,
+                                                            outputmodel.get(i).metadata);*/
+
+//          var new_output = {output_type : "execute_result", 
+//                            execution_count : outputmodel.get(i).executionCount,
+//                            data : outputmodel.get(i).data,
+//                            metadata : outputmodel.get(i).metadata};
+                            
+//          outputmodel.add((new_output as IExecuteResult));  // this worked, so going to refine technique now
+//        }
+
+        //let test_output = IExecuteResult // todo: implement non-blocking type of output, write that in s.t. it gets rendered
 
         //let prompt_container = this._makeDiv("p-Widget p-Panel jp-prompt-Wrapper");
         //let collapser_holder = this._makeDiv("p-Widget jp-Collapser jp-OutputCollapser jp-prompt-collapser");
@@ -70,7 +310,7 @@ export class Prompter {
         //console.log("[PROMPTML] cell node type", cell.node.className);
     	//console.log("[PROMPTML] cell has children ", cell.node.children);
 
-
+/*
         let text = this._newDataText();
 
         let additional_info = { 
@@ -83,7 +323,8 @@ export class Prompter {
       }
     }
   }
-
+*/
+/*
   private _form_onclick_factory(input_area : HTMLTextAreaElement, 
                                 cell : string, prompt_div : HTMLElement, 
                                 min_div : HTMLElement,
@@ -102,23 +343,25 @@ export class Prompter {
             output["input"] = input_area.value;
             console.log("[PROMPT-ML] sending ", output);
             client.request("exec", "POST", JSON.stringify(output),
-                ServerConnection.makeSettings()); 
+                ServerConnection.defaultSettings); 
             _minimizeForm(prompt_div, min_div);
         }
 
         return new_data_form;
   }
-
+*/
+/*
   private _makeDiv(classnames : string) {
     let elt = document.createElement("div");
     elt.className = classnames;
     return elt;
   }
-
+*/
+/*
   private _onModelNotify(models : any) {
     // var cell : Cell = this._getCell(models["cell"], this._tracker);
   }
-
+*/
   private _getCell(id : string, tracker : INotebookTracker) : Cell {
 
     var nb : Notebook = tracker.currentWidget.content;
@@ -131,7 +374,7 @@ export class Prompter {
 
     return null;
   }
-
+/*
   private _makeForm(question_text : HTMLElement, cell : string, additional_info? : any) : HTMLElement {
     // make a form with text input
     let prompt_container = this._makeDiv("p-Widget p-Panel jp-prompt-Wrapper");
@@ -172,7 +415,8 @@ export class Prompter {
 
     return prompt_container;
   }
-
+*/
+/*
   private _newDataText() {
 
     var prompt_container = this._makeDiv("p-Widget jp-Cell");
@@ -204,8 +448,9 @@ export class Prompter {
 
     return prompt_container;
   }
+*/
 }
-
+/*
 function _minimizeForm(prompt_div : HTMLElement, min_div : HTMLElement) {
 
   prompt_div.style.display = "none";
@@ -220,4 +465,4 @@ function _maximizeForm(prompt_div : HTMLElement, min_div : HTMLElement) {
   min_div.style.display = "none";
 
 }
-
+*/

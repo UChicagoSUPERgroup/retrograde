@@ -7,7 +7,8 @@ echo '{"argv" : ["python3", "'"$PWD"'/forking_kernel.py", "-f", "{connection_fil
 pipenv run pip install -r requirements.txt
 cd ./prompt-ml
 pipenv run jlpm install
-pipenv run jupyter labextension install --no-build
+pipenv run jupyter labextension install
+
 cd ..
 cd ./serverextension
 pipenv run python3 setup.py sdist bdist_wheel

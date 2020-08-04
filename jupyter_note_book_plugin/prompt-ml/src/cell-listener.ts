@@ -27,8 +27,7 @@ export class Listener {
   */
   private client: CodeCellClient;
   private tracker : INotebookTracker;
-  private _newSignal : Signal<this, any> = new Signal<this, any>(this);
-  private _changeSignal : Signal<this, any>  = new Signal<this, any>(this);
+  private _infoSignal : Signal<this, any> = new Signal<this, any>(this);
 
   constructor(client: CodeCellClient, tracker : INotebookTracker) {
 
@@ -38,12 +37,9 @@ export class Listener {
 
   }
 
-  get newsignal(): ISignal<this, string> {
-    return this._newSignal;
+  get infoSignal(): ISignal<this, string> {
+    return this._infoSignal;
   }
-  get changesignal(): ISignal<this, string> {
-    return this._changeSignal;
-  } 
 
   private async init() {
     this.listen();
@@ -71,7 +67,7 @@ export class Listener {
           contents = cell.model.value.text;
 	      id = cell.model.id;
           k_id = this.tracker.currentWidget.sessionContext.session.kernel.id;
-          //todo: should add url/kernel id to differentiate
+          console.log(this.tracker.currentWidget.content.contentFactory);
           this.client.request(
             "exec", "POST", 
             JSON.stringify({
@@ -80,14 +76,15 @@ export class Listener {
                 "cell_id" : id, "kernel" : k_id}),
 	        ServerConnection.makeSettings()).
 	    then(value => { 
+              console.log("received: ",value);
               let obj = JSON.parse(value);
               console.log("[prompt-ml] received", obj);
-              if ("new" in obj) { this._newSignal.emit(obj["new"]); };
-              if ("model" in obj) { this._changeSignal.emit(obj["model"]); }});
+              if ("info" in obj) { this._infoSignal.emit(obj["info"]); }; });
         }
       })
   }
-
+  
+  
   private _ready = new PromiseDelegate<void>();
 }
 export class CellListen {
