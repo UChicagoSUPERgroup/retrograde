@@ -6,12 +6,22 @@ from queue import Empty
 from ast import NodeVisitor, Call, Name, Attribute, Expr, Load, Str, Num
 from ast import Subscript, List, Index, ExtSlice, keyword, NameConstant
 from ast import parse, walk, iter_child_nodes, NodeTransformer, copy_location
+
+from random import choice
 #from nbconvert.preprocessers import DeadKernelError
 
 import astor
+import dill
+
 from timeit import default_timer as timer
+from datetime import datetime
+from jupyter_client.manager import start_new_kernel
+
 from .config import other_funcs, ambig_funcs, series_funcs
 from .config import make_df_snippet, clf_fp_fn_snippet, clf_scan_snippet, clf_test_snippet
+from .sim_functions import check_sex
+from .storage import load_dfs
+from .sortilege import wands, swords, cups, pentacles
 
 #from code import InteractiveInterpreter
 
@@ -24,13 +34,15 @@ class AnalysisEnvironment:
     """
     Analysis environment tracks relevant variables in execution
 
-    TODO: should add ability to execute in parallel, in order to be able to run
-          tests DS isn't thinking of
     """
-    def __init__(self, nbapp, kernel_id):
+    def __init__(self, nbapp, kernel_id, db):
         """
-        nbapp = the notebook application object
+        nbapp: the notebook application object, needed for access to logging and (maybe) kernel stuff? TODO: check to see whether we just need this for logging
+        
+        kernel_id: the kernel this analysis environment is for
+        db: the DbHandler object for reading to/from past code executions and significant entities
         """
+        self.db = db
         self.pandas_alias = Aliases("pandas") # handle imports and functions
         self.sklearn_alias = Aliases("sklearn")
 
@@ -47,13 +59,112 @@ class AnalysisEnvironment:
                             "read_gbq"]
         self._nbapp = nbapp
         self.client = None
-#        self._session = InteractiveInterpreter()
         self.models = {}
 
+        self.exec_count = 0
+
+    def fork(self, msg_id, db):
+        """
+        spawn a kernel with the namespace of the main kernel just after msg id
+        """
+        self._nbapp.log.debug("[FORK] spawning new kernel with msg id {0}".format(msg_id))
+        km, kc = start_new_kernel()
+        ns_loading_code = NAMESPACE_CODE.format(msg_id, db.dir) 
+
+        self._nbapp.log.debug("[FORK] reconstructing namespace for {0}".format(msg_id))
+        
+        output = run_code(kc, km, ns_loading_code, self._nbapp.log)
+
+        self._nbapp.log.debug("[FORK] reconstructed namespace, output {0}".format(output))
+
+        return km, kc 
+
+    def sortilege(self, kernel_id, cell_id):
+        """
+        run the sortilege analyses, and return a list of options
+        formatted as {"type" : <wands | cups | swords | pentacles>,
+                      if "wands" 
+                        "op" : <sum | mean>, "num_col" <numeric column name>,
+                        "cat_col" : <categorical column name>
+                        "rank" : <where the variation ranks relative to other variances>
+                        "total" : <total variances>
+                      }
+        """
+        df = self.find_dataframe(kernel_id, cell_id)
+        if df is None: return None
+
+        output = wands(df)[:13]
+        output += cups(df)[:13]
+        output += swords(df)[:13]
+        output += pentacles(df)[:13]
+ 
+        return output
+ 
+    def colsim(self, kernel_id, cell_id):
+        """
+        see if any columns in the data resemble sensitive categories
+        return a list of options and list of weights
+        
+        options is a list of tuples w/ column and category, weights is
+        similarity score
+        """
+        df = self.find_dataframe(kernel_id, cell_id)
+
+        if df is None: return None
+        
+        cols = df.columns
+        categories = {"sex" : check_sex, "race" : check_race} # each value is function that takes colname and df as inputs
+        
+        options = []
+        weights = []
+
+        for c in cols:
+            for cat, cat_fn in categories.items():
+                options.append((c, cat))
+                weights.append(cat_fn(c, df))
+        return options, weights
+ 
+    def find_dataframe(self, kernel_id, cell_id):
+        """
+        find the nearest/most recent dataframe variable
+        """
+        self._nbapp.log.debug(
+            "[ANALYSIS] looking for dataframes for cell {0} and kernel {1}".format(cell_id, kernel_id))
+        cell_code = self.db.get_code(kernel_id, cell_id)
+         
+        if not cell_code: 
+            self._nbapp.log.debug(
+                "[ANALYSIS] could not recover cell code")
+            return None
+        
+        cell_tree = parse(cell_code)
+        visitor = NearestDataframeFinder(self)
+        visitor.visit(cell_tree)
+
+        curr_ns = self.db.recent_ns()
+        curr_df = load_dfs(curr_ns)
+
+        if len(curr_df.keys()) == 0:
+            return None # nothing to be done since introspection not possible
+
+        if len(visitor.names) == 0 and len(curr_df.keys()) > 0:
+            poss_choices = list(curr_df.keys())
+        else:        
+            poss_choices = [var_name for var_name in visitor.names if var_name in curr_df.keys()]
+
+        var_name = choice(poss_choices)
+        self._nbapp.log.debug(
+            "[ANALYSIS] found dataframe {0} for cell {1}".format(var_name, cell_id))
+        return curr_df[var_name]       
+ 
     def cell_exec(self, code, notebook, cell_id):
         """
         execute a cell and propagate the analysis
+        
+        returns the msg id of the code execution msg to the main kernel
         """
+        self.exec_count += 1
+
         cell_code = parse(code)
 
         old_models = set(self.models.keys())
@@ -95,6 +206,23 @@ class AnalysisEnvironment:
                                             "kernel" : self._kernel_id,
                                             "columns" : {}}
 
+    def get_msg_id(self, kernel_id):
+        if not self.client:
+            kernel = self._nbapp.kernel_manager.get_kernel(kernel_id)
+            self.client = kernel.client()
+
+            self.client.start_channels()
+            self.client.wait_for_ready()
+
+        try:
+            io_msg = self.client.iopub_channel.get_msg(timeout=0.5)
+            if "parent_header" in io_msg and io_msg["parent_header"]["msg_type"] == "execute_request":
+                return io_msg["parent_header"]["msg_id"] 
+            self._nbapp.log.debug("[ANALYSIS] Could not identify central msg_id in {0}".format(io_msg))
+ 
+        except Empty:
+            return None
+
     def _wait_for_clear(self, client):
         """let's try polling the iopub channel until nothing queued up to execute"""
         while True:
@@ -129,7 +257,9 @@ class AnalysisEnvironment:
         
         kernel = self._nbapp.kernel_manager.get_kernel(kernel_id)
         self._wait_for_clear(client)
+
         output = run_code(client, kernel, code, self._nbapp.log)
+        self.exec_count += 1
 
         self._nbapp.log.debug("[ANALYSIS] {0}\n{1}".format(kernel_id, output))
 #        self._nbapp.web_app.kernel_locks[kernel_id].release()
@@ -154,27 +284,37 @@ class AnalysisEnvironment:
 #            self.entry_points[target.id]["imbalance"] = {}
 
             if tgt_type == DATAFRAME_TYPE:
-                cols = self.get_col_names(target)
-                self.entry_points[target.id]["columns"] = {c : self.get_col_stats(target, c) for c in cols}
+                if isinstance(target, Name):
+
+                    ns_entry = self.db.link_cell_to_ns(self.exec_count, datetime.now())
+                    ns = dill.loads(ns_entry["namespace"])
+ 
+                    df_obj = dill.loads(ns["_forking_kernel_dfs"][target.id])
+
+                    for c in df_obj.columns:
+                        self.entry_points[target.id]["columns"][c] = {}
+                        self.entry_points[target.id]["columns"][c]["size"] = len(df_obj[c])
+                        self.entry_points[target.id]["columns"][c]["type"] = str(df_obj[c].dtypes)
+
+                else:
+
+                    cols = self.get_col_names_callnode(target)
+                    self.entry_points[target.id]["columns"] = {c : self.get_col_stats(target, c) for c in cols}
 #                self.entry_points[target.id]["imbalance"] = self.data_imbalance(target, cols)
                         
 #            elif tgt_type == SERIES_TYPE:
 #                pass # TODO: IDK if we should do this for series
+    def get_col_names(self, obj):
+        if isinstance(obj, Name):
+            ns_entry = self.db.link_cell_to_ns(self.exec_count, datetime.now())  # TODO: may need smarter lookup for this 
+            ns = dill.loads(ns_entry["namespace"])
+            df_obj = dill.loads(ns["_forking_kernel_dfs"][target.id])
+            return df_obj.columns
+        else:
+            return self.get_col_names_callnode(obj)
+
     def get_col_stats(self, target, colname):
-        # size, type, 
-        col_ref_exp = Subscript(value=target,
-                                slice=Index(value=Str(s=colname)))
-        len_exp = Expr(
-                    value=Call(func=Name(id="print"),
-                               args=[Call(func=Name(id="len"),
-                                          args = [col_ref_exp],
-                                          keywords =[])],
-                               keywords=[]))
-        type_exp = Expr(  
-                    value=Call(func=Name(id="print"),
-                               args=[Attribute(value=col_ref_exp,
-                                     attr="dtypes")],
-                               keywords=[]))
+    
         output = {}
         output["type"] = self._execute_code(astor.to_source(type_exp))
         output["size"] = self._execute_code(astor.to_source(len_exp))
@@ -348,14 +488,14 @@ class AnalysisEnvironment:
         except:
             return None
 
-    def get_col_names(self, call_or_name_node):
-        """try to get columns from the node"""
+    def get_col_names_callnode(self, call_node):
+        """try to get columns from the node by running code in the kernel"""
         #if not self.is_node_df(call_or_name_node):
         #    return None
 
         colnames_expression = Call(
             func=Name(id="list", ctx=Load()),
-            args=[Attribute(value=call_or_name_node, attr="columns")], keywords=[])
+            args=[Attribute(value=call_node, attr="columns")], keywords=[])
         colnames_return = self._execute_code(astor.to_source(colnames_expression))
         try:
             return eval(colnames_return)
@@ -720,6 +860,7 @@ class Graph:
     def set_type(self, node, type_name):
         """set a nodes type, if node was not in graph, node is added to graph"""
         self._type_register[node] = type_name
+
 def get_call(assign_node):
     """search down until we find the root call node"""
     last_call = None
@@ -870,6 +1011,28 @@ class SnippetVisitor(NodeTransformer):
         if node.id in self.map:
             return copy_location(self.map[node.id], node)
         return node
+class NearestDataframeFinder(NodeVisitor):
 
+    def __init__(self, env):
+        super().__init__()
+        self.env = env
+        self.names = set()
+
+    def visit_Name(self, node):
+
+        q = [node]
+        
+        while len(q) > 0:
+
+            path_node = q.pop(0)
+
+            if self.env.graph.get_type(path_node) == DATAFRAME_TYPE:
+                if isinstance(path_node, Name): self.names.add(path_node.id)
+            else:
+                try:
+                    q.extend(self.env.graph.get_parents(path_node))
+                except KeyError:
+                    pass
+        self.generic_visit(node)
 class DeadKernelError(RuntimeError):
     pass

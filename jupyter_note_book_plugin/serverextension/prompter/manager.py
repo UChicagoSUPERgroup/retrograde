@@ -4,8 +4,11 @@ routing of code analyses and handles failures
 """
 import sys
 
-from prompter.storage import DbHandler
-from prompter.analysis import AnalysisEnvironment
+from random import choice
+
+from .storage import DbHandler
+from .analysis import AnalysisEnvironment
+from .config import MODE
 
 class AnalysisManager:
     """
@@ -19,7 +22,7 @@ class AnalysisManager:
         self.db = DbHandler()
         self.analyses = {}
         self._nb = nbapp
-
+    
     def handle_request(self, request):
         """
         handle a request (json object with "content", "id", and "kernel" fields)
@@ -33,45 +36,67 @@ class AnalysisManager:
         cell_id = request["cell_id"]
         code = request["contents"]
 
-        self.db.add_entry(request)  
 
         self._nb.log.info("[MANAGER] Analyzing cell {0} with kernel {1}".format(cell_id, kernel_id))
 
         if kernel_id not in self.analyses:
 
             self._nb.log.info("[MANAGER] Starting new analysis environment for kernel {0}".format(kernel_id))
-            self.analyses[kernel_id] = AnalysisEnvironment(self._nb, kernel_id)
+            self.analyses[kernel_id] = AnalysisEnvironment(self._nb, kernel_id, self.db)
         
         env = self.analyses[kernel_id]
+        request["exec_ct"] = env.exec_count + 1
+        self.db.add_entry(request) 
 
         try:
             env.cell_exec(code, kernel_id, cell_id)
         except RuntimeError as e:
             self._nb.log.error("[MANAGER] Analysis environment encountered exception {0}, call back {1}".format(e, sys.exc_info()[0]))
 
-        response = self.make_response(kernel_id, cell_id)
-
+        response = self.make_response(kernel_id, cell_id, mode=MODE)
+        self._nb.log.info("[MANAGER] sending response {0}".format(response))
         return response
 
-    def make_response(self, kernel_id, cell_id):
+    def make_response(self, kernel_id, cell_id, mode=None):
         """
         form the body of the response to send back to plugin, in the form of a dictionary
         """
+        resp = {}
 
-        resp = {"new" : {}, "changes" : {}}
-
-        resp["new"] = self.new_data(kernel_id)
-#        resp["new"].extend(self.new_models(kernel_id, cell_id))
-
-#        resp["changes"] = self.changed_data(kernel_id, cell_id)
-#        resp["changes"].extend(self.changed_models(kernel_id, cell_id)) 
-
-        # TODO: probably makes more sense to do new/changed in one pass to 
-        #       minimize number of db lookups (don't want to prematurely minimize,
-        #       though)
-
+        if mode == "SORT":
+            resp["info"] = self.run_sortilege(kernel_id, cell_id)
+        if mode == "SIM":
+            ans = self.run_colsim(kernel_id, cell_id)
+            if ans:
+                resp["info"] = self.run_colsim(kernel_id, cell_id)
+        resp["info"]["cell"] = cell_id
         return resp
 
+    def run_sortilege(self, kernel_id, cell_id):
+        """run the sortilege analsysis and drop in a pattern"""
+        env = self.analyses[kernel_id]
+        options = env.sortilege(kernel_id, cell_id) # run the analyses on closest df
+                                         # options is list of individual responses
+        self._nb.log.debug("[MANAGER] there are %s options to choose from" % len(options))
+
+        if len(options) == 0: return None
+
+        return choice(options)
+
+    def run_colsim(self, kernel_id, cell_id):
+        """see if any of the columns resemble sensitive categories"""
+        env = self.analyses[kernel_id]
+
+        options, weights = env.colsim(cell_id)
+        index = weights.index(max(weights))
+
+        if weights[index] > 0.5: # Do we need a better notification decision mechanism?
+
+            resp = {"type" : "resemble"}
+            resp["column"] = options[index][0]
+            resp["category"] = options[index][1]
+            return resp
+        return None           
     def new_data(self, kernel_id): 
         """ check if data in the env is new, and if so, register and send event"""
         env = self.analyses[kernel_id]
