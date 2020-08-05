@@ -15,6 +15,8 @@ from tornado.routing import Rule, PathMatches
 from prompter.storage import DbHandler
 from prompter.analysis import AnalysisEnvironment, run_code
 from prompter.manager import AnalysisManager
+from prompter.forkingkernel import ForkingKernel
+
 #from prompter.handler import TSChannelHandler
 
 # all the examples I've seen require _jupyter_server_extension_paths
@@ -34,7 +36,6 @@ class CodeExecHandler(APIHandler):
         resp_body = MANAGER.handle_request(tornado.escape.json_decode(self.request.body))
         self.set_status(200)
         self.set_default_headers()
-        db.add_entry(tornado.escape.json_decode(self.request.body))
         self.finish(resp_body)
 
 def _jupyter_server_extension_paths():

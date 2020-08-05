@@ -4,7 +4,9 @@ notebook application and tracking development of particular cells over time
 """
 import sqlite3
 import os
-from datetime import datetime
+import dill
+
+from datetime import datetime, timedelta
 
 from .config import DB_DIR, DB_NAME
 
@@ -18,6 +20,7 @@ class DbHandler(object):
 
             self._conn = sqlite3.connect(db_path_resolved+dbname, 
                 detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
+            self._conn.row_factory = sqlite3.Row
             self._cursor = self._conn.cursor()
         else:
             if not os.path.isdir(db_path_resolved):
@@ -36,7 +39,7 @@ class DbHandler(object):
             CREATE TABLE cells(kernel TEXT, id TEXT PRIMARY KEY, contents TEXT, num_exec INT, last_exec TIMESTAMP);
             """)
         self._cursor.execute("""
-            CREATE TABLE versions(kernel TEXT, id TEXT, version INT, time TIMESTAMP, contents TEXT, PRIMARY KEY(id, contents));
+            CREATE TABLE versions(kernel TEXT, id TEXT, version INT, time TIMESTAMP, contents TEXT, exec_ct INT, PRIMARY KEY(id, contents));
             """)
 
         # the table w/ the data entities in it
@@ -54,7 +57,18 @@ class DbHandler(object):
                                  size INT,
                                  PRIMARY KEY(source, version, name, col_name));
             """)
+
+        self._cursor.execute("""
+            CREATE TABLE namespaces(msg_id TEXT PRIMARY KEY, exec_num INT, time TIMESTAMP, code TEXT, namespace BLOB)
+            """)
         self._conn.commit()
+    def get_code(self, kernel_id, cell_id):
+        """return the contents of the cell, none if does not exist"""
+        result = self._cursor.execute(
+            """SELECT contents FROM cells WHERE id = ? AND kernel = ?""", (cell_id, kernel_id)).fetchall()
+        if len(result) != 0:
+            return result[0]["contents"]
+        return None
 
     def add_entry(self, cell):
         """
@@ -83,19 +97,19 @@ class DbHandler(object):
         #inserting new value into cells
         try:
           #if the cell already exists, this will raise an integrity error
-          self._cursor.execute("""INSERT INTO cells(id, contents, num_exec, last_exec)
-                 VALUES (?,?,?,?);""", (cell['cell_id'], cell['contents'], 1, datetime.now()))
+          self._cursor.execute("""INSERT INTO cells(id, contents, num_exec, last_exec, kernel)
+                 VALUES (?,?,?,?,?);""", (cell['cell_id'], cell['contents'], 1, datetime.now(), cell["kernel"]))
         except sqlite3.IntegrityError as e:
           #value for cell already exists in cells, so update as needed
           self._cursor.execute("""UPDATE cells
-                 SET contents = ?, num_exec = num_exec + 1, last_exec = ?
-                 WHERE id = ?;""", (cell['contents'], datetime.now(), cell['cell_id']))
+                 SET contents = ?, num_exec = num_exec + 1, last_exec = ?, kernel = ?
+                 WHERE id = ?;""", (cell['contents'], datetime.now(), cell["kernel"], cell['cell_id']))
 
         #this is adding the versions row if it doesnt exist. If it 
         #does exist then do nothing.
         try:
-          self._cursor.execute("""INSERT INTO versions(id, version, time, contents)
-                 VALUES (?,?,?,?);""", (cell['cell_id'], 1, datetime.now(),cell['contents']))
+          self._cursor.execute("""INSERT INTO versions(id, version, time, contents, exec_ct)
+                 VALUES (?,?,?,?,?);""", (cell['cell_id'], 1, datetime.now(),cell['contents'], cell["exec_ct"]))
         except sqlite3.IntegrityError as e:
           #As I understand the documentation, nothing happens if a version
           #already exists. 
@@ -103,6 +117,29 @@ class DbHandler(object):
         self._conn.commit()
         pass
 
+    def recover_ns(self, msg_id):
+        """return the namespace under the msg_id entry"""
+        return self._cursor.execute("""
+                SELECT namespace FROM namespaces WHERE msg_id = ? 
+            """, (msg_id,)).fetchall()[0]
+
+    def recent_ns(self):
+        """return the most recently logged namespace"""
+        return self._cursor.execute("""
+            SELECT * FROM namespaces ORDER BY time DESC LIMIT 1
+        """).fetchall()[0]
+    def link_cell_to_ns(self, exec_ct, time, delta=timedelta(seconds=5)):
+        """given an entry in the versions table, find matching namespace entry"""
+        results = self._cursor.execute("""
+            SELECT * FROM namespaces WHERE exec_num = ? AND time BETWEEN ? AND ? 
+        """, (exec_ct, time - delta, time + delta)).fetchall()
+        
+        if len(results) == 0:
+            return None
+        if len(results) == 1:
+            return results[0]        
+        else:
+            raise sqlite3.IntegrityError("Multiple namespaces in range")  
     def find_data(self, data):
         """look up if data entry exists, return if exists, None if not"""
         # note that will *not* compare columns
@@ -151,7 +188,7 @@ class DbHandler(object):
                  version, 
                  name, # nb notebook name
                  col, # column's name
-                 columns[col]["type"], 
+                 str(columns[col]["type"]), 
                  columns[col]["size"]) for col in columns.keys()]
         self._cursor.executemany("""
             INSERT INTO columns VALUES (?, ?, ?, ?, ?, ?) 
@@ -163,3 +200,7 @@ class DbHandler(object):
     def add_model(self, name, info, kernel_id):
         """add model to model entry table"""
         # TODO
+
+def load_dfs(ns):
+    ns_dict = dill.loads(ns["namespace"])
+    return {k : dill.loads(v) for k,v in ns_dict["_forking_kernel_dfs"].items()}

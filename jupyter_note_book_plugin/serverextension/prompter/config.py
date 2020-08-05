@@ -144,3 +144,25 @@ clf_test_snippet =\
 from sklearn.base import ClassifierMixin\n
 isinstance(REPLACE_NAME, ClassifierMixin)\n
 """ 
+
+NAMESPACE_CODE =\
+"""
+def _make_namespace(msg_id, db_path):
+
+    import sqlite3
+    import dill
+
+    conn = sqlite3.connection(db_path, detect_types = sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
+    cursor = conn.cursor()
+    
+    result = cursor.execute("SELECT namespace FROM namespaces WHERE msg_id = ?", msg_id).fetchall()[0]
+    
+    for k in result["_forking_kernel_dfs"].keys():
+        globals()[k] = dill.loads(result["_forking_kernel_dfs"][k])
+    for k in result.keys():
+        if k != "_forking_kernel_dfs": globals()[k] = result[k] 
+
+_make_namespace({0}, {1})
+""" 
+
+MODE = "SORT" # the sorts of responses the plugin should provide. options are "SORT" for sortilege, "SIM" for column similarity, and None
