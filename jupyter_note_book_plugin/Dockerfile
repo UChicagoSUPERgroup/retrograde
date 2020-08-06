@@ -8,7 +8,7 @@ RUN apt-get -y install nodejs
 RUN pip install pipenv
 RUN pipenv --python 3.7
 ADD . /
-RUN chmod +x test_build.sh
+RUN chmod +x docker_build.sh
 #Run the installation script
-RUN  /test_build.sh
-CMD pipenv run jupyter lab . --log-level=DEBUG --port=8888 --no-browser --allow-root --ip=0.0.0.0
+RUN  /docker_build.sh
+CMD pipenv run jupyter lab . --log-level=DEBUG --port=8888 --no-browser --allow-root --ip=0.0.0.0 --NotebookApp.token='' --NotebookApp.password=''

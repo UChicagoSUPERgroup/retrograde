@@ -15,4 +15,4 @@ pipenv run jupyter serverextension enable --py prompter --sys-prefix --debug
 cd ..
 export JUPYTER_CONFIG_DIR="./etc/jupyter"
 pipenv run jupyter kernelspec install prompt_kernel
-pipenv run jupyter lab . --log-level=DEBUG --ip=127.0.0.1 --port=8888 #--watch 
+#pipenv run jupyter lab . --log-level=DEBUG --ip=127.0.0.1 --port=8888 #--watch 

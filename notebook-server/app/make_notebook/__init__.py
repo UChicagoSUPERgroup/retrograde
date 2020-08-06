@@ -3,7 +3,7 @@ import psutil
 from random import randint
 import time
 
-IMAGE = 'jupyter/scipy-notebook:2c80cf3537ca'
+IMAGE = 'broken-jupyter-plugin:1.0'
 SLEEP_SECONDS = 3
 
 def get_free_port():
