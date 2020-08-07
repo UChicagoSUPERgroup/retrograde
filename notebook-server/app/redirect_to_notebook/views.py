@@ -1,7 +1,6 @@
 from flask_classy import FlaskView, route
 from flask import Flask, redirect
 from app.make_notebook import start_notebook 
-from .models import PatronCount, PATRON_TYPES
 from datetime import date
 import math
 
