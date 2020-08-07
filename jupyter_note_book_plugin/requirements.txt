@@ -44,6 +44,7 @@ python-dateutil==2.8.1
 pyzmq==19.0.1
 requests==2.24.0
 scipy
+scikit-learn
 Send2Trash==1.5.0
 six==1.15.0
 terminado==0.8.3
