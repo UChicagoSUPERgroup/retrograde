@@ -1,0 +1,7 @@
+{
+ "argv":  [
+   "python3",
+   "/Users/galenharrison/Desktop/prompt-ml/serverextension/test/test_forking_kernel.py",
+   "-f", "{connection_file}"],
+ "display_name":"prompter"
+}

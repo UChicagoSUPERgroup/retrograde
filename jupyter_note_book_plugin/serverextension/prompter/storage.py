@@ -7,8 +7,25 @@ import os
 import dill
 
 from datetime import datetime, timedelta
+from mysql.connector import connect
+from mysql.connector.errors import IntegrityError
+from _mysql_connector import MySQLInterfaceError
 
-from .config import DB_DIR, DB_NAME
+from .config import DB_DIR, DB_NAME, table_query
+
+SQL_CMDS = {
+  "GET_CODE" : """SELECT contents FROM cells WHERE id = ? AND kernel = ? AND user = ?""",
+  "INSERT_CELLS" : """INSERT INTO cells(id, contents, num_exec, last_exec, kernel, user) VALUES (?,?,?,?,?,?);""",
+  "UPDATE_CELLS" : """UPDATE cells SET contents = ?, num_exec = num_exec + 1, last_exec = ?, kernel = ? WHERE id = ? AND user = ?;""",
+  "INSERT_VERSIONS" : """INSERT INTO versions(user, kernel, id, version, time, contents, exec_ct) VALUES (?,?,?,?,?,?,?);""",
+  "RECOVER_NS" : """SELECT namespace FROM namespaces WHERE msg_id = ? AND user = ?""",
+  "RECENT_NS" : """SELECT * FROM namespaces WHERE user = ? ORDER BY time DESC LIMIT 1""",
+  "LINK_CELL" : """SELECT * FROM namespaces WHERE exec_num = ? AND user = ? AND  code_hash = ?""",
+  "DATA_VERSIONS" : """SELECT kernel, source, name, version, user FROM data WHERE source = ? AND name = ? AND user = ? ORDER BY version""",
+  "ADD_DATA" : """INSERT INTO data(kernel, cell, version, source, name, user) VALUES (?, ?, ?, ?, ?, ?)""",
+  "ADD_COLS" : """INSERT INTO columns VALUES (?, ?, ?, ?, ?, ?, ?)""",
+  "GET_VERSIONS" : """SELECT contents, version FROM versions WHERE kernel = ? AND id = ? AND user = ? ORDER BY version DESC LIMIT 1"""
+}
 
 class DbHandler(object):
 
@@ -16,6 +33,9 @@ class DbHandler(object):
 
         db_path_resolved = os.path.expanduser(dirname)
 
+        self.user="default"
+        self.cmds = SQL_CMDS
+ 
         if os.path.isdir(db_path_resolved) and os.path.isfile(db_path_resolved+dbname):
 
             self._conn = sqlite3.connect(db_path_resolved+dbname, 
@@ -35,37 +55,13 @@ class DbHandler(object):
         """
         add the tables to the new database
         """
-        self._cursor.execute("""
-            CREATE TABLE cells(kernel TEXT, id TEXT PRIMARY KEY, contents TEXT, num_exec INT, last_exec TIMESTAMP);
-            """)
-        self._cursor.execute("""
-            CREATE TABLE versions(kernel TEXT, id TEXT, version INT, time TIMESTAMP, contents TEXT, exec_ct INT, PRIMARY KEY(id, contents));
-            """)
-
-        # the table w/ the data entities in it
-        # TODO: start here (needed to implement other methods for getting changes etc working
-        self._cursor.execute("""
-            CREATE TABLE data(kernel TEXT, cell TEXT, version INT, source TEXT, name TEXT, PRIMARY KEY(name, version, source));
-            """)
-        # columns for each data entry
-        self._cursor.execute("""
-            CREATE TABLE columns(source TEXT, 
-                                 version INT, 
-                                 name TEXT, 
-                                 col_name TEXT,
-                                 type TEXT,
-                                 size INT,
-                                 PRIMARY KEY(source, version, name, col_name));
-            """)
-
-        self._cursor.execute("""
-            CREATE TABLE namespaces(msg_id TEXT PRIMARY KEY, exec_num INT, time TIMESTAMP, code TEXT, namespace BLOB)
-            """)
+        
+        self._cursor.executescript(table_query)
         self._conn.commit()
+
     def get_code(self, kernel_id, cell_id):
         """return the contents of the cell, none if does not exist"""
-        result = self._cursor.execute(
-            """SELECT contents FROM cells WHERE id = ? AND kernel = ?""", (cell_id, kernel_id)).fetchall()
+        result = self._cursor.execute(self.cmds["GET_CODE"], (cell_id, kernel_id, self.user)).fetchall()
         if len(result) != 0:
             return result[0]["contents"]
         return None
@@ -97,20 +93,27 @@ class DbHandler(object):
         #inserting new value into cells
         try:
           #if the cell already exists, this will raise an integrity error
-          self._cursor.execute("""INSERT INTO cells(id, contents, num_exec, last_exec, kernel)
-                 VALUES (?,?,?,?,?);""", (cell['cell_id'], cell['contents'], 1, datetime.now(), cell["kernel"]))
-        except sqlite3.IntegrityError as e:
+          self._cursor.execute(self.cmds["INSERT_CELLS"], (cell['cell_id'], cell['contents'], 1, datetime.now(), cell["kernel"], self.user))
+        except (sqlite3.IntegrityError, IntegrityError) as e:
           #value for cell already exists in cells, so update as needed
-          self._cursor.execute("""UPDATE cells
-                 SET contents = ?, num_exec = num_exec + 1, last_exec = ?, kernel = ?
-                 WHERE id = ?;""", (cell['contents'], datetime.now(), cell["kernel"], cell['cell_id']))
+          self._cursor.execute(self.cmds["UPDATE_CELLS"], (cell['contents'], datetime.now(), cell["kernel"], cell['cell_id'], self.user))
 
         #this is adding the versions row if it doesnt exist. If it 
         #does exist then do nothing.
         try:
-          self._cursor.execute("""INSERT INTO versions(id, version, time, contents, exec_ct)
-                 VALUES (?,?,?,?,?);""", (cell['cell_id'], 1, datetime.now(),cell['contents'], cell["exec_ct"]))
-        except sqlite3.IntegrityError as e:
+
+          self._cursor.execute(self.cmds["GET_VERSIONS"], (cell["kernel"], cell["cell_id"], self.user))
+          results = self._cursor.fetchone()
+
+          if results and results["contents"] != cell["contents"]:
+            self._cursor.execute(self.cmds["INSERT_VERSIONS"], (self.user, cell["kernel"], cell['cell_id'], 
+                                                                results["version"]+1, datetime.now(), cell['contents'], 
+                                                                cell["exec_ct"]))
+          if not results:
+            self._cursor.execute(self.cmds["INSERT_VERSIONS"], (self.user, cell["kernel"], cell['cell_id'], 
+                                                                1, datetime.now(), cell['contents'], 
+                                                                cell["exec_ct"]))
+        except (sqlite3.IntegrityError, IntegrityError) as e:
           #As I understand the documentation, nothing happens if a version
           #already exists. 
           pass
@@ -119,21 +122,18 @@ class DbHandler(object):
 
     def recover_ns(self, msg_id):
         """return the namespace under the msg_id entry"""
-        return self._cursor.execute("""
-                SELECT namespace FROM namespaces WHERE msg_id = ? 
-            """, (msg_id,)).fetchall()[0]
+        return self._cursor.execute(self.cmds["RECOVER_NS"], (msg_id, self.user)).fetchall()[0]
 
     def recent_ns(self):
-        """return the most recently logged namespace"""
-        return self._cursor.execute("""
-            SELECT * FROM namespaces ORDER BY time DESC LIMIT 1
-        """).fetchall()[0]
-    def link_cell_to_ns(self, exec_ct, time, delta=timedelta(seconds=5)):
+        """return the most recently logged namespace""" 
+        self._cursor.execute(self.cmds["RECENT_NS"], (self.user,))
+        return self._cursor.fetchall()[0]
+
+    def link_cell_to_ns(self, exec_ct, contents):
         """given an entry in the versions table, find matching namespace entry"""
-        results = self._cursor.execute("""
-            SELECT * FROM namespaces WHERE exec_num = ? AND time BETWEEN ? AND ? 
-        """, (exec_ct, time - delta, time + delta)).fetchall()
-        
+        self._cursor.execute(self.cmds["LINK_CELL"],
+                (exec_ct, self.user, hash(contents)))
+        results = self._cursor.fetchall() 
         if len(results) == 0:
             return None
         if len(results) == 1:
@@ -147,16 +147,9 @@ class DbHandler(object):
         source = data["source"]
         name = data["name"] 
  
-        data_versions = self._cursor.execute("""
-            SELECT 
-                kernel,
-                source,
-                name,
-                version
-            FROM 
-                data 
-            WHERE source = ? AND name = ?
-            ORDER BY version""", (source, name)).fetchall()
+        self._cursor.execute(self.cmds["DATA_VERSIONS"], 
+                             (source, name, self.user))
+        data_versions = self._cursor.fetchall()
 
         if data_versions == []: return None
         return data_versions
@@ -180,26 +173,37 @@ class DbHandler(object):
 
         columns = data["columns"]
 
-        self._cursor.execute("""
-            INSERT INTO data(kernel, cell, version, source, name)
-            VALUES (?, ?, ?, ?, ?)""", (kernel, cell, version, source, name))
+        self._cursor.execute(self.cmds["ADD_DATA"], (kernel, cell, version, source, name, self.user))
 
         cols = [(source, 
+                 self.user,
                  version, 
                  name, # nb notebook name
                  col, # column's name
                  str(columns[col]["type"]), 
                  columns[col]["size"]) for col in columns.keys()]
-        self._cursor.executemany("""
-            INSERT INTO columns VALUES (?, ?, ?, ?, ?, ?) 
-            """, cols)
+        self._cursor.executemany(self.cmds["ADD_COLS"], cols)
         self._conn.commit()
+        
+    def close(self):
+        self._cursor.close()
+        self._conn.close()
+
     def find_model(self, name, info, kernel_id):
         """look up if model entry exists, return if exists, None if not"""
         # TODO
     def add_model(self, name, info, kernel_id):
         """add model to model entry table"""
         # TODO
+
+class RemoteDbHandler(DbHandler):
+    """when we want the database to be remote"""
+    def __init__(self, database, db_user, password, host, nb_user):
+        self._conn = connect(host=host, user=db_user, 
+                             password=password, database=database)
+        self._cursor = self._conn.cursor(buffered=True, dictionary=True)
+        self.user = nb_user
+        self.cmds = {k : v.replace("?","%s") for k, v in SQL_CMDS.items()}
 
 def load_dfs(ns):
     ns_dict = dill.loads(ns["namespace"])

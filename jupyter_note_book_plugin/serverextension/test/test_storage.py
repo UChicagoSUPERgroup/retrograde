@@ -17,6 +17,7 @@ class TestDBMethods(unittest.TestCase):
         self.TEST_DB_NAME = "cellstest.db"
         self.db = prompter.DbHandler(dirname=self.TEST_DB_DIR, dbname=self.TEST_DB_NAME)
         self.conn = sqlite3.connect(self.TEST_DB_DIR + self.TEST_DB_NAME)
+        self.conn.row_factory = sqlite3.Row
         self.cursor = self.conn.cursor()
     
     def test_init(self):
@@ -32,7 +33,7 @@ class TestDBMethods(unittest.TestCase):
             """)
         tables = self.cursor.fetchall() 
         
-        self.assertEqual(len(tables), 4)
+        self.assertEqual(len(tables), 5, "found tables {0}".format(tables))
         table_names = [t[0] for t in tables]
 
         self.assertTrue("cells" in table_names)
@@ -40,8 +41,8 @@ class TestDBMethods(unittest.TestCase):
 
     #tests if changing text creates new version (key constant)
     def test_add_entry_versions(self):
-        self.db.add_entry({'contents': '1+1+1=2', 'cell_id': 'some_key_1'})
-        self.db.add_entry({'contents': '1+1=4', 'cell_id': 'some_key_1'})
+        self.db.add_entry({"kernel" : "TEST-1234", 'contents': '1+1+1=2', 'cell_id': 'some_key_1', "exec_ct" : 1})
+        self.db.add_entry({"kernel" : "TEST-1234", 'contents': '1+1=4', 'cell_id': 'some_key_1', "exec_ct" : 2})
         self.cursor.execute(
             """
             SELECT
@@ -53,15 +54,15 @@ class TestDBMethods(unittest.TestCase):
             """)
         tables = self.cursor.fetchall() 
         self.assertEqual(len(tables), 2)
-        table_names = [t[0] for t in tables]
-        self.assertTrue([("1+1+1=2",1)] == tables[0])
-        self.assertTrue([("1+1=4",1)] == tables[1])
+
+        self.assertTrue({"contents" : "1+1+1=2","version" : 1} == tables[0], tables)
+        self.assertTrue({"contents":"1+1=4", "version" : 2} == tables[1], tables)
 
     #tests if identical executions increment num_exec
     #and create no new versions
-    def test_add_entry_versions(self):
-        self.db.add_entry({'contents': 'hello friends', 'cell_id': 'a_key_1'})
-        self.db.add_entry({'contents': 'hello friends', 'cell_id': 'a_key_1'})
+    def test_add_entry_reexec(self):
+        self.db.add_entry({"kernel" : "TEST-1234", 'contents': 'hello friends', 'cell_id': 'a_key_1', "exec_ct" : 1})
+        self.db.add_entry({"kernel" : "TEST-1234", 'contents': 'hello friends', 'cell_id': 'a_key_1', "exec_ct" : 2})
         self.cursor.execute(
             """
             SELECT
@@ -73,8 +74,8 @@ class TestDBMethods(unittest.TestCase):
             """)
         tables = self.cursor.fetchall() 
         self.assertEqual(len(tables), 1)
-        table_names = [t[1] for t in tables]
-        self.assertTrue(tables[0][1] == 2)
+
+        self.assertTrue(tables[0]["num_exec"] == 2, "tables {0}".format(tables))
         self.cursor.execute(
             """
             SELECT
@@ -114,7 +115,7 @@ class TestDBMethods(unittest.TestCase):
         add_result = self.cursor.fetchall()
         self.assertEqual(len(add_result), 1)
          
-        col_result = self.cursor.execute(
+        self.cursor.execute(
             """
             SELECT
                 *
@@ -124,12 +125,13 @@ class TestDBMethods(unittest.TestCase):
                 name = 'test_df' AND
                 version = 1 AND
                 source = 'test.csv'
-            """).fetchall()
+            """)
+        col_result = self.cursor.fetchall()
         self.assertEqual(len(col_result), 4)
-        test_names = [r[3] for r in col_result]
+        test_names = [r["col_name"] for r in col_result]
 
         for col_name in data["columns"].keys():
-            self.assertTrue(col_name in test_names, "{0} not in {1}".format(col_name, test_names))
+            self.assertTrue(col_name in test_names, "{0} not in {1}\nraw = {2}".format(col_name, test_names, col_result))
 
     def test_find_data(self):
         data = {
@@ -144,7 +146,6 @@ class TestDBMethods(unittest.TestCase):
                "v1_stat" : {"type" : "obj", "size" : 32} 
              }
         }
-
         self.db.add_data(data, 1)
 
         self_result = self.db.find_data(data)
@@ -187,13 +188,14 @@ class TestDBMethods(unittest.TestCase):
         new_version = self.db.find_data(new_data)[0]["version"]
         self.db.add_data(new_data, new_version + 1)
 
-        col_result = self.cursor.execute(
+        self.cursor.execute(
             """
             SELECT
                 *
             FROM
                 columns
-            """).fetchall()
+            """)
+        col_result = self.cursor.fetchall()
         self.assertEqual(len(col_result), 9)
 
     def tearDown(self):

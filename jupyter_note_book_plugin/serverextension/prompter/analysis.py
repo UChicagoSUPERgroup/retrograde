@@ -13,6 +13,7 @@ from random import choice
 import astor
 import dill
 
+from time import sleep
 from timeit import default_timer as timer
 from datetime import datetime
 from jupyter_client.manager import start_new_kernel
@@ -164,6 +165,7 @@ class AnalysisEnvironment:
         returns the msg id of the code execution msg to the main kernel
         """
         self.exec_count += 1
+        self.code = code
 
         cell_code = parse(code)
 
@@ -286,7 +288,12 @@ class AnalysisEnvironment:
             if tgt_type == DATAFRAME_TYPE:
                 if isinstance(target, Name):
 
-                    ns_entry = self.db.link_cell_to_ns(self.exec_count, datetime.now())
+                    ns_entry = self.db.link_cell_to_ns(self.exec_count, self.code)
+                    if not ns_entry:
+                        self._nbapp.log.debug("[ANALYSIS could not find namespace for ({0}, {1}, {2}), waiting".format(self.exec_count, self.db.user, hash(self.code)))
+                        sleep(1)
+                        ns_entry = self.db.link_cell_to_ns(self.exec_count, self.code)
+                        print(self.code)
                     ns = dill.loads(ns_entry["namespace"])
  
                     df_obj = dill.loads(ns["_forking_kernel_dfs"][target.id])

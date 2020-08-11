@@ -2,13 +2,15 @@
 we need a global session manager which handles
 routing of code analyses and handles failures
 """
-import sys
+import sys, os
+
+import mysql.connector
 
 from random import choice
 
-from .storage import DbHandler
+from .storage import DbHandler, RemoteDbHandler
 from .analysis import AnalysisEnvironment
-from .config import MODE
+from .config import MODE, remote_config
 
 class AnalysisManager:
     """
@@ -18,8 +20,17 @@ class AnalysisManager:
     """
 
     def __init__(self, nbapp):
+        
+        try:
 
-        self.db = DbHandler()
+            remote_config["nb_user"] = os.getenv("JP_PLUGIN_USER")
+            if not remote_config["nb_user"]: remote_config["nb_user"] = "DEFAULT_USER"
+
+            self.db = RemoteDbHandler(**remote_config)
+
+        except mysql.connector.Error as e:
+            nbapp.log.warning("[MANAGER] Unable to connect to remote db, creating local backup. Error {0}".format(e))
+            self.db = DbHandler()
         self.analyses = {}
         self._nb = nbapp
     
