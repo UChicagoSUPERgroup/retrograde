@@ -74,7 +74,7 @@ export class Listener {
                 "type" : "execute",
                 "contents" : contents, 
                 "cell_id" : id, "kernel" : k_id}),
-	        ServerConnection.defaultSettings).
+	        ServerConnection.makeSettings()).
 	    then(value => { 
               console.log("received: ",value);
               let obj = JSON.parse(value);

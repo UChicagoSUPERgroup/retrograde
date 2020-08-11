@@ -16,8 +16,9 @@ from datetime import datetime
 from ipykernel.kernelbase import Kernel
 from ipykernel.ipkernel import IPythonKernel
 from inspect import ismodule
+from mysql.connector import connect
 
-from .config import DB_DIR, DB_NAME
+from .config import DB_DIR, DB_NAME, remote_config
 
 class ForkingKernel(IPythonKernel):
 
@@ -29,6 +30,11 @@ class ForkingKernel(IPythonKernel):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self.insert_cmd = """INSERT INTO namespaces(msg_id, exec_num, user, code_hash, time, code, namespace) VALUES (?, ?, ?, ?, ?, ?, ?)"""
+
+        self.user = os.getenv("JP_PLUGIN_USER")
+        if self.user is None: self.user = "DEFAULT_USER"
+
         self._connect_db()
 
     def _connect_db(self, dirname=DB_DIR, dbname=DB_NAME):
@@ -54,7 +60,7 @@ class ForkingKernel(IPythonKernel):
 
         if len(result) == 0:
             self._cursor.execute("""
-                CREATE TABLE namespaces(msg_id TEXT PRIMARY KEY, exec_num INT, time TIMESTAMP, code TEXT, namespace BLOB)
+                CREATE TABLE namespaces(msg_id TEXT PRIMARY KEY, exec_num INT, user VARCHAR(255), code_hash BIGINT, time TIMESTAMP, code TEXT, namespace BLOB)
                 """)
             self._conn.commit()
 
@@ -90,9 +96,11 @@ class ForkingKernel(IPythonKernel):
 #        bad_items = dill.detect.baditems(self.shell.user_ns)
 #        censored_ns = {k : v for k,v in self.shell.user_ns.items() if v not in bad_items}
         relevant_ns = self._handle_ns() 
-        ns = sqlite3.Binary(dill.dumps(relevant_ns))
-        self._cursor.execute("""
-            INSERT INTO namespaces(msg_id, exec_num, time, code, namespace) VALUES (?, ?, ?, ?, ?)""", (msg_id, exec_ct, curr_time, code, ns))
+        #ns = sqlite3.Binary(dill.dumps(relevant_ns))
+        ns = dill.dumps(relevant_ns)
+        code_hash = hash(code) 
+        print("inserting code hash ",code_hash)
+        self._cursor.execute(self.insert_cmd, (msg_id, exec_ct, self.user, code_hash, curr_time, code, ns))
         self._conn.commit()
  
     def do_execute(self, code, silent, store_history=True, 
@@ -101,3 +109,12 @@ class ForkingKernel(IPythonKernel):
                                     user_expressions=user_expressions, allow_stdin=allow_stdin)
         self._cache_ns(code)
         return result
+
+class RemoteForkingKernel(ForkingKernel):
+
+    def _connect_db(self):
+       remote_config["user"] = remote_config["db_user"]
+       del remote_config["db_user"]
+       self._conn = connect(**remote_config)
+       self._cursor = self._conn.cursor(buffered=True, dictionary=True)
+       self.insert_cmd = """INSERT INTO namespaces(msg_id, exec_num, user, code_hash, time, code, namespace) VALUES (%s, %s, %s, %s, %s, %s, %s)"""

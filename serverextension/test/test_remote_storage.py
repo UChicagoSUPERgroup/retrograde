@@ -14,12 +14,15 @@ class TestRemoteDB(TestDBMethods):
     def setUp(self):
 
         user_config = {"database" : "test_jupyter",
-                  "user" : "prompter_user",
-                  "password" : "test",
-                  "host" : "localhost"}
+                       "db_user" : "test_user",
+                       "nb_user" : "test_uid",
+                       "password" : "test",
+                       "host" : "localhost"}
 
-        test_config = user_config
-        test_config["user"] = "prompter_tester"
+        test_config = {"database" : "test_jupyter",
+                       "user" : "prompter_tester",
+                       "password" : "test",
+                       "host" : "localhost"}
 
         self.db = prompter.RemoteDbHandler(**user_config)
 

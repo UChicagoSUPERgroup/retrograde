@@ -20,7 +20,7 @@ SQL_CMDS = {
   "INSERT_VERSIONS" : """INSERT INTO versions(user, kernel, id, version, time, contents, exec_ct) VALUES (?,?,?,?,?,?,?);""",
   "RECOVER_NS" : """SELECT namespace FROM namespaces WHERE msg_id = ? AND user = ?""",
   "RECENT_NS" : """SELECT * FROM namespaces WHERE user = ? ORDER BY time DESC LIMIT 1""",
-  "LINK_CELL" : """SELECT * FROM namespaces WHERE exec_num = ? AND user = ? AND time BETWEEN ? AND ?""",
+  "LINK_CELL" : """SELECT * FROM namespaces WHERE exec_num = ? AND user = ? AND  code_hash = ?""",
   "DATA_VERSIONS" : """SELECT kernel, source, name, version, user FROM data WHERE source = ? AND name = ? AND user = ? ORDER BY version""",
   "ADD_DATA" : """INSERT INTO data(kernel, cell, version, source, name, user) VALUES (?, ?, ?, ?, ?, ?)""",
   "ADD_COLS" : """INSERT INTO columns VALUES (?, ?, ?, ?, ?, ?, ?)""",
@@ -129,10 +129,10 @@ class DbHandler(object):
         self._cursor.execute(self.cmds["RECENT_NS"], (self.user,))
         return self._cursor.fetchall()[0]
 
-    def link_cell_to_ns(self, exec_ct, time, delta=timedelta(seconds=5)):
+    def link_cell_to_ns(self, exec_ct, contents):
         """given an entry in the versions table, find matching namespace entry"""
         self._cursor.execute(self.cmds["LINK_CELL"],
-                (exec_ct, self.user, time - delta, time + delta))
+                (exec_ct, self.user, hash(contents)))
         results = self._cursor.fetchall() 
         if len(results) == 0:
             return None
@@ -198,11 +198,11 @@ class DbHandler(object):
 
 class RemoteDbHandler(DbHandler):
     """when we want the database to be remote"""
-    def __init__(self, database, user, password, host):
-        self._conn = connect(host=host, user=user, 
+    def __init__(self, database, db_user, password, host, nb_user):
+        self._conn = connect(host=host, user=db_user, 
                              password=password, database=database)
         self._cursor = self._conn.cursor(buffered=True, dictionary=True)
-        self.user = user
+        self.user = nb_user
         self.cmds = {k : v.replace("?","%s") for k, v in SQL_CMDS.items()}
 
 def load_dfs(ns):

@@ -1,5 +1,4 @@
 # script to build, install and test jupyter extension
-
 jupyter kernelspec remove prompt_kernel
 
 cd ./serverextension

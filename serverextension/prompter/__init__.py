@@ -15,7 +15,7 @@ from tornado.routing import Rule, PathMatches
 from prompter.storage import DbHandler, RemoteDbHandler
 from prompter.analysis import AnalysisEnvironment, run_code
 from prompter.manager import AnalysisManager
-from prompter.forkingkernel import ForkingKernel
+from prompter.forkingkernel import ForkingKernel, RemoteForkingKernel
 from prompter.config import table_query # necessary for testing
 
 #from prompter.handler import TSChannelHandler
@@ -24,10 +24,6 @@ from prompter.config import table_query # necessary for testing
 # and load_jupyter_server_extension
 #
 # IDK what either of them do
-
-#Alek, Moved this into global scope in order to deal with 
-#Init causing the app to crash. 
-db = DbHandler()
 
 class CodeExecHandler(APIHandler):
     """handles transactions from notebook js app and server backend"""

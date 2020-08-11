@@ -217,4 +217,4 @@ _make_namespace({0}, {1})
 """ 
 
 MODE = "SORT" # the sorts of responses the plugin should provide. options are "SORT" for sortilege, "SIM" for column similarity, and None
-
+remote_config = {"db_user" : "prompter_user", "host" : "localhost", "password" : "user_pw", "database" : "notebooks"}
