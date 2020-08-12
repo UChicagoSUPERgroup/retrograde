@@ -18,13 +18,17 @@ SQL_CMDS = {
   "INSERT_CELLS" : """INSERT INTO cells(id, contents, num_exec, last_exec, kernel, user) VALUES (?,?,?,?,?,?);""",
   "UPDATE_CELLS" : """UPDATE cells SET contents = ?, num_exec = num_exec + 1, last_exec = ?, kernel = ? WHERE id = ? AND user = ?;""",
   "INSERT_VERSIONS" : """INSERT INTO versions(user, kernel, id, version, time, contents, exec_ct) VALUES (?,?,?,?,?,?,?);""",
-  "RECOVER_NS" : """SELECT namespace FROM namespaces WHERE msg_id = ? AND user = ?""",
-  "RECENT_NS" : """SELECT * FROM namespaces WHERE user = ? ORDER BY time DESC LIMIT 1""",
-  "LINK_CELL" : """SELECT * FROM namespaces WHERE exec_num = ? AND user = ? AND  code_hash = ?""",
   "DATA_VERSIONS" : """SELECT kernel, source, name, version, user FROM data WHERE source = ? AND name = ? AND user = ? ORDER BY version""",
   "ADD_DATA" : """INSERT INTO data(kernel, cell, version, source, name, user) VALUES (?, ?, ?, ?, ?, ?)""",
   "ADD_COLS" : """INSERT INTO columns VALUES (?, ?, ?, ?, ?, ?, ?)""",
   "GET_VERSIONS" : """SELECT contents, version FROM versions WHERE kernel = ? AND id = ? AND user = ? ORDER BY version DESC LIMIT 1"""
+}
+
+LOCAL_SQL_CMDS = { # cmds that will always get executed locally
+  "MAKE_NS_TABLE" : """CREATE TABLE namespaces(msg_id TEXT PRIMARY KEY, exec_num INT, code TEXT, time TIMESTAMP, namespace BLOB)""",
+  "RECOVER_NS" : """SELECT namespace FROM namespaces WHERE msg_id = ?""",
+  "RECENT_NS" : """SELECT * FROM namespaces ORDER BY time DESC LIMIT 1""",
+  "LINK_CELL" : """SELECT * FROM namespaces WHERE exec_num = ?""",
 }
 
 class DbHandler(object):
@@ -35,6 +39,7 @@ class DbHandler(object):
 
         self.user="default"
         self.cmds = SQL_CMDS
+        self.cmds.update(LOCAL_SQL_CMDS)
  
         if os.path.isdir(db_path_resolved) and os.path.isfile(db_path_resolved+dbname):
 
@@ -57,11 +62,15 @@ class DbHandler(object):
         """
         
         self._cursor.executescript(table_query)
+        self._cursor.execute(self.cmds["MAKE_NS_TABLE"])
         self._conn.commit()
 
     def get_code(self, kernel_id, cell_id):
         """return the contents of the cell, none if does not exist"""
-        result = self._cursor.execute(self.cmds["GET_CODE"], (cell_id, kernel_id, self.user)).fetchall()
+
+        self._cursor.execute(self.cmds["GET_CODE"], (cell_id, kernel_id, self.user))
+        result = self._cursor.fetchall()
+
         if len(result) != 0:
             return result[0]["contents"]
         return None
@@ -120,26 +129,37 @@ class DbHandler(object):
         self._conn.commit()
         pass
 
-    def recover_ns(self, msg_id):
+    def recover_ns(self, msg_id, curs=None):
         """return the namespace under the msg_id entry"""
-        return self._cursor.execute(self.cmds["RECOVER_NS"], (msg_id, self.user)).fetchall()[0]
+        if not curs: curs = self._cursor
+        curs.execute(self.cmds["RECOVER_NS"], (msg_id,))
+        return curs.fetchall()[0]
 
-    def recent_ns(self):
+    def recent_ns(self, curs=None):
         """return the most recently logged namespace""" 
-        self._cursor.execute(self.cmds["RECENT_NS"], (self.user,))
-        return self._cursor.fetchall()[0]
+        if not curs: curs = self._cursor
+        curs.execute(self.cmds["RECENT_NS"])
+        return curs.fetchall()[0]
 
-    def link_cell_to_ns(self, exec_ct, contents):
+    def link_cell_to_ns(self, exec_ct, contents, cell_time, curs = None):
         """given an entry in the versions table, find matching namespace entry"""
-        self._cursor.execute(self.cmds["LINK_CELL"],
-                (exec_ct, self.user, hash(contents)))
-        results = self._cursor.fetchall() 
+        if not curs: curs = self._cursor
+
+        delta = timedelta(seconds=3) 
+
+        curs.execute(self.cmds["LINK_CELL"], (exec_ct,))
+        results = curs.fetchall()
+       
+        results = [r for r in results if r["time"] > (cell_time - delta)]  
+        results = [r for r in results if r["time"] < (cell_time + delta)]
+        
         if len(results) == 0:
             return None
         if len(results) == 1:
             return results[0]        
         else:
             raise sqlite3.IntegrityError("Multiple namespaces in range")  
+
     def find_data(self, data):
         """look up if data entry exists, return if exists, None if not"""
         # note that will *not* compare columns
@@ -199,12 +219,41 @@ class DbHandler(object):
 class RemoteDbHandler(DbHandler):
     """when we want the database to be remote"""
     def __init__(self, database, db_user, password, host, nb_user):
+
         self._conn = connect(host=host, user=db_user, 
                              password=password, database=database)
         self._cursor = self._conn.cursor(buffered=True, dictionary=True)
         self.user = nb_user
         self.cmds = {k : v.replace("?","%s") for k, v in SQL_CMDS.items()}
+        self.cmds.update(LOCAL_SQL_CMDS)
+        self._init_local_db()
 
+    def _init_local_db(self, dbname=DB_NAME, dirname=DB_DIR):
+        db_path_resolved = os.path.expanduser(dirname)
+
+        print("creating local database at {0}".format(db_path_resolved+dbname))
+
+        if os.path.isdir(db_path_resolved) and os.path.isfile(db_path_resolved+dbname): 
+            self._local_conn = sqlite3.connect(db_path_resolved+dbname, 
+                detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
+            self._local_conn.row_factory = sqlite3.Row
+            self._local_cursor = self._conn.cursor()
+        else:
+            if not os.path.isdir(db_path_resolved):
+               os.mkdir(db_path_resolved)
+            self._local_conn = sqlite3.connect(db_path_resolved+dbname, 
+                detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
+            self._local_conn.row_factory = sqlite3.Row
+            self._local_cursor = self._local_conn.cursor()
+            self._local_cursor.execute(self.cmds["MAKE_NS_TABLE"])
+
+    def recover_ns(self, msg_id):
+        return super().recover_ns(msg_id, curs=self._local_cursor)
+    def recent_ns(self):
+        return super().recent_ns(curs=self._local_cursor)
+    def link_cell_to_ns(self, exec_ct, contents, cell_time):
+        return super().link_cell_to_ns(exec_ct, contents, cell_time, curs=self._local_cursor)
+                      
 def load_dfs(ns):
     ns_dict = dill.loads(ns["namespace"])
     return {k : dill.loads(v) for k,v in ns_dict["_forking_kernel_dfs"].items()}

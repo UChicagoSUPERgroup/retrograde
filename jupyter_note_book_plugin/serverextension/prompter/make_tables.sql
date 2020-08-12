@@ -35,12 +35,3 @@ CREATE TABLE IF NOT EXISTS columns(
     type TEXT,
     size INT,
     PRIMARY KEY(source, version, name, col_name));
-
-CREATE TABLE IF NOT EXISTS namespaces(
-    msg_id VARCHAR(255) PRIMARY KEY, 
-    exec_num INT, 
-    user TEXT, 
-    code_hash BIGINT,
-    time TIMESTAMP, 
-    code TEXT, 
-    namespace LONGBLOB)

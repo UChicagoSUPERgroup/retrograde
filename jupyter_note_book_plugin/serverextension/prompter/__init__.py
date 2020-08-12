@@ -15,7 +15,7 @@ from tornado.routing import Rule, PathMatches
 from prompter.storage import DbHandler, RemoteDbHandler
 from prompter.analysis import AnalysisEnvironment, run_code
 from prompter.manager import AnalysisManager
-from prompter.forkingkernel import ForkingKernel, RemoteForkingKernel
+from prompter.forkingkernel import ForkingKernel
 from prompter.config import table_query # necessary for testing
 
 #from prompter.handler import TSChannelHandler

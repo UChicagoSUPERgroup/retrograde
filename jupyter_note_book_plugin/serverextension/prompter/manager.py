@@ -47,7 +47,6 @@ class AnalysisManager:
         cell_id = request["cell_id"]
         code = request["contents"]
 
-
         self._nb.log.info("[MANAGER] Analyzing cell {0} with kernel {1}".format(cell_id, kernel_id))
 
         if kernel_id not in self.analyses:
@@ -56,11 +55,10 @@ class AnalysisManager:
             self.analyses[kernel_id] = AnalysisEnvironment(self._nb, kernel_id, self.db)
         
         env = self.analyses[kernel_id]
-        request["exec_ct"] = env.exec_count + 1
         self.db.add_entry(request) 
 
         try:
-            env.cell_exec(code, kernel_id, cell_id)
+            env.cell_exec(code, kernel_id, cell_id, request["exec_ct"])
         except RuntimeError as e:
             self._nb.log.error("[MANAGER] Analysis environment encountered exception {0}, call back {1}".format(e, sys.exc_info()[0]))
 

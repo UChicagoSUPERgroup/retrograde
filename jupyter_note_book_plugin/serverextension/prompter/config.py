@@ -43,14 +43,6 @@ CREATE TABLE IF NOT EXISTS columns(
     type TEXT,
     size INT,
     PRIMARY KEY(source, version, name, col_name));
-
-CREATE TABLE IF NOT EXISTS namespaces(
-    user TEXT, 
-    msg_id VARCHAR(255) PRIMARY KEY, 
-    exec_num INT, 
-    time TIMESTAMP, 
-    code TEXT, 
-    namespace BLOB)
 """
 
 """df_funcs are dataframe methods that return non-dataframe values"""
