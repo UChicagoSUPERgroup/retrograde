@@ -14,6 +14,10 @@ import {
   INotebookTracker,
 } from "@jupyterlab/notebook";
 
+import {
+  ExecutionCount,
+} from "@jupyterlab/nbformat";
+
 import { ISignal, Signal } from '@lumino/signaling';
 import { IObservableList } from "@jupyterlab/observables";
 import { ServerConnection } from "@jupyterlab/services";
@@ -52,6 +56,7 @@ export class Listener {
     var contents: string;
     var id: string;
     var k_id: string;
+    var exec_ct : ExecutionCount;
 //    var notebook: Notebook;
 //    var resp: string;
 
@@ -67,13 +72,15 @@ export class Listener {
           contents = cell.model.value.text;
 	      id = cell.model.id;
           k_id = this.tracker.currentWidget.sessionContext.session.kernel.id;
-          console.log(this.tracker.currentWidget.content.contentFactory);
+          exec_ct = (cell as CodeCell).model.executionCount;
+ 
+//          console.log(this.tracker.currentWidget.content.contentFactory);
           this.client.request(
             "exec", "POST", 
             JSON.stringify({
                 "type" : "execute",
                 "contents" : contents, 
-                "cell_id" : id, "kernel" : k_id}),
+                "cell_id" : id, "kernel" : k_id, "exec_ct" : exec_ct}),
 	        ServerConnection.makeSettings()).
 	    then(value => { 
               console.log("received: ",value);
