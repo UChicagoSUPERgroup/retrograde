@@ -35,7 +35,9 @@ class TestAnalysisMethods(unittest.TestCase):
         nbapp.log.info = print
         nbapp.log.error = print
 
-        env = prompter.AnalysisEnvironment(nbapp, "TEST")
+        db = prompter.DbHandler() 
+
+        env = prompter.AnalysisEnvironment(nbapp, "TEST", db)
         return env
 
     def tearDown(self):
@@ -109,10 +111,15 @@ class TestAnalysisMethods(unittest.TestCase):
                  "func_mapping" : {},
                  "functions" : set()},
             },]
+
+        exec_ct = 1
+
         for import_stmnt, expected in zip(imports_list, expected_outputs):
 
             env = self._makeEnv() 
-            env.cell_exec(import_stmnt, "TEST", "TESTCELL")
+            env.cell_exec(import_stmnt, "TEST", "TESTCELL", exec_ct)
+            exec_ct += 1
+
             self._compare_alias_env(env, expected)
             env._nbapp.kernel_manager.shutdown_kernel(now=True)
 
@@ -178,10 +185,14 @@ class TestAnalysisMethods(unittest.TestCase):
                 "func_mapping" : {"BallTree": "bt"},
                 "functions" : set(["bt"])},
             },]
+
+        exec_ct = 1
+
         for import_stmnt, expected in zip(import_stmnts, expected_outputs):
 
             env = self._makeEnv() 
-            env.cell_exec(import_stmnt, "TEST", "TESTCELL")
+            env.cell_exec(import_stmnt, "TEST", "TESTCELL", exec_ct)
+            exec_ct += 1 
             self._compare_alias_env(env, expected)
             env._nbapp.kernel_manager.shutdown_kernel(now=True)
 
@@ -213,7 +224,7 @@ class TestAnalysisMethods(unittest.TestCase):
         for call, data in zip(calls, expected):
 
             env = self._makeEnv()
-            env.cell_exec(call, "TEST","TESTCELL")
+            env.cell_exec(call, "TEST","TESTCELL", 1)
 
             self._compare_alias_env(env, expected_imports)
             self._compare_new_data_env(env, data)
@@ -294,11 +305,11 @@ class TestAnalysisMethods(unittest.TestCase):
         expected_chaining = {"df" : {"source": "filename", "format" : "csv", "cell" :"TESTCELL"}}
 
         env = self._makeEnv()
-        env.cell_exec(slicing_cell, "TEST","TESTCELL")
+        env.cell_exec(slicing_cell, "TEST","TESTCELL", 1)
         self._compare_new_data_env(env, expected_slicing)
 
         env = self._makeEnv()
-        env.cell_exec(chaining_cell, "TEST","TESTCELL")
+        env.cell_exec(chaining_cell, "TEST","TESTCELL", 1)
         self._compare_new_data_env(env, expected_chaining)
 
     def test_multiple_new_datasources(self):
@@ -314,7 +325,7 @@ class TestAnalysisMethods(unittest.TestCase):
                              "df2" : {"source" : "filename", "format" : "csv", "cell" : "TESTCELL"}}
 
         env = self._makeEnv()
-        env.cell_exec(multiple_cell, "TEST","TESTCELL")
+        env.cell_exec(multiple_cell, "TEST","TESTCELL", 1)
         self._compare_new_data_env(env, expected_multiple)
 
     def test_reassign_newdata(self):
@@ -331,7 +342,7 @@ class TestAnalysisMethods(unittest.TestCase):
         expected_reassign = {"df" : {"source": "filename", "format" : "csv", "cell" : "TESTCELL"}}
 
         env = self._makeEnv()
-        env.cell_exec(reassign_cell, "TEST","TESTCELL")
+        env.cell_exec(reassign_cell, "TEST","TESTCELL", 1)
         self._compare_new_data_env(env, expected_reassign)
 
         newvar_cell = """from pandas import read_csv\n"""+\
@@ -341,7 +352,7 @@ class TestAnalysisMethods(unittest.TestCase):
         expected_newvar = {}
 
         env = self._makeEnv() 
-        env.cell_exec(newvar_cell, "TEST","TESTCELL")
+        env.cell_exec(newvar_cell, "TEST","TESTCELL", 1)
         self._compare_new_data_env(env, expected_newvar)
 
         delete_cell = """from pandas import read_csv\n"""+\
@@ -351,7 +362,7 @@ class TestAnalysisMethods(unittest.TestCase):
         expected_delete = {}
 
         env = self._makeEnv()
-        env.cell_exec(delete_cell, "TEST","TESTCELL")
+        env.cell_exec(delete_cell, "TEST","TESTCELL", 1)
         self._compare_new_data_env(env, expected_delete)
 
 
@@ -363,7 +374,7 @@ class TestAnalysisMethods(unittest.TestCase):
             """lr = lm.LinearRegression()\n"""+\
             """lr.fit(df.iloc[:,2:5].to_numpy(), df.iloc[:,5].to_numpy())"""
         env = self._makeEnv()
-        env.cell_exec(call_cell, "TEST","TESTCELL")
+        env.cell_exec(call_cell, "TEST","TESTCELL", 1)
         
         expected_path = [Call, Attribute, Call, Name, Name, Subscript, Attribute, Call]
         expected_size = 13
@@ -387,8 +398,8 @@ class TestAnalysisMethods(unittest.TestCase):
                 """lr.fit(df[1:4,:].to_numpy(), df[5,:].to_numpy())\n"""
 
         env = self._makeEnv()
-        env.cell_exec(data_cell, "TEST","TESTCELL")
-        env.cell_exec(fit_cell, "TEST","TESTCELL")
+        env.cell_exec(data_cell, "TEST","TESTCELL", 1)
+        env.cell_exec(fit_cell, "TEST","TESTCELL", 2)
  
         expected_size = 13
         expected_path = [Call, Attribute, Call, Name, Name, Subscript, Attribute, Call]
@@ -413,6 +424,24 @@ class TestAnalysisMethods(unittest.TestCase):
                 if is_poss:
                     return True, path
         return False, actual_path
+
+class TestVisitors(unittest.TestCase):
+
+
+    def test_ModelVisitor(self):
+
+        code_snippet = """lr = LogisticRegression().fit(df2[["fed", "income", "home", "personal", "interest", "term", "principal"]], df2["approved"])"""
+        expected_features = {"name" : "df2", "name_ind" : ["fed", "income", "home", "personal", "interest", "term", "principal"]}
+        expected_labels = {"name" : "df2", "name_ind" : ["approved"]}
+
+        visitor = prompter.ModelVisitor({"lr" : "foo"})
+        visitor.visit(parse(code_snippet))
+
+        self.assertEqual(len(visitor.models), 1, "Incorrect number of models, {0}".format(len(visitor.models)))
+        self.assertIn("lr", visitor.models, "Could not find name lr in {0}".format(visitor.models))
+
+        self.assertEqual(visitor.models["lr"]["features"], expected_features, "Found {0}".format(visitor.models["lr"]["features"]))
+        self.assertEqual(visitor.models["lr"]["label"], expected_labels, "Found {0}".format(visitor.models["lr"]["label"])) 
 
 def node_to_string(node):
     """make a node into a string"""

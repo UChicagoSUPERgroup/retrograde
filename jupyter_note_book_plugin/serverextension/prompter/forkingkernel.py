@@ -40,11 +40,12 @@ class ForkingKernel(IPythonKernel):
     def _connect_db(self, dirname=DB_DIR, dbname=DB_NAME):
         db_path = os.path.expanduser(dirname)
         if os.path.isdir(db_path) and os.path.isfile(db_path+dbname):
-
+            self.log.debug("[FORKINGKERNEL] found database")
             self._conn = sqlite3.connect(db_path+dbname,
                                          detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
             self._cursor = self._conn.cursor()
         else:
+            self.log.debug("[FORKINGKERNEL] creating database")
             if not os.path.isdir(db_path):
                 os.mkdir(db_path)
             self._conn = sqlite3.connect(db_path+dbname,

@@ -5,6 +5,7 @@ notebook application and tracking development of particular cells over time
 import sqlite3
 import os
 import dill
+import json
 
 from datetime import datetime, timedelta
 from mysql.connector import connect
@@ -21,7 +22,11 @@ SQL_CMDS = {
   "DATA_VERSIONS" : """SELECT kernel, source, name, version, user FROM data WHERE source = ? AND name = ? AND user = ? ORDER BY version""",
   "ADD_DATA" : """INSERT INTO data(kernel, cell, version, source, name, user) VALUES (?, ?, ?, ?, ?, ?)""",
   "ADD_COLS" : """INSERT INTO columns VALUES (?, ?, ?, ?, ?, ?, ?)""",
-  "GET_VERSIONS" : """SELECT contents, version FROM versions WHERE kernel = ? AND id = ? AND user = ? ORDER BY version DESC LIMIT 1"""
+  "GET_VERSIONS" : """SELECT contents, version FROM versions WHERE kernel = ? AND id = ? AND user = ? ORDER BY version DESC LIMIT 1""",
+  "GET_COLS" : """SELECT * FROM columns WHERE user = ? AND col_name = ?""",
+  "STORE_RESP" : """INSERT INTO notifications(kernel, user, cell, resp) VALUES (?, ?, ?, ?)""",
+  "GET_RESPS" : """SELECT cell, resp FROM notifications WHERE kernel = ? AND user = ?""",
+  "UPDATE_RESP" : """UPDATE notifications SET resp = ? WHERE kernel = ? AND user = ? AND resp =?;"""
 }
 
 LOCAL_SQL_CMDS = { # cmds that will always get executed locally
@@ -204,7 +209,36 @@ class DbHandler(object):
                  columns[col]["size"]) for col in columns.keys()]
         self._cursor.executemany(self.cmds["ADD_COLS"], cols)
         self._conn.commit()
+    
+    def get_columns(self, name):
+        """does a column with that name exist?"""
+        self._cursor.execute(self.cmds["GET_COLS"], (self.user, name))
+        return self._cursor.fetchall()
+  
+    def store_response(self, kernel_id, cell_id, response):
+
+        self._cursor.execute(self.cmds["STORE_RESP"], (kernel_id, self.user, cell_id, json.dumps(response)))
+        self._conn.commit()
+
+    def update_response(self, kernel_id, cell_id, old_resp, response):
+
+        self._cursor.execute(self.cmds["UPDATE_RESP"], (json.dumps(response), kernel_id, self.user, json.dumps(old_resp)))
+        self._conn.commit()
+
+    def get_responses(self, kernel_id):
         
+        self._cursor.execute(self.cmds["GET_RESPS"], (kernel_id, self.user))
+        results = self._cursor.fetchall()
+
+        responses = {}
+
+        for elt in results:
+            try: 
+                responses[elt["cell"]].append(json.loads(elt["resp"]))
+            except KeyError:
+                responses[elt["cell"]] = [json.loads(elt["resp"])]
+
+        return responses
     def close(self):
         self._cursor.close()
         self._conn.close()

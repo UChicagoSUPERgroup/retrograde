@@ -19,7 +19,7 @@ from timeit import default_timer as timer
 from datetime import datetime
 from jupyter_client.manager import start_new_kernel
 
-from .config import other_funcs, ambig_funcs, series_funcs
+from .config import other_funcs, ambig_funcs, series_funcs, classifier_names
 from .config import make_df_snippet, clf_fp_fn_snippet, clf_scan_snippet, clf_test_snippet
 from .sim_functions import check_sex
 from .storage import load_dfs
@@ -391,13 +391,17 @@ class AnalysisEnvironment:
         """try executing to test if has "fit" method"""
         """there are a lot of sklearn methods so this seems easier"""
 
-        expr = Expr(
-            value=Call(
-                func=Name(id="hasattr", ctx=Load()),
-                args=[call_node, Str("fit")], keywords=[]))
-
-        resp = self._execute_code(astor.to_source(expr))
-        return resp == "True"
+        if not isinstance(call_node, Call): return False
+        if isinstance(call_node.func, Attribute):
+            return call_node.func.attr in classifier_names
+        elif isinstance(call_node.func, Name):
+            if call_node.func.id in classifier_names:
+                return True
+            # look up aliases
+            res_name = self.sklearn_alias.get_alias_for(call_node.func.id)
+            if res_name and res_name in classifier_names:
+                return True
+        return False 
 
     def make_new_model(self, call_node, assign_node):
         """add model to environment"""
@@ -412,7 +416,7 @@ class AnalysisEnvironment:
 #            self.edges[value] = [target]
 #        else:
 #            self.edges[value].append(target)
-    def add_train(self, func_node, args):
+    def add_train(self, func_node, args, model_node):
         """
         have made a fit(X, y) call on model
         fill in info about training data
@@ -421,7 +425,7 @@ class AnalysisEnvironment:
         args are args input to fit
         """
 
-        model_name = func_node.value.id
+        model_name = model_node.id
         self._nbapp.log.debug("[ANALYSIS] Retrieved model %s" % model_name)
 
         if model_name not in self.models:
@@ -460,8 +464,17 @@ class AnalysisEnvironment:
         # run perf. test on features
         if self.is_clf(func_node.value):
             self._nbapp.log.debug("[ANALYSIS] {0} is a classifier, running performance metrics".format(model_name))
-            self.models[model_name]["train"]["perf"] = self.model_perf_clf(func_node, args)
-            
+        #    self.models[model_name]["train"]["perf"] = self.model_perf_clf(func_node, args)
+
+    def get_models(self, cell_code):
+
+        """are models in cell defined in this analysis?"""
+        cell_tree = parse(cell_code)
+        visitor = ModelVisitor(self.models)
+        visitor.visit(cell_tree)
+
+        return visitor.models
+     
     def is_clf(self, name_node):
         """return the type of classifier func_node is"""
         blank_snippet = parse(clf_test_snippet)
@@ -725,7 +738,13 @@ class CellVisitor(NodeVisitor):
                 self.env.make_newdata(self.unfinished_call, node)
                 new_data = True
             elif self.env.is_model_call(self.unfinished_call):
+
                 self.env.make_new_model(self.unfinished_call, node)
+
+                if isinstance(self.unfinished_call.func, Attribute) and self.unfinished_call.func.attr == "fit":
+
+                    self.env.add_train(self.unfinished_call.func, self.unfinished_call.args, node.targets[0])
+
             self.unfinished_call = None
 
         if node.value in self.nodes:
@@ -766,8 +785,8 @@ class CellVisitor(NodeVisitor):
         if self.env.is_model_call(node):
             self.nodes.add(node)
             self.unfinished_call = node
-        if isinstance(node.func, Attribute) and node.func.attr == "fit":
-            self.env.add_train(node.func, node.args)
+        if isinstance(node.func, Attribute) and node.func.attr == "fit" and isinstance(node.func.value, Name):
+            self.env.add_train(node.func, node.args, node.func.value)
 
     def visit_Attribute(self, node):
         """if attribute references tagged object, extend"""
@@ -1046,5 +1065,69 @@ class NearestDataframeFinder(NodeVisitor):
                 except KeyError:
                     pass
         self.generic_visit(node)
+
+class ModelVisitor(NodeVisitor):
+
+    def __init__(self, models):
+
+        self.defined_models = models
+        self.models = {}
+
+    def visit_Name(self, node):
+        if node.id in self.defined_models:
+            if "placeholder" in self.models:
+                self.models[node.id] = self.models["placeholder"]
+                del self.models["placeholder"]
+            else:
+                self.models[node.id] = None
+
+    def try_get_info(self, arg):
+        """try to get name of dataframe and columns"""
+
+        resp = {"name" : None, "name_ind" : None}
+
+        if isinstance(arg, Subscript):
+            if isinstance(arg.value, Name):
+                resp["name"] = arg.value.id
+                if isinstance(arg.slice.value, List):
+                    elt_list = arg.slice.value.elts
+                    if all([isinstance(elt, Str) for elt in elt_list]):
+                        resp["name_ind"] = [elt.s for elt in elt_list]
+                    else:
+                        resp["name_ind"] = None
+                elif isinstance(arg.slice.value, Str):
+                   resp["name_ind"] = [arg.slice.value.s]
+                else:
+                    resp["name_ind"] = None
+            else: resp["name"] = None
+
+        if isinstance(arg, Name):
+
+            resp["name"] = arg.id
+            resp["name_ind"] = None 
+
+        return resp 
+        
+    def visit_Call(self, node):
+
+        self.generic_visit(node) # visit before
+
+        if isinstance(node.func, Attribute) and node.func.attr == "fit":
+
+            x_args = node.args[0]
+            y_args = node.args[1]
+
+            model_name = None
+            for poss_name in self.models.keys():
+                if not self.models[poss_name]: model_name = poss_name
+            if not model_name: model_name = "placeholder"
+
+            model_info = {}
+            model_info["features"] = self.try_get_info(x_args)
+            model_info["label"] = self.try_get_info(y_args)
+
+            self.models[model_name] = model_info
+  
 class DeadKernelError(RuntimeError):
     pass
+

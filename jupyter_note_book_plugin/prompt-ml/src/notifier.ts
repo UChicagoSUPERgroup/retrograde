@@ -1,4 +1,8 @@
 import {
+  find
+} from "@lumino/algorithm"
+
+import {
   JupyterFrontEnd
 } from "@jupyterlab/application"
 
@@ -17,7 +21,7 @@ import {
 } from "@jupyterlab/cells";
 
 import {
-  IOutputAreaModel, OutputPrompt
+  IOutputAreaModel, OutputPrompt, OutputArea
 } from "@jupyterlab/outputarea";
 
 import {
@@ -53,7 +57,10 @@ export class Prompter {
   }
   
   private appendMsg(cell : Cell, msg : string) {
+
     var outputmodel : IOutputAreaModel = (cell as CodeCell).model.outputs;
+    let ins_n : number = outputmodel.length;
+
     if (outputmodel.length > 0) {
       var new_output = {output_type : "execute_result",
                         execution_count : outputmodel.get(0).executionCount,
@@ -70,37 +77,59 @@ export class Prompter {
     } 
     
     // get the OutputPrompt and overwrite
-    this._overwritePrompt(cell);
+    this._overwritePrompt(cell as CodeCell, ins_n);
 
-  } 
-  private _overwritePrompt(cell : Cell) {
-    // overwrite the output prompt for the additional commentary
-    var cell_iter = cell.children();
-    cell_iter.next();
-    cell_iter.next();
+  }
+  
+  private _isOp(w : Widget) {
+    return w instanceof OutputPrompt;
+  }
+
+  private _findOp(cell : CodeCell, ins_index : number) : OutputPrompt {
+
+    let tgt_op : OutputArea = (cell.outputArea.widgets[ins_index] as OutputArea);
+    let output_prompt : OutputPrompt = (find(tgt_op.widgets, this._isOp) as OutputPrompt)
     
-    let outputarea : Widget = cell_iter.next();
+    return output_prompt;
+  }
  
-    if (outputarea != undefined) {
-
-      var output_iter = outputarea.children();
-      output_iter.next();
-      outputarea = output_iter.next(); 
-
-      var prompt_iter = outputarea.children();
-      prompt_iter.next();
-
-      let output_result = prompt_iter.next();
-      let output_prompt : OutputPrompt = (output_result.children().next() as OutputPrompt);
-      
-      if (output_prompt.executionCount == (cell as CodeCell).model.executionCount) {
-          output_prompt.node.textContent = "[!]:"; 
-      }
+  private _overwritePrompt(cell : CodeCell, ins_index : number) {
+    // overwrite the output prompt for the additional commentary
+    let output_prompt : OutputPrompt = this._findOp(cell, ins_index);
+    if (output_prompt && (output_prompt.executionCount == cell.model.executionCount)) {
+        output_prompt.node.textContent = "[!]:"; 
     }
   }
+
+  private _routeNotice(notice : any) {
+    if (notice["type"] == "resemble") {
+      return this._makeResembleMsg(notice["df"], notice["col"]).outerHTML;
+    }
+    if (notice["type"] == "variance") {
+      return this._makeVarMsg(notice["zip1"], notice["zip2"], notice["demo"]).outerHTML;
+    }
+    if (notice["type"] == "outliers") {
+      return this._makeOutliersMsg(notice["col_name"], notice["value"], notice["std_dev"]).outerHTML;
+    }
+    if (notice["type"] == "model_perf") {
+      return this._makePerformanceMsg(notice).outerHTML;
+    }
+  }
+
   private _onInfo(info_object : any) {
+
     var cell : Cell = this._getCell(info_object["cell"], this._tracker);
-    
+
+    if (info_object["type"] == "multiple") {
+      for (let key of Object.keys(info_object["info"])) {
+        cell = this._getCell(key, this._tracker);
+        for (let notice of info_object["info"][key]) {
+          let msg : string = this._routeNotice(notice);
+          if (msg) { this.appendMsg(cell, msg); }
+        } 
+      }   
+    }
+  
     if (info_object["type"] == "resemble") {
       let msg : string = "<div>Column <b>"+info_object["column"]+"</b> resembles "+info_object["category"] +"</div>";
       this.appendMsg(cell, msg); 
@@ -254,6 +283,109 @@ export class Prompter {
 
     return body;
   }
+  private _makeResembleMsg(df_name : string, col_name : string) {
+
+    let var_line_1 = document.createElement("p");
+    let var_line_2 = document.createElement("p");
+
+    var_line_1.innerHTML = "The dataframe <b>"+df_name+"</b> contains a column <b>"+col_name+"</b>";
+
+    var_line_2.innerHTML = "Using this column may be discrimnatory";
+    
+    var [body, area] = this._makeContainer();
+    area.appendChild(var_line_1);
+    area.appendChild(var_line_2);
+
+    return body;     
+  }
+
+  private _makeVarMsg(zip1 : string, zip2 : string, demo : any) {
+
+    let var_line_1 = document.createElement("p");
+    let var_line_2 = document.createElement("p");
+
+    var_line_1.innerHTML = "Zip code <b>"+zip1+"</b> is "+demo[zip1]+"% black";
+    var_line_2.innerHTML = "Zip code <b>"+zip2+"</b> is "+demo[zip2]+"% white";
+
+    var [body, area] = this._makeContainer();
+    area.appendChild(var_line_1);
+    area.appendChild(var_line_2);
+
+    return body;
+  }
+  private _makeOutliersMsg(col_name : string, value : number, std_dev : number) {
+
+    let var_line_1 = document.createElement("p");
+    let var_line_2 = document.createElement("p");
+
+    var_line_1.innerHTML = "The column <b>"+col_name+"</b> contains values greater than "+value;
+    var_line_2.innerHTML = value + " is "+std_dev.toString().slice(0,5)+" standard deviations above the average for that column";
+
+    var [body, area] = this._makeContainer();
+    area.appendChild(var_line_1);
+    area.appendChild(var_line_2);
+
+    return body;
+  }
+
+  private _makePerformanceMsg(notice : any) {
+
+    let table_elt = document.createElement("table");
+    let header = document.createElement("tr");
+
+    header.appendChild(document.createElement("th"));
+    header.appendChild(document.createElement("th"));
+
+    let fpr_header = document.createElement("th");
+    let fnr_header = document.createElement("th");
+
+    fpr_header.innerHTML = "Pr[&#374;="+notice["values"]["pos"] +"|Y="+notice["values"]["neg"]+"]";
+    fnr_header.innerHTML = "Pr[&#374;="+notice["values"]["neg"] +"|Y="+notice["values"]["pos"]+"]";
+
+    header.appendChild(fpr_header);
+    header.appendChild(fnr_header);
+
+    table_elt.appendChild(header);
+
+    for (let col_name of Object.keys(notice["columns"])) {
+
+      let col_values = Object.keys(notice["columns"][col_name])
+    
+      for (let i = 0; i < col_values.length; i++) {
+
+        let row = document.createElement("tr");
+
+        if (i == 0) {
+          let col_name_entry = document.createElement("th");
+          col_name_entry.setAttribute("rowspan", col_values.length.toString());
+          col_name_entry.innerHTML = col_name;
+          row.appendChild(col_name_entry);
+        }
+
+        let value_name = document.createElement("td");
+        value_name.innerHTML = col_values[i];
+        row.appendChild(value_name);
+
+        let rates_obj = notice["columns"][col_name][col_values[i]];
+
+        let fpr_entry = document.createElement("td");
+        fpr_entry.innerHTML = rates_obj["fpr"].toFixed(3);
+        row.appendChild(fpr_entry);
+
+        let fnr_entry = document.createElement("td");
+        fnr_entry.innerHTML = rates_obj["fnr"].toFixed(3);
+        row.appendChild(fnr_entry);
+
+        table_elt.appendChild(row);
+      }  
+    }
+
+    var [body, area] = this._makeContainer();
+    area.appendChild(table_elt);
+
+    return body; 
+  }
+
 /*  private _onDataNotify(data_object : any) {
 
     var data_entries : any = Object.keys(data_object); // each key a data variable

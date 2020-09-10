@@ -144,6 +144,51 @@ series_funcs = [
     "memory_usage",
 ]
 
+classifier_names = [
+        "AdaBoostClassifier",
+        "BaggingClassifier",
+        "BernoulliNB",
+        "CalibratedClassifierCV",
+        "CategoricalNB",
+        "CheckingClassifier",
+        "ClassifierChain",
+        "ComplementNB",
+        "DecisionTreeClassifier",
+        "DummyClassifier",
+        "ExtraTreeClassifier",
+        "ExtraTreesClassifier",
+        "GaussianNB",
+        "GaussianProcessClassifier",
+        "GradientBoostingClassifier",
+        "HistGradientBoostingClassifier",
+        "KNeighborsClassifier",
+        "LabelPropagation",
+        "LabelSpreading",
+        "LinearDiscriminantAnalysis",
+        "LinearSVC",
+        "LogisticRegression",
+        "LogisticRegressionCV",
+        "MLPClassifier",
+        "MultiOutputClassifier",
+        "MultinomialNB",
+        "NearestCentroid",
+        "NuSVC",
+        "OneVsOneClassifier",
+        "OneVsRestClassifier",
+        "OutputCodeClassifier",
+        "PassiveAggressiveClassifier",
+        "Perceptron",
+        "QuadraticDiscriminantAnalysis",
+        "RadiusNeighborsClassifier",
+        "RandomForestClassifier",
+        "RidgeClassifier",
+        "RidgeClassifierCV",
+        "SGDClassifier",
+        "SVC",
+        "StackingClassifier",
+        "VotingClassifier",
+]
+
 make_df_snippet = """\n
 prompt_ml_pred = REPLACE_MODEL.predict(REPLACE_X)\n
 prompt_ml_df = DF_ALIAS(REPLACE_X)\n
@@ -208,5 +253,5 @@ def _make_namespace(msg_id, db_path):
 _make_namespace({0}, {1})
 """ 
 
-MODE = "SORT" # the sorts of responses the plugin should provide. options are "SORT" for sortilege, "SIM" for column similarity, and None
+MODE = "EXP_END" # the sorts of responses the plugin should provide. options are "SORT" for sortilege, "SIM" for column similarity, and None
 remote_config = {"db_user" : "prompter_user", "host" : "localhost", "password" : "user_pw", "database" : "notebooks"}

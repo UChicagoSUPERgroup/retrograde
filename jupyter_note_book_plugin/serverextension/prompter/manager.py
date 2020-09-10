@@ -11,6 +11,7 @@ from random import choice
 from .storage import DbHandler, RemoteDbHandler
 from .analysis import AnalysisEnvironment
 from .config import MODE, remote_config
+from .notifications import SensitiveColumnNote, ZipVarianceNote, OutliersNote, PerformanceNote
 
 class AnalysisManager:
     """
@@ -33,7 +34,16 @@ class AnalysisManager:
             self.db = DbHandler()
         self.analyses = {}
         self._nb = nbapp
+        self.rules = {} # rules used to trigger notifications
     
+        if MODE == "EXP_CTS" or MODE == "EXP_END":
+            self.rules = {
+                "column" : SensitiveColumnNote(self.db),
+                "variance" : ZipVarianceNote(self.db),
+                "outliers" : OutliersNote(self.db),
+                "performance" : PerformanceNote(self.db)
+            }
+
     def handle_request(self, request):
         """
         handle a request (json object with "content", "id", and "kernel" fields)
@@ -62,9 +72,14 @@ class AnalysisManager:
         except RuntimeError as e:
             self._nb.log.error("[MANAGER] Analysis environment encountered exception {0}, call back {1}".format(e, sys.exc_info()[0]))
 
+        self.new_data(kernel_id) # add columns and data to db
         response = self.make_response(kernel_id, cell_id, mode=MODE)
         self._nb.log.info("[MANAGER] sending response {0}".format(response))
         return response
+
+    def check_submit(self, kernel_id, cell_id):
+        code = self.db.get_code(kernel_id, cell_id)
+        return "%prompter_plugin submit%" in code
 
     def make_response(self, kernel_id, cell_id, mode=None):
         """
@@ -77,9 +92,46 @@ class AnalysisManager:
         if mode == "SIM":
             ans = self.run_colsim(kernel_id, cell_id)
             if ans:
-                resp["info"] = self.run_colsim(kernel_id, cell_id)
+                resp["info"] = ans
+        if mode == "EXP_CTS":
+            ans = self.run_rules(kernel_id, cell_id)
+
+            resp["info"] = ans
+            resp["type"] = "multiple"
+
+        if mode == "EXP_END":
+
+            ans = self.run_rules(kernel_id, cell_id)
+
+            if self.check_submit(kernel_id, cell_id):
+
+                self._nb.log.info("[MANAGER] model submission")                
+                resp["info"] = ans
+                resp["type"] = "multiple"
+
+        if "info" not in resp:
+            resp["info"] = {}
+
         resp["info"]["cell"] = cell_id
         return resp
+
+    def run_rules(self, kernel_id, cell_id):
+
+        self._nb.log.debug("[MANAGER] running rules for cell {0}, kernel {1}".format(cell_id, kernel_id)) 
+        env = self.analyses[kernel_id]
+ 
+        feasible_rules = [r for r in self.rules.values() if r.feasible(cell_id, env)]
+        self._nb.log.debug("[MANAGER] There are {0} feasible rules".format(len(feasible_rules)))
+        
+        if feasible_rules:
+
+            chosen_rule = choice(feasible_rules)
+            chosen_rule.make_response(self.analyses[kernel_id], kernel_id, cell_id)
+            self._nb.log.debug("[MANAGER] chose rule {0}".format(chosen_rule))
+
+        responses = self.db.get_responses(kernel_id)
+
+        return responses 
 
     def run_sortilege(self, kernel_id, cell_id):
         """run the sortilege analsysis and drop in a pattern"""
