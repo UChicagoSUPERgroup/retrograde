@@ -3,7 +3,7 @@ import psutil
 from random import randint
 import time
 
-IMAGE = 'broken-jupyter-plugin:1.0'
+IMAGE = 'gsamharrison/plugin-test:1.0'
 
 def get_free_port():
     lower_port = 8000

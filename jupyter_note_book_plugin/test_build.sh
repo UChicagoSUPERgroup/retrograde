@@ -9,10 +9,12 @@ pipenv run jupyter labextension install
 
 cd ..
 cd ./serverextension
+
+pipenv run export JUPYTER_CONFIG_DIR=$VIRTUAL_ENV"/etc/jupyter"
+
 pipenv run python3 setup.py sdist bdist_wheel
 pipenv run pip3 install -U -I dist/prompter-0.1-py3-none-any.whl
-pipenv run jupyter serverextension enable --py prompter --sys-prefix --debug
+pipenv run jupyter serverextension enable --py prompter --debug
 cd ..
-export JUPYTER_CONFIG_DIR="./etc/jupyter"
 pipenv run jupyter kernelspec install prompt_kernel
 pipenv run jupyter lab . --log-level=DEBUG --ip=127.0.0.1 --port=8888 #--watch 

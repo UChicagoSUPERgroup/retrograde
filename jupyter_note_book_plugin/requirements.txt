@@ -24,6 +24,7 @@ jupyterlab==2.2.0
 jupyterlab-server==1.2.0
 MarkupSafe==1.1.1
 mistune==0.8.4
+mysql-connector-python
 nbconvert==5.6.1
 nbformat==5.0.7
 notebook==6.0.3
@@ -35,7 +36,6 @@ pexpect==4.8.0
 pickleshare==0.7.5
 prometheus-client==0.8.0
 prompt-toolkit==3.0.5
-# prompter @ file:///Users/AlekB/Desktop/blaseGalenResearch/prompt-ml/serverextension/dist/prompter-0.1-py3-none-any.whl
 ptyprocess==0.6.0
 Pygments==2.6.1
 pyparsing==2.4.7
@@ -44,6 +44,7 @@ python-dateutil==2.8.1
 pyzmq==19.0.1
 requests==2.24.0
 scipy
+scikit-learn
 Send2Trash==1.5.0
 six==1.15.0
 terminado==0.8.3

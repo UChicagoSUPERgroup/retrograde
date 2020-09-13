@@ -12,7 +12,9 @@ from random import choice
 
 import astor
 import dill
+import sqlite3
 
+from time import sleep
 from timeit import default_timer as timer
 from datetime import datetime
 from jupyter_client.manager import start_new_kernel
@@ -157,13 +159,14 @@ class AnalysisEnvironment:
             "[ANALYSIS] found dataframe {0} for cell {1}".format(var_name, cell_id))
         return curr_df[var_name]       
  
-    def cell_exec(self, code, notebook, cell_id):
+    def cell_exec(self, code, notebook, cell_id, exec_ct):
         """
         execute a cell and propagate the analysis
         
         returns the msg id of the code execution msg to the main kernel
         """
-        self.exec_count += 1
+        self.exec_count = exec_ct
+        self.code = code
 
         cell_code = parse(code)
 
@@ -259,7 +262,6 @@ class AnalysisEnvironment:
         self._wait_for_clear(client)
 
         output = run_code(client, kernel, code, self._nbapp.log)
-        self.exec_count += 1
 
         self._nbapp.log.debug("[ANALYSIS] {0}\n{1}".format(kernel_id, output))
 #        self._nbapp.web_app.kernel_locks[kernel_id].release()
@@ -285,8 +287,18 @@ class AnalysisEnvironment:
 
             if tgt_type == DATAFRAME_TYPE:
                 if isinstance(target, Name):
-
-                    ns_entry = self.db.link_cell_to_ns(self.exec_count, datetime.now())
+                    try:
+                        ns_entry = self.db.link_cell_to_ns(self.exec_count, self.code, datetime.now())
+                    except sqlite3.IntegrityError:
+                        self._nbapp.log.warning("[STORAGE] multiple namespaces found")
+                        cols = self.get_col_names_callnode(target)
+                        self.entry_points[target.id]["columns"] = {c : self.get_col_stats(target, c) for c in cols}
+                        return
+                    if not ns_entry:
+                        self._nbapp.log.debug("[ANALYSIS could not find namespace for ({0}, {1}), waiting".format(self.exec_count, datetime.now()))
+                        cols = self.get_col_names_callnode(target)
+                        self.entry_points[target.id]["columns"] = {c : self.get_col_stats(target, c) for c in cols}
+                        return
                     ns = dill.loads(ns_entry["namespace"])
  
                     df_obj = dill.loads(ns["_forking_kernel_dfs"][target.id])

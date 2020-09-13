@@ -5,10 +5,9 @@ RUN apt-get -y install curl gnupg
 RUN curl -sL https://deb.nodesource.com/setup_14.x  | bash -
 RUN apt-get -y install nodejs
 #Install pipenv and run the build script
-RUN pip install pipenv
-RUN pipenv --python 3.7
 ADD . /
 RUN chmod +x docker_build.sh
 #Run the installation script
+RUN pip install -r /requirements.txt
 RUN  /docker_build.sh
-CMD pipenv run jupyter lab . --log-level=DEBUG --port=8888 --no-browser --allow-root --ip=0.0.0.0 --NotebookApp.token='' --NotebookApp.password=''
+CMD jupyter lab . --log-level=DEBUG --port=8888 --no-browser --allow-root --ip=0.0.0.0 --NotebookApp.token='' --NotebookApp.password=''

@@ -1,6 +1,49 @@
 DB_DIR = "~/.promptml/"
 DB_NAME = "cells.db"
 
+# Table query creates the database tables, it should be exactly the contents of
+# make_tables.sql 
+
+table_query = """
+
+CREATE TABLE IF NOT EXISTS cells(
+    user TEXT, 
+    kernel TEXT, 
+    id VARCHAR(255) PRIMARY KEY, 
+    contents TEXT, 
+    num_exec INT, 
+    last_exec TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS versions(
+    user TEXT, 
+    kernel TEXT, 
+    id VARCHAR(255), 
+    version INT, 
+    time TIMESTAMP, 
+    contents TEXT, 
+    exec_ct INT, 
+    PRIMARY KEY(id, version));
+
+CREATE TABLE IF NOT EXISTS data(
+    user TEXT, 
+    kernel TEXT, 
+    cell TEXT, 
+    version INT, 
+    source VARCHAR(255), 
+    name VARCHAR(255), 
+    PRIMARY KEY(name, version, source));
+
+CREATE TABLE IF NOT EXISTS columns(
+    source VARCHAR(255), 
+    user TEXT,
+    version INT, 
+    name VARCHAR(255), 
+    col_name VARCHAR(255),
+    type TEXT,
+    size INT,
+    PRIMARY KEY(source, version, name, col_name));
+"""
 
 """df_funcs are dataframe methods that return non-dataframe values"""
 # TODO: this is a noisy list. Some elements sometimes return a df, and some methods not in this
@@ -166,3 +209,4 @@ _make_namespace({0}, {1})
 """ 
 
 MODE = "SORT" # the sorts of responses the plugin should provide. options are "SORT" for sortilege, "SIM" for column similarity, and None
+remote_config = {"db_user" : "prompter_user", "host" : "localhost", "password" : "user_pw", "database" : "notebooks"}
