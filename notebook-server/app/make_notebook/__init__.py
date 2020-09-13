@@ -4,7 +4,6 @@ from random import randint
 import time
 
 IMAGE = 'broken-jupyter-plugin:1.0'
-SLEEP_SECONDS = 3
 
 def get_free_port():
     lower_port = 8000
@@ -28,15 +27,20 @@ def get_free_port():
 def start_notebook():
     #start a docker on a random port from range container and detach from it 
     notebook_port = get_free_port()
-    print(notebook_port)
     client = docker.from_env()
     container = client.containers.run(image=IMAGE,
       ports={8888:notebook_port},
       detach = True
     )
-    # Wait for 5 seconds
-    time.sleep(SLEEP_SECONDS)
-    return notebook_port
+    while (container.status == 'restarting' or container.status == 'created'):
+        container.reload()
+    return notebook_port, container.id
+
+def stop_notebook(container_id):
+    client = docker.from_env()
+    container = client.containers.get(container_id)
+    #wait 1 second to stop container, default is 10
+    container.stop(timeout = 1)
 
 if __name__ == '__main__':
     start_notebook()
