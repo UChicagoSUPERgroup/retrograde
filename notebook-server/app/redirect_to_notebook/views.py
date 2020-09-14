@@ -32,7 +32,7 @@ class MainView(FlaskView):
         if not prolific_id_exists:
             #this is a new user, create a container
             port, container = start_notebook()
-        redirect_url = 'http://localhost:'+str(port)
+            redirect_url = 'http://localhost:'+str(port)
             UsersContainers.handle_new_entry(prolific_id, container, port, True)
             print('redirecting...')
             #Sleep for 10 seconds to make sure jupyter lab is booted
@@ -45,7 +45,7 @@ class MainView(FlaskView):
                 #if the container is running, redirect to the container
                 port = UsersContainers.get_port(prolific_id)
                 redirect_url = f'http://localhost:{port}/lab?'
-        return redirect(redirect_url)
+                return redirect(redirect_url)
             else:
                 #this user with has completed survey. Return message saying they are done
                 return 'Sorry, this prolific ID has already been used to complete the survey.', 404
