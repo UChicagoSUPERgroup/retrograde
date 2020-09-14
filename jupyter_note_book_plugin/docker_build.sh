@@ -15,4 +15,5 @@ jupyter serverextension enable --py prompter --sys-prefix --debug
 cd ..
 export JUPYTER_CONFIG_DIR="./etc/jupyter"
 jupyter kernelspec install prompt_kernel
+yes | jupyter kernelspec uninstall -y python3
 #pipenv run jupyter lab . --log-level=DEBUG --ip=127.0.0.1 --port=8888 #--watch 
