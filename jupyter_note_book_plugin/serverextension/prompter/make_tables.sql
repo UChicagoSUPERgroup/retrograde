@@ -18,13 +18,13 @@ CREATE TABLE IF NOT EXISTS versions(
     PRIMARY KEY(id, version));
 
 CREATE TABLE IF NOT EXISTS data(
-    user TEXT, 
+    user VARCHAR(255), 
     kernel TEXT, 
     cell TEXT, 
     version INT, 
     source VARCHAR(255), 
     name VARCHAR(255), 
-    PRIMARY KEY(name, version, source));
+    PRIMARY KEY(user, name, version, source));
 
 CREATE TABLE IF NOT EXISTS columns(
     source VARCHAR(255), 
