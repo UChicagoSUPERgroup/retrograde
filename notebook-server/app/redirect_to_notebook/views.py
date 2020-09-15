@@ -15,8 +15,8 @@ CONTAINER_ALREADY_STOPPED_MESSAGE = 'Container was already stopped'
 class MainView(FlaskView):
     route_base = '/'
 
-    @route('/<prolific_id>', methods=['GET'])
-    def handle_request(self, prolific_id):
+    @route('/<prolific_id>/<mode>', methods=['GET'])
+    def handle_request(self, prolific_id, mode):
         '''
         Handles getting and creating containers and corresponding db entry
 
@@ -31,7 +31,7 @@ class MainView(FlaskView):
         prolific_id_exists = UsersContainers.check_if_prolific_id_exists(prolific_id)
         if not prolific_id_exists:
             #this is a new user, create a container
-            port, container = start_notebook()
+            port, container = start_notebook(prolific_id=prolific_id, mode=mode)
             redirect_url = 'http://localhost:'+str(port)
             UsersContainers.handle_new_entry(prolific_id, container, port, True)
             print('redirecting...')

@@ -3,7 +3,7 @@ import psutil
 from random import randint
 import time
 
-IMAGE = 'gsamharrison/plugin-test:1.3'
+IMAGE = 'gsamharrison/plugin-test:1.5'
 
 def get_free_port():
     lower_port = 8000
@@ -24,13 +24,25 @@ def get_free_port():
         raise ValueError('All ports in use...')
     return port
 
-def start_notebook():
+def start_notebook(prolific_id=None, mode=None):
     #start a docker on a random port from range container and detach from it 
     notebook_port = get_free_port()
     client = docker.from_env()
+
+    env = {"DOCKER_HOST_IP" : "127.0.0.1", "PLUGIN_PORT" : notebook_port}
+     
+    if not prolific_id:
+        env["JP_PLUGIN_USER"] = "UNTRACKED_USER-"+str(notebook_port)+str(randint(0,50))
+
+    if not mode:
+        env["MODE"] = "EXP_END"
+
     container = client.containers.run(image=IMAGE,
-      ports={8888:notebook_port},
-      detach = True
+     # ports={8888:notebook_port},
+      command="bash ./run_image.sh",
+      detach = True,
+      network_mode = "host",
+      environment = env, 
     )
     while (container.status == 'restarting' or container.status == 'created'):
         container.reload()
