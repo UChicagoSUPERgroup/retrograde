@@ -96,7 +96,10 @@ class AnalysisManager:
         if mode == "EXP_CTS":
             ans = self.run_rules(kernel_id, cell_id)
 
-            resp["info"] = ans
+            if cell_id in ans:
+                resp["info"] = {cell_id : ans[cell_id]}
+            else:
+                resp["info"] = {}
             resp["type"] = "multiple"
 
         if mode == "EXP_END":
