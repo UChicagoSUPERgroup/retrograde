@@ -259,5 +259,13 @@ def _make_namespace(msg_id, db_path):
 _make_namespace({0}, {1})
 """ 
 
-MODE = "EXP_END" # the sorts of responses the plugin should provide. options are "SORT" for sortilege, "SIM" for column similarity, and None
-remote_config = {"db_user" : "prompter_user", "host" : "localhost", "password" : "user_pw", "database" : "notebooks"}
+import os
+
+if not os.getenv("MODE"):
+    MODE = "EXP_END" # the sorts of responses the plugin should provide. options are "SORT" for sortilege, "SIM" for column similarity, and None
+else:
+    MODE = os.getenv("MODE")
+if not os.getenv("DOCKER_HOST_IP"):
+    remote_config = {"db_user" : "prompter_user", "host" : "localhost", "password" : "user_pw", "database" : "notebooks"}
+else:
+    remote_config = {"db_user" : "prompter_user", "host" : os.getenv("DOCKER_HOST_IP"), "password" : "user_pw", "database" : "notebooks"}
