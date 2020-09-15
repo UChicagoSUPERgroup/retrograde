@@ -12,6 +12,8 @@ INVALID_PROLIFIC_ID_ERROR = 'Error, Invalid Prolific ID Specified'
 CONTAINER_STOPPED_MESSAGE = 'Container Stopped'
 CONTAINER_ALREADY_STOPPED_MESSAGE = 'Container was already stopped'
 
+HOST = "http://notebooks.cs.uchicago.edu"
+
 class MainView(FlaskView):
     route_base = '/'
 
@@ -32,7 +34,7 @@ class MainView(FlaskView):
         if not prolific_id_exists:
             #this is a new user, create a container
             port, container = start_notebook(prolific_id=prolific_id, mode=mode)
-            redirect_url = 'http://localhost:'+str(port)
+            redirect_url = HOST+":"+str(port)
             UsersContainers.handle_new_entry(prolific_id, container, port, True)
             print('redirecting...')
             #Sleep for 10 seconds to make sure jupyter lab is booted
@@ -44,7 +46,7 @@ class MainView(FlaskView):
             if running:
                 #if the container is running, redirect to the container
                 port = UsersContainers.get_port(prolific_id)
-                redirect_url = f'http://localhost:{port}/lab?'
+                redirect_url = f'{HOST}{port}/lab?'
                 return redirect(redirect_url)
             else:
                 #this user with has completed survey. Return message saying they are done
