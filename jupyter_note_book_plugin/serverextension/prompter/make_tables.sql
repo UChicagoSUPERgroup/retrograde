@@ -41,3 +41,10 @@ CREATE TABLE IF NOT EXISTS notifications(
     user VARCHAR(255),
     cell VARCHAR(255),
     resp LONGTEXT);
+
+CREATE TABLE IF NOT EXISTS UsersContainers(
+    prolific_id VARCHAR(255) PRIMARY KEY,
+    container_id VARCHAR(255),
+    port INT,
+    container_started_at DATETIME,
+    running BOOL); 

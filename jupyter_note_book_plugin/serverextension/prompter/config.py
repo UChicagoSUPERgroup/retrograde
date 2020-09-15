@@ -43,6 +43,12 @@ CREATE TABLE IF NOT EXISTS columns(
     type TEXT,
     size INT,
     PRIMARY KEY(source, version, name, col_name));
+
+CREATE TABLE IF NOT EXISTS notifications(
+    kernel VARCHAR(255),
+    user VARCHAR(255),
+    cell VARCHAR(255),
+    resp LONGTEXT);
 """
 
 """df_funcs are dataframe methods that return non-dataframe values"""
