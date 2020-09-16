@@ -3,7 +3,7 @@ import psutil
 from random import randint
 import time
 
-IMAGE = 'gsamharrison/plugin-test:1.5'
+IMAGE = 'gsamharrison/plugin-test:1.6'
 
 def get_free_port():
     lower_port = 8000

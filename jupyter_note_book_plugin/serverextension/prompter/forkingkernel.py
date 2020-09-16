@@ -79,7 +79,7 @@ class ForkingKernel(IPythonKernel):
                 better_ns["_forking_kernel_dfs"][k] = dill.dumps(var)
             else:
                 bad_objs = dill.detect.badobjects(var)
-                elif bad_objs is None:
+                if bad_objs is None:
                     better_ns[k] = var
                 else:
                     self.log.debug(
