@@ -26,7 +26,7 @@ class AnalysisManager:
 
             remote_config["nb_user"] = os.getenv("JP_PLUGIN_USER")
             if not remote_config["nb_user"]: remote_config["nb_user"] = "DEFAULT_USER"
-
+            nbapp.log.debug("[MANAGER] user is {0}".format(remote_config["nb_user"]))
             self.db = RemoteDbHandler(**remote_config)
 
         except mysql.connector.Error as e:
@@ -43,7 +43,6 @@ class AnalysisManager:
                 "outliers" : OutliersNote(self.db),
                 "performance" : PerformanceNote(self.db)
             }
-
     def handle_request(self, request):
         """
         handle a request (json object with "content", "id", and "kernel" fields)

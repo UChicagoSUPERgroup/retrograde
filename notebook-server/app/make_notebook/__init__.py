@@ -3,7 +3,7 @@ import psutil
 from random import randint
 import time
 
-IMAGE = 'gsamharrison/plugin-test:1.6'
+IMAGE = 'gsamharrison/plugin-test:1.6-debug'
 
 def get_free_port():
     lower_port = 8000
@@ -33,9 +33,13 @@ def start_notebook(prolific_id=None, mode=None):
      
     if not prolific_id:
         env["JP_PLUGIN_USER"] = "UNTRACKED_USER-"+str(notebook_port)+str(randint(0,50))
+    else:
+        env["JP_PLUGIN_USER"] = prolific_id
 
     if not mode:
         env["MODE"] = "EXP_END"
+    else:
+        env["MODE"] = mode
 
     container = client.containers.run(image=IMAGE,
      # ports={8888:notebook_port},

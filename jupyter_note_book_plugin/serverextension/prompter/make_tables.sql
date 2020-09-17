@@ -28,13 +28,13 @@ CREATE TABLE IF NOT EXISTS data(
 
 CREATE TABLE IF NOT EXISTS columns(
     source VARCHAR(255), 
-    user TEXT,
+    user VARCHAR(255),
     version INT, 
     name VARCHAR(255), 
     col_name VARCHAR(255),
     type TEXT,
     size INT,
-    PRIMARY KEY(source, version, name, col_name));
+    PRIMARY KEY(version, name, col_name, user));
 
 CREATE TABLE IF NOT EXISTS notifications(
     kernel VARCHAR(255),
