@@ -73,6 +73,7 @@ class DbHandler(object):
     def get_code(self, kernel_id, cell_id):
         """return the contents of the cell, none if does not exist"""
 
+        self.renew_connection()
         self._cursor.execute(self.cmds["GET_CODE"], (cell_id, kernel_id, self.user))
         result = self._cursor.fetchall()
 
@@ -105,6 +106,8 @@ class DbHandler(object):
                will need to create a new entry in the versions table
         """
         #inserting new value into cells
+
+        self.renew_connection()
         try:
           #if the cell already exists, this will raise an integrity error
           self._cursor.execute(self.cmds["INSERT_CELLS"], (cell['cell_id'], cell['contents'], 1, datetime.now(), cell["kernel"], self.user))
@@ -152,6 +155,7 @@ class DbHandler(object):
 
         delta = timedelta(seconds=3) 
 
+        self.renew_connection()
         curs.execute(self.cmds["LINK_CELL"], (exec_ct,))
         results = curs.fetchall()
        
@@ -171,7 +175,8 @@ class DbHandler(object):
 
         source = data["source"]
         name = data["name"] 
- 
+
+        self.renew_connection() 
         self._cursor.execute(self.cmds["DATA_VERSIONS"], 
                              (source, name, self.user))
         data_versions = self._cursor.fetchall()
@@ -198,6 +203,8 @@ class DbHandler(object):
 
         columns = data["columns"]
 
+        self.renew_connection()
+
         self._cursor.execute(self.cmds["ADD_DATA"], (kernel, cell, version, source, name, self.user))
 
         cols = [(source, 
@@ -212,21 +219,28 @@ class DbHandler(object):
     
     def get_columns(self, name):
         """does a column with that name exist?"""
+
+        self.renew_connection()
+
         self._cursor.execute(self.cmds["GET_COLS"], (self.user, name))
         return self._cursor.fetchall()
   
     def store_response(self, kernel_id, cell_id, response):
+
+        self.renew_connection()
 
         self._cursor.execute(self.cmds["STORE_RESP"], (kernel_id, self.user, cell_id, json.dumps(response)))
         self._conn.commit()
 
     def update_response(self, kernel_id, cell_id, old_resp, response):
 
+        self.renew_connection()
         self._cursor.execute(self.cmds["UPDATE_RESP"], (json.dumps(response), kernel_id, self.user, json.dumps(old_resp)))
         self._conn.commit()
 
     def get_responses(self, kernel_id):
-        
+
+        self.renew_connection()        
         self._cursor.execute(self.cmds["GET_RESPS"], (kernel_id, self.user))
         results = self._cursor.fetchall()
 
@@ -249,6 +263,8 @@ class DbHandler(object):
     def add_model(self, name, info, kernel_id):
         """add model to model entry table"""
         # TODO
+    def renew_connection(self):
+        return True # only relevant when db is remote
 
 class RemoteDbHandler(DbHandler):
     """when we want the database to be remote"""
@@ -265,7 +281,7 @@ class RemoteDbHandler(DbHandler):
     def _init_local_db(self, dbname=DB_NAME, dirname=DB_DIR):
         db_path_resolved = os.path.expanduser(dirname)
 
-        print("creating local database at {0}".format(db_path_resolved+dbname))
+#        print("creating local database at {0}".format(db_path_resolved+dbname))
 
         if os.path.isdir(db_path_resolved) and os.path.isfile(db_path_resolved+dbname): 
             self._local_conn = sqlite3.connect(db_path_resolved+dbname, 
@@ -287,7 +303,17 @@ class RemoteDbHandler(DbHandler):
         return super().recent_ns(curs=self._local_cursor)
     def link_cell_to_ns(self, exec_ct, contents, cell_time):
         return super().link_cell_to_ns(exec_ct, contents, cell_time, curs=self._local_cursor)
-                      
+
+    def renew_connection(self):
+
+        if not self._conn.is_connected():
+            self._conn.reconnect(attempts=2, delay=1)
+
+        if self._conn.is_connected():
+            self._cursor = self._conn.cursor(buffered=True, dictionary=True)
+            return True
+        return False
+
 def load_dfs(ns):
     ns_dict = dill.loads(ns["namespace"])
     return {k : dill.loads(v) for k,v in ns_dict["_forking_kernel_dfs"].items()}
