@@ -41,11 +41,9 @@ class EnabledNote(Notifications):
         cell_code = self.db.get_code(env._kernel_id, cell_id)
         invocation_matcher = re.compile(r"#\W*%(\w+)\W+(\w+)")
 
-        env._nbapp.log.debug("[ENABLEDNOTE] Testing statement {0}".format(cell_code)) 
 
         for line in cell_code.splitlines():
             mtch = invocation_matcher.search(line)
-            env._nbapp.log.debug("[ENABLEDNOTE] testing match {0}".format(mtch))
             if mtch and mtch.group(1) == "prompter_plugin"\
                     and mtch.group(2) == "model_training":
                 self.start_message_recvd = True
