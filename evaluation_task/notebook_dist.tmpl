@@ -1,0 +1,794 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": SECTION_1_TEXT
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": SECTION_2_TEXT
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": SECTION_3_TEXT
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": SECTION_4_TEXT
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 51,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/html": [
+       "<div>\n",
+       "<style scoped>\n",
+       "    .dataframe tbody tr th:only-of-type {\n",
+       "        vertical-align: middle;\n",
+       "    }\n",
+       "\n",
+       "    .dataframe tbody tr th {\n",
+       "        vertical-align: top;\n",
+       "    }\n",
+       "\n",
+       "    .dataframe thead th {\n",
+       "        text-align: right;\n",
+       "    }\n",
+       "</style>\n",
+       "<table border=\"1\" class=\"dataframe\">\n",
+       "  <thead>\n",
+       "    <tr style=\"text-align: right;\">\n",
+       "      <th></th>\n",
+       "      <th>Unnamed: 0</th>\n",
+       "      <th>race</th>\n",
+       "      <th>gender</th>\n",
+       "      <th>date</th>\n",
+       "      <th>fed</th>\n",
+       "      <th>zip</th>\n",
+       "      <th>income</th>\n",
+       "      <th>type</th>\n",
+       "      <th>interest</th>\n",
+       "      <th>term</th>\n",
+       "      <th>principal</th>\n",
+       "      <th>approved</th>\n",
+       "    </tr>\n",
+       "  </thead>\n",
+       "  <tbody>\n",
+       "    <tr>\n",
+       "      <th>0</th>\n",
+       "      <td>0</td>\n",
+       "      <td>black</td>\n",
+       "      <td>female</td>\n",
+       "      <td>2017-10-01</td>\n",
+       "      <td>1.15</td>\n",
+       "      <td>60637</td>\n",
+       "      <td>21155</td>\n",
+       "      <td>personal</td>\n",
+       "      <td>10.195762</td>\n",
+       "      <td>12</td>\n",
+       "      <td>44622</td>\n",
+       "      <td>True</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>1</th>\n",
+       "      <td>1</td>\n",
+       "      <td>black</td>\n",
+       "      <td>male</td>\n",
+       "      <td>2018-04-01</td>\n",
+       "      <td>1.69</td>\n",
+       "      <td>60623</td>\n",
+       "      <td>58431</td>\n",
+       "      <td>home</td>\n",
+       "      <td>NaN</td>\n",
+       "      <td>180</td>\n",
+       "      <td>519375</td>\n",
+       "      <td>False</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>2</th>\n",
+       "      <td>2</td>\n",
+       "      <td>black</td>\n",
+       "      <td>female</td>\n",
+       "      <td>2013-11-01</td>\n",
+       "      <td>0.08</td>\n",
+       "      <td>60637</td>\n",
+       "      <td>28489</td>\n",
+       "      <td>home</td>\n",
+       "      <td>8.780219</td>\n",
+       "      <td>360</td>\n",
+       "      <td>265714</td>\n",
+       "      <td>True</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>3</th>\n",
+       "      <td>3</td>\n",
+       "      <td>black</td>\n",
+       "      <td>male</td>\n",
+       "      <td>2011-10-01</td>\n",
+       "      <td>0.07</td>\n",
+       "      <td>60626</td>\n",
+       "      <td>122782</td>\n",
+       "      <td>home</td>\n",
+       "      <td>1.915670</td>\n",
+       "      <td>360</td>\n",
+       "      <td>917704</td>\n",
+       "      <td>True</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>4</th>\n",
+       "      <td>4</td>\n",
+       "      <td>white</td>\n",
+       "      <td>female</td>\n",
+       "      <td>2014-07-01</td>\n",
+       "      <td>0.09</td>\n",
+       "      <td>60614</td>\n",
+       "      <td>324243</td>\n",
+       "      <td>home</td>\n",
+       "      <td>3.680747</td>\n",
+       "      <td>300</td>\n",
+       "      <td>1728441</td>\n",
+       "      <td>True</td>\n",
+       "    </tr>\n",
+       "  </tbody>\n",
+       "</table>\n",
+       "</div>"
+      ],
+      "text/plain": [
+       "   Unnamed: 0   race  gender        date   fed    zip  income      type  \\\n",
+       "0           0  black  female  2017-10-01  1.15  60637   21155  personal   \n",
+       "1           1  black    male  2018-04-01  1.69  60623   58431      home   \n",
+       "2           2  black  female  2013-11-01  0.08  60637   28489      home   \n",
+       "3           3  black    male  2011-10-01  0.07  60626  122782      home   \n",
+       "4           4  white  female  2014-07-01  0.09  60614  324243      home   \n",
+       "\n",
+       "    interest  term  principal  approved  \n",
+       "0  10.195762    12      44622      True  \n",
+       "1        NaN   180     519375     False  \n",
+       "2   8.780219   360     265714      True  \n",
+       "3   1.915670   360     917704      True  \n",
+       "4   3.680747   300    1728441      True  "
+      ]
+     },
+     "execution_count": 51,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "import pandas as pd\n",
+    "\n",
+    "loans = pd.read_csv(\"loan_data.csv\")\n",
+    "loans.head()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": SECTION_5_TEXT
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 5,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "0.511"
+      ]
+     },
+     "execution_count": 5,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "sum(loans[\"approved\"])/len(loans[\"approved\"]) # calculating the percent of approved loans"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": SECTION_6_TEXT
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 8,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "14943.0 353479.25\n"
+     ]
+    }
+   ],
+   "source": [
+    "# 25th and 75th percentile\n",
+    "print(loans[\"principal\"].quantile(0.25), loans[\"principal\"].quantile(0.75))"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "``interest`` is the annual percent interest on the loan. ``term`` is how long in months the loan was supposed to run. \n",
+    "\n",
+    "``income`` is the annual income of the loan applicants."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "The ``type`` column denotes the purpose of the loan. "
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 9,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "array(['personal', 'home', 'auto'], dtype=object)"
+      ]
+     },
+     "execution_count": 9,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "loans[\"type\"].unique()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "There are three possible values ``type`` can have: ``personal``, ``home`` and ``auto``. \n",
+    "\n",
+    "* ``auto`` These loans were for automobile purchases. With these loans, the lender may repossess the car if the person who took out the loan is unable to make payments.\n",
+    "\n",
+    "* ``home`` These loans were for the purchase of residential real estate. Under these loans, the lender may reposssess the home through foreclosure if the person who took out the loan is unable to make payments.\n",
+    "\n",
+    "* ``personal`` These loans are for personal expenses or investments other than a home or automobile. Under these loans, there is not generally any specific piece of property that a lender may repossess."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 15,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/html": [
+       "<div>\n",
+       "<style scoped>\n",
+       "    .dataframe tbody tr th:only-of-type {\n",
+       "        vertical-align: middle;\n",
+       "    }\n",
+       "\n",
+       "    .dataframe tbody tr th {\n",
+       "        vertical-align: top;\n",
+       "    }\n",
+       "\n",
+       "    .dataframe thead th {\n",
+       "        text-align: right;\n",
+       "    }\n",
+       "</style>\n",
+       "<table border=\"1\" class=\"dataframe\">\n",
+       "  <thead>\n",
+       "    <tr style=\"text-align: right;\">\n",
+       "      <th></th>\n",
+       "      <th>count</th>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>type</th>\n",
+       "      <th></th>\n",
+       "    </tr>\n",
+       "  </thead>\n",
+       "  <tbody>\n",
+       "    <tr>\n",
+       "      <th>auto</th>\n",
+       "      <td>0.348</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>home</th>\n",
+       "      <td>0.370</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>personal</th>\n",
+       "      <td>0.282</td>\n",
+       "    </tr>\n",
+       "  </tbody>\n",
+       "</table>\n",
+       "</div>"
+      ],
+      "text/plain": [
+       "          count\n",
+       "type           \n",
+       "auto      0.348\n",
+       "home      0.370\n",
+       "personal  0.282"
+      ]
+     },
+     "execution_count": 15,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "# percent of each type of loan\n",
+    "\n",
+    "pct_df = pd.DataFrame({\"type\" : loans[\"type\"], \"count\" : [1 for _ in loans[\"type\"]]})\n",
+    "pct_df.groupby([\"type\"]).sum()/len(loans[\"type\"])"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 2. Data Cleaning\n",
+    "\n",
+    "Before we can use this data to build a model, we'll need to clean it up a bit. \n",
+    "\n",
+    "The ``date`` column is the date the loan was applied for. However because of the way Pandas works with csv files, this is interpreted as a string. In order do things like test whether a loan was issued before or after a certain date, we need to convert it to a different format."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 16,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "loans[\"date\"] = pd.to_datetime(loans[\"date\"])"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Now if we wanted to see how many applications there were from 2015 on, we can do things like this"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 20,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "627"
+      ]
+     },
+     "execution_count": 20,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "from datetime import datetime\n",
+    "\n",
+    "sum(loans[\"date\"] >= datetime(month=1, day=1, year=2015))"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Another thing we need to do is to deal with data that is categorical (not numeric and which does not have any sort of ordering). Since many scikit-learn models can only handle data that is numeric , it is necessary to represent these columns numerically.\n",
+    "\n",
+    "One example of this is the ``type`` column. To turn this into numeric data, we'll apply a dummy encoding. This creates two columns: one which indicates whether the loan was a home loan and one which indicates whether the loan was a personal loan. If an entry is neither, we can the assume that it was an auto loan.\n",
+    "\n",
+    "There are other ways of representing categorical data, such as OneHot or simple numeric labels. If you are familiar with those techniques, and believe them to be applicable in this case, you may choose to apply them instead.\n",
+    "\n",
+    "**There are other categorical data columns in the data, you should take this opportunity to encode those too**"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 52,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/html": [
+       "<div>\n",
+       "<style scoped>\n",
+       "    .dataframe tbody tr th:only-of-type {\n",
+       "        vertical-align: middle;\n",
+       "    }\n",
+       "\n",
+       "    .dataframe tbody tr th {\n",
+       "        vertical-align: top;\n",
+       "    }\n",
+       "\n",
+       "    .dataframe thead th {\n",
+       "        text-align: right;\n",
+       "    }\n",
+       "</style>\n",
+       "<table border=\"1\" class=\"dataframe\">\n",
+       "  <thead>\n",
+       "    <tr style=\"text-align: right;\">\n",
+       "      <th></th>\n",
+       "      <th>Unnamed: 0</th>\n",
+       "      <th>race</th>\n",
+       "      <th>gender</th>\n",
+       "      <th>date</th>\n",
+       "      <th>fed</th>\n",
+       "      <th>zip</th>\n",
+       "      <th>income</th>\n",
+       "      <th>interest</th>\n",
+       "      <th>term</th>\n",
+       "      <th>principal</th>\n",
+       "      <th>approved</th>\n",
+       "      <th>type_home</th>\n",
+       "      <th>type_personal</th>\n",
+       "    </tr>\n",
+       "  </thead>\n",
+       "  <tbody>\n",
+       "    <tr>\n",
+       "      <th>0</th>\n",
+       "      <td>0</td>\n",
+       "      <td>black</td>\n",
+       "      <td>female</td>\n",
+       "      <td>2017-10-01</td>\n",
+       "      <td>1.15</td>\n",
+       "      <td>60637</td>\n",
+       "      <td>21155</td>\n",
+       "      <td>10.195762</td>\n",
+       "      <td>12</td>\n",
+       "      <td>44622</td>\n",
+       "      <td>True</td>\n",
+       "      <td>0</td>\n",
+       "      <td>1</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>1</th>\n",
+       "      <td>1</td>\n",
+       "      <td>black</td>\n",
+       "      <td>male</td>\n",
+       "      <td>2018-04-01</td>\n",
+       "      <td>1.69</td>\n",
+       "      <td>60623</td>\n",
+       "      <td>58431</td>\n",
+       "      <td>NaN</td>\n",
+       "      <td>180</td>\n",
+       "      <td>519375</td>\n",
+       "      <td>False</td>\n",
+       "      <td>1</td>\n",
+       "      <td>0</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>2</th>\n",
+       "      <td>2</td>\n",
+       "      <td>black</td>\n",
+       "      <td>female</td>\n",
+       "      <td>2013-11-01</td>\n",
+       "      <td>0.08</td>\n",
+       "      <td>60637</td>\n",
+       "      <td>28489</td>\n",
+       "      <td>8.780219</td>\n",
+       "      <td>360</td>\n",
+       "      <td>265714</td>\n",
+       "      <td>True</td>\n",
+       "      <td>1</td>\n",
+       "      <td>0</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>3</th>\n",
+       "      <td>3</td>\n",
+       "      <td>black</td>\n",
+       "      <td>male</td>\n",
+       "      <td>2011-10-01</td>\n",
+       "      <td>0.07</td>\n",
+       "      <td>60626</td>\n",
+       "      <td>122782</td>\n",
+       "      <td>1.915670</td>\n",
+       "      <td>360</td>\n",
+       "      <td>917704</td>\n",
+       "      <td>True</td>\n",
+       "      <td>1</td>\n",
+       "      <td>0</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>4</th>\n",
+       "      <td>4</td>\n",
+       "      <td>white</td>\n",
+       "      <td>female</td>\n",
+       "      <td>2014-07-01</td>\n",
+       "      <td>0.09</td>\n",
+       "      <td>60614</td>\n",
+       "      <td>324243</td>\n",
+       "      <td>3.680747</td>\n",
+       "      <td>300</td>\n",
+       "      <td>1728441</td>\n",
+       "      <td>True</td>\n",
+       "      <td>1</td>\n",
+       "      <td>0</td>\n",
+       "    </tr>\n",
+       "  </tbody>\n",
+       "</table>\n",
+       "</div>"
+      ],
+      "text/plain": [
+       "   Unnamed: 0   race  gender        date   fed    zip  income   interest  \\\n",
+       "0           0  black  female  2017-10-01  1.15  60637   21155  10.195762   \n",
+       "1           1  black    male  2018-04-01  1.69  60623   58431        NaN   \n",
+       "2           2  black  female  2013-11-01  0.08  60637   28489   8.780219   \n",
+       "3           3  black    male  2011-10-01  0.07  60626  122782   1.915670   \n",
+       "4           4  white  female  2014-07-01  0.09  60614  324243   3.680747   \n",
+       "\n",
+       "   term  principal  approved  type_home  type_personal  \n",
+       "0    12      44622      True          0              1  \n",
+       "1   180     519375     False          1              0  \n",
+       "2   360     265714      True          1              0  \n",
+       "3   360     917704      True          1              0  \n",
+       "4   300    1728441      True          1              0  "
+      ]
+     },
+     "execution_count": 52,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "coded_cols = pd.get_dummies(loans[\"type\"], prefix=\"type\", drop_first=True)\n",
+    "encoded_loans = pd.concat([loans, coded_cols], axis=1)\n",
+    "loans = encoded_loans.drop([\"type\"], axis=1)\n",
+    "loans.head()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Several columns contain null data. This means that the information was not recorded by the loan officer at the time of the application. This may be a problem as many machine learning models cannot handle undefined input or output values.\n",
+    "\n",
+    "There are several methods of handling null data. One option is to drop all rows where the entry is not defined. "
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 42,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "877"
+      ]
+     },
+     "execution_count": 42,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "all_dropped = loans.dropna()\n",
+    "len(all_dropped)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Another option is to drop just the columns where there is a null entry. "
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 44,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "Index(['Unnamed: 0', 'race', 'gender', 'date', 'fed', 'zip', 'income', 'term',\n",
+       "       'principal', 'approved', 'type__home', 'type__personal'],\n",
+       "      dtype='object')"
+      ]
+     },
+     "execution_count": 44,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "cols_dropped = loans.dropna(axis=\"columns\")\n",
+    "cols_dropped.columns"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "You can also try to attribute a value to data in a column that's missing. Here for example, we fill the missing entries in the ``interest`` column with 0.  "
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 46,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "0    10.195762\n",
+       "1     0.000000\n",
+       "2     8.780219\n",
+       "3     1.915670\n",
+       "4     3.680747\n",
+       "Name: interest, dtype: float64"
+      ]
+     },
+     "execution_count": 46,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "filled_interest = loans[\"interest\"].fillna(0.0)\n",
+    "filled_interest.head()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "**You should take a moment now to examine the missing data and pick a method for handling it** "
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 3. Model Training"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Before beginning this section please execute this block of code. This tells the plugin that you have reached the stage where you are starting to build models. "
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 47,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# %prompter_plugin model_training%"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Executing this block does not prevent you from going back and revisiting previous data analysis decisions. "
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Now we ask that you train a classifier which predicts whether a loan will be approved or not. The purpose of this classifier is to be used by loan officers or local lenders to recommend to applicants specific loans they might be eligible for. The lenders hope that this tool will help match financial products to borrowers more efficiently. \n",
+    "\n",
+    "Please note that this classifier *will not* be used to make decisions about whether to grant a loan or not. \n",
+    "\n",
+    "There are a couple different things you could do here. A small example using the ``LogisticRegressionClassifier`` is included below. Other classifiers include the ``RandomForestClassifier`` or ``KNeighborsClassifier``"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 64,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "0.518"
+      ]
+     },
+     "execution_count": 64,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "from sklearn.linear_model import LogisticRegression\n",
+    "\n",
+    "X = loans[[\"type_home\", \"type_personal\", \"income\", \"principal\"]]\n",
+    "\n",
+    "y = loans[\"approved\"]\n",
+    "\n",
+    "lr = LogisticRegression()\n",
+    "lr.fit(X,y)\n",
+    "\n",
+    "lr.score(X, y)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": []
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 4. Model Selection"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "There are many different ways that models can vary. You could use different model types, use different input variables, or different model parameters. In this section please take a moment to try to examine how if you change one or more of these parameters the model's performance changes.\n",
+    "\n",
+    "At the end of this section you should have a model you believe to be the best for the purpose described in this scenario."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": []
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# End\n",
+    "\n",
+    "When you feel you have completed this exercise, please execute this cell to submit your model. You may (but are not required to) submit multiple times. "
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 4,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# %prompter_plugin submit%"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.6.4"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 4
+}
