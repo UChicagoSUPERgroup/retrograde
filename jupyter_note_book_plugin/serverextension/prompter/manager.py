@@ -2,7 +2,7 @@
 we need a global session manager which handles
 routing of code analyses and handles failures
 """
-import sys, os
+import sys, os, re
 
 import mysql.connector
 
@@ -77,8 +77,15 @@ class AnalysisManager:
         return response
 
     def check_submit(self, kernel_id, cell_id):
+
         code = self.db.get_code(kernel_id, cell_id)
-        return "%prompter_plugin submit%" in code
+        invocation_matcher = re.compile(r"#\W*%(\w+)\W+(\w+)")
+        matches = invocation_matcher.findall(code)
+
+        for match in matches:
+            if match[0] == "prompter_plugin" and match[1] == "submit":
+                return True
+        return False
 
     def make_response(self, kernel_id, cell_id, mode=None):
         """

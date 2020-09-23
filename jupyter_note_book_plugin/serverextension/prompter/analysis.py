@@ -292,12 +292,12 @@ class AnalysisEnvironment:
                     except sqlite3.IntegrityError:
                         self._nbapp.log.warning("[STORAGE] multiple namespaces found")
                         cols = self.get_col_names_callnode(target)
-                        self.entry_points[target.id]["columns"] = {c : self.get_col_stats(target, c) for c in cols}
+#                        self.entry_points[target.id]["columns"] = {c : self.get_col_stats(target, c) for c in cols}
                         return
                     if not ns_entry:
                         self._nbapp.log.debug("[ANALYSIS could not find namespace for ({0}, {1}), waiting".format(self.exec_count, datetime.now()))
                         cols = self.get_col_names_callnode(target)
-                        self.entry_points[target.id]["columns"] = {c : self.get_col_stats(target, c) for c in cols}
+#                        self.entry_points[target.id]["columns"] = {c : self.get_col_stats(target, c) for c in cols}
                         return
                     ns = dill.loads(ns_entry["namespace"])
  
@@ -325,15 +325,6 @@ class AnalysisEnvironment:
         else:
             return self.get_col_names_callnode(obj)
 
-    def get_col_stats(self, target, colname):
-    
-        output = {}
-        output["type"] = self._execute_code(astor.to_source(type_exp))
-        output["size"] = self._execute_code(astor.to_source(len_exp))
-#        output["size"] = int(output["size"])
-
-        return output 
-        
     def data_imbalance(self, obj, colnames):
         output = {}
         for col in colnames:

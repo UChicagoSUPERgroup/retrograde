@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import dill
+import re
 
 from scipy.stats import zscore
 from random import choice
@@ -26,7 +27,32 @@ class Notifications:
         """form the response to send to the frontend""" 
         raise NotImplementedError
  
-class OnetimeNote(Notifications):
+class EnabledNote(Notifications):
+
+    def __init__(self, db):
+        super().__init__(db)
+        self.start_message_recvd = False
+
+    def feasible(self, cell_id, env):
+
+        if self.start_message_recvd:
+            return True 
+
+        cell_code = self.db.get_code(env._kernel_id, cell_id)
+        invocation_matcher = re.compile(r"#\W*%(\w+)\W+(\w+)")
+
+        env._nbapp.log.debug("[ENABLEDNOTE] Testing statement {0}".format(cell_code)) 
+
+        for line in cell_code.splitlines():
+            mtch = invocation_matcher.search(line)
+            env._nbapp.log.debug("[ENABLEDNOTE] testing match {0}".format(mtch))
+            if mtch and mtch.group(1) == "prompter_plugin"\
+                    and mtch.group(2) == "model_training":
+                self.start_message_recvd = True
+                env._nbapp.log.debug("[ENABLEDNOTE] model training started")
+        return self.start_message_recvd
+
+class OnetimeNote(EnabledNote):
     """
     A notification that is sent exactly once
     """
@@ -36,13 +62,14 @@ class OnetimeNote(Notifications):
         self.sent = False
 
     def feasible(self, cell_id, env):
-        return not self.sent
+        return (not self.sent and super().feasible(cell_id, env))
     
     def times_sent(self):
         return int(self.sent)
 
     def make_response(self, env, kernel_id, cell_id):
         self.sent = True
+
 
 class SensitiveColumnNote(OnetimeNote):
 
@@ -170,7 +197,7 @@ class OutliersNote(OnetimeNote):
 
         self.db.store_response(kernel_id, cell_id, resp) 
 
-class PerformanceNote(Notifications):
+class PerformanceNote(EnabledNote):
 
     def feasible(self, cell_id, env):
 
