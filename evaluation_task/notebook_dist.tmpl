@@ -162,8 +162,10 @@
     }
    ],
    "source": [
+    "# import pandas \n\n",
     "import pandas as pd\n",
     "\n",
+    "# load dataframe and print first 5 rows\n\n",
     "loans = pd.read_csv(\"loan_data.csv\")\n",
     "loans.head()"
    ]
@@ -190,7 +192,8 @@
     }
    ],
    "source": [
-    "sum(loans[\"approved\"])/len(loans[\"approved\"]) # calculating the percent of approved loans"
+    "# calculating the percent of approved loans\n\n",
+    "sum(loans[\"approved\"])/len(loans[\"approved\"])"
    ]
   },
   {
@@ -212,25 +215,14 @@
     }
    ],
    "source": [
-    "# 25th and 75th percentile\n",
+    "# 25th and 75th percentile\n\n",
     "print(loans[\"principal\"].quantile(0.25), loans[\"principal\"].quantile(0.75))"
    ]
   },
   {
    "cell_type": "markdown",
    "metadata": {},
-   "source": [
-    "``interest`` is the annual percent interest on the loan. ``term`` is how long in months the loan was supposed to run. \n",
-    "\n",
-    "``income`` is the annual income of the loan applicants."
-   ]
-  },
-  {
-   "cell_type": "markdown",
-   "metadata": {},
-   "source": [
-    "The ``type`` column denotes the purpose of the loan. "
-   ]
+   "source": SECTION_7_TEXT
   },
   {
    "cell_type": "code",
@@ -249,21 +241,14 @@
     }
    ],
    "source": [
+    "#get unique loan types\n",
     "loans[\"type\"].unique()"
    ]
   },
   {
    "cell_type": "markdown",
    "metadata": {},
-   "source": [
-    "There are three possible values ``type`` can have: ``personal``, ``home`` and ``auto``. \n",
-    "\n",
-    "* ``auto`` These loans were for automobile purchases. With these loans, the lender may repossess the car if the person who took out the loan is unable to make payments.\n",
-    "\n",
-    "* ``home`` These loans were for the purchase of residential real estate. Under these loans, the lender may reposssess the home through foreclosure if the person who took out the loan is unable to make payments.\n",
-    "\n",
-    "* ``personal`` These loans are for personal expenses or investments other than a home or automobile. Under these loans, there is not generally any specific piece of property that a lender may repossess."
-   ]
+   "source": SECTION_10_TEXT
   },
   {
    "cell_type": "code",
@@ -338,13 +323,7 @@
   {
    "cell_type": "markdown",
    "metadata": {},
-   "source": [
-    "## 2. Data Cleaning\n",
-    "\n",
-    "Before we can use this data to build a model, we'll need to clean it up a bit. \n",
-    "\n",
-    "The ``date`` column is the date the loan was applied for. However because of the way Pandas works with csv files, this is interpreted as a string. In order do things like test whether a loan was issued before or after a certain date, we need to convert it to a different format."
-   ]
+   "source": SECTION_11_TEXT
   },
   {
    "cell_type": "code",
@@ -358,9 +337,7 @@
   {
    "cell_type": "markdown",
    "metadata": {},
-   "source": [
-    "Now if we wanted to see how many applications there were from 2015 on, we can do things like this"
-   ]
+   "source": SECTION_12_TEXT
   },
   {
    "cell_type": "code",
@@ -387,15 +364,7 @@
   {
    "cell_type": "markdown",
    "metadata": {},
-   "source": [
-    "Another thing we need to do is to deal with data that is categorical (not numeric and which does not have any sort of ordering). Since many scikit-learn models can only handle data that is numeric , it is necessary to represent these columns numerically.\n",
-    "\n",
-    "One example of this is the ``type`` column. To turn this into numeric data, we'll apply a dummy encoding. This creates two columns: one which indicates whether the loan was a home loan and one which indicates whether the loan was a personal loan. If an entry is neither, we can the assume that it was an auto loan.\n",
-    "\n",
-    "There are other ways of representing categorical data, such as OneHot or simple numeric labels. If you are familiar with those techniques, and believe them to be applicable in this case, you may choose to apply them instead.\n",
-    "\n",
-    "**There are other categorical data columns in the data, you should take this opportunity to encode those too**"
-   ]
+   "source": SECTION_13_TEXT
   },
   {
    "cell_type": "code",
@@ -554,11 +523,7 @@
   {
    "cell_type": "markdown",
    "metadata": {},
-   "source": [
-    "Several columns contain null data. This means that the information was not recorded by the loan officer at the time of the application. This may be a problem as many machine learning models cannot handle undefined input or output values.\n",
-    "\n",
-    "There are several methods of handling null data. One option is to drop all rows where the entry is not defined. "
-   ]
+   "source": SECTION_14_TEXT
   },
   {
    "cell_type": "code",
@@ -584,9 +549,7 @@
   {
    "cell_type": "markdown",
    "metadata": {},
-   "source": [
-    "Another option is to drop just the columns where there is a null entry. "
-   ]
+   "source": SECTION_15_TEXT
   },
   {
    "cell_type": "code",
@@ -614,9 +577,7 @@
   {
    "cell_type": "markdown",
    "metadata": {},
-   "source": [
-    "You can also try to attribute a value to data in a column that's missing. Here for example, we fill the missing entries in the ``interest`` column with 0.  "
-   ]
+   "source": SECTION_16_TEXT
   },
   {
    "cell_type": "code",
@@ -647,23 +608,17 @@
   {
    "cell_type": "markdown",
    "metadata": {},
-   "source": [
-    "**You should take a moment now to examine the missing data and pick a method for handling it** "
-   ]
+   "source": SECTION_17_TEXT
   },
   {
    "cell_type": "markdown",
    "metadata": {},
-   "source": [
-    "## 3. Model Training"
-   ]
+   "source": SECTION_18_TEXT
   },
   {
    "cell_type": "markdown",
    "metadata": {},
-   "source": [
-    "Before beginning this section please execute this block of code. This tells the plugin that you have reached the stage where you are starting to build models. "
-   ]
+   "source": SECTION_19_TEXT
   },
   {
    "cell_type": "code",
@@ -677,20 +632,12 @@
   {
    "cell_type": "markdown",
    "metadata": {},
-   "source": [
-    "Executing this block does not prevent you from going back and revisiting previous data analysis decisions. "
-   ]
+   "source": SECTION_20_TEXT
   },
   {
    "cell_type": "markdown",
    "metadata": {},
-   "source": [
-    "Now we ask that you train a classifier which predicts whether a loan will be approved or not. The purpose of this classifier is to be used by loan officers or local lenders to recommend to applicants specific loans they might be eligible for. The lenders hope that this tool will help match financial products to borrowers more efficiently. \n",
-    "\n",
-    "Please note that this classifier *will not* be used to make decisions about whether to grant a loan or not. \n",
-    "\n",
-    "There are a couple different things you could do here. A small example using the ``LogisticRegressionClassifier`` is included below. Other classifiers include the ``RandomForestClassifier`` or ``KNeighborsClassifier``"
-   ]
+   "source": SECTION_21_TEXT
   },
   {
    "cell_type": "code",
@@ -731,18 +678,12 @@
   {
    "cell_type": "markdown",
    "metadata": {},
-   "source": [
-    "## 4. Model Selection"
-   ]
+   "source": SECTION_22_TEXT
   },
   {
    "cell_type": "markdown",
    "metadata": {},
-   "source": [
-    "There are many different ways that models can vary. You could use different model types, use different input variables, or different model parameters. In this section please take a moment to try to examine how if you change one or more of these parameters the model's performance changes.\n",
-    "\n",
-    "At the end of this section you should have a model you believe to be the best for the purpose described in this scenario."
-   ]
+   "source": SECTION_23_TEXT
   },
   {
    "cell_type": "code",
@@ -754,11 +695,7 @@
   {
    "cell_type": "markdown",
    "metadata": {},
-   "source": [
-    "# End\n",
-    "\n",
-    "When you feel you have completed this exercise, please execute this cell to submit your model. You may (but are not required to) submit multiple times. "
-   ]
+   "source": SECTION_24_TEXT
   },
   {
    "cell_type": "code",

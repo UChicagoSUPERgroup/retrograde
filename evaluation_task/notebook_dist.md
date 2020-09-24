@@ -14,16 +14,20 @@ This task is structured into four parts.
 3. **Model Training**
 4. **Model Selection**
 
-In each of these, there will be some code pre-written. You are not required to use this code, and may replace it if you like. You may refer to any documentation source you like during this task (such as Pandas of scikit-learn API documentation, or StackOverflow).
+In each of these, there will be some code pre-written. This code is meant to help you complete the task by providing structure, but you are not required to use the provided code if you do not want to. You may refer to any documentation source you like during this task (such as Pandas of scikit-learn API documentation, or StackOverflow).
 
 We ask that you use pandas and scikit-learn to perform the tasks. We have also installed numpy and matplotlib, should those be helpful. You will not be able to install any other non-standard libraries.
 <!--- section_3_text -->
 ## 1. Dataset Introduction
 <!--- section_4_text -->
-We will be asking you to use loan&#95;data dataset during this experiment. This data was collected in a major metropolitan city in the United States. It contains information about applications received for loans aggregated from several different loan providers.
+We will be asking you to use provided the \"loan&#95;data.csv\" dataset during this experiment. This data was collected in a major metropolitan city in the United States. It contains information about applications received for loans aggregated from several different loan providers.
+
+Let's start working with the dataset using some python code to help us understand it.
+
+Below is a few lines of python code that loads the provided \"loan&#95;data.csv\" dataset into a pandas dataframe. 
 
 <!--- section_5_text -->
-Let's look at some of the columns in the dataframe. The column ``approved`` indicates whether or not the loan was approved
+Let's look at some of the columns in the dataframe. The column ``approved`` on the far left indicates whether or not the loan was approved.
 
 <!--- section_6_text -->
 The column ``principal`` is the amount of money the loan was for, that is how much money the applicant received if the loan was approved.
