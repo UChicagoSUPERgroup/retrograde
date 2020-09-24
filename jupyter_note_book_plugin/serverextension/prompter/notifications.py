@@ -213,12 +213,23 @@ class PerformanceNote(EnabledNote):
  
         for model_name in poss_models:
 
-            features_name = poss_models[model_name]["features"]["name"]
-            labels_name = poss_models[model_name]["label"]["name"]
+            if not poss_models[model_name]:
+                continue
+
+            if "features" in poss_models[model_name] and "name" in poss_models[model_name]["features"]:
+                features_name = poss_models[model_name]["features"]["name"]
+            else:
+                features_name = None
+            if "label" in poss_models[model_name] and "name" in poss_models[model_name]["label"]:
+                labels_name = poss_models[model_name]["label"]["name"]
+            else:
+                labels_name = None
 
             has_model = model_name in ns.keys()
             has_features = features_name in dfs.keys() # implicit expectation that arguments are dataframes
             has_labels = labels_name in dfs.keys()
+
+            
 
             env._nbapp.log.debug(
                 "[PERFORMANCENOTE] model {0} has_model {1}, has_features {2}, has_labels {3}".format(model_name, has_model, has_features, has_labels))

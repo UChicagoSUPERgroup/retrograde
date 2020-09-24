@@ -175,6 +175,7 @@ class AnalysisManager:
             data_entry = self.db.find_data(info)
             if not data_entry:
                 new_data_response[name] = info
+                env._nbapp.log.debug("[MANAGER] Adding new data {0}".format(info))
                 self.db.add_data(info, 1)
         return new_data_response
 

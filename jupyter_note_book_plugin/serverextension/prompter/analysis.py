@@ -6,6 +6,7 @@ from queue import Empty
 from ast import NodeVisitor, Call, Name, Attribute, Expr, Load, Str, Num
 from ast import Subscript, List, Index, ExtSlice, keyword, NameConstant
 from ast import parse, walk, iter_child_nodes, NodeTransformer, copy_location
+from ast import Tuple, List
 
 from random import choice
 #from nbconvert.preprocessers import DeadKernelError
@@ -453,8 +454,8 @@ class AnalysisEnvironment:
         self.models[model_name]["train"]["labels"] = label_cols
 
         # run perf. test on features
-        if self.is_clf(func_node.value):
-            self._nbapp.log.debug("[ANALYSIS] {0} is a classifier, running performance metrics".format(model_name))
+#        if self.is_clf(func_node.value):
+#            self._nbapp.log.debug("[ANALYSIS] {0} is a classifier, running performance metrics".format(model_name))
         #    self.models[model_name]["train"]["perf"] = self.model_perf_clf(func_node, args)
 
     def get_models(self, cell_code):
@@ -570,12 +571,10 @@ class AnalysisEnvironment:
     def resolve_data(self, node, permitted_types={DATAFRAME_TYPE, SERIES_TYPE}):
         """
         given a node, find nearest upstream variable with type in permitted_type
-
         """
         if self.graph.get_type(node) in permitted_types:
             return node
         queue = self.graph.get_parents(node)
-
         while queue:
             parent = queue.pop()
             if self.graph.get_type(parent) in permitted_types:
@@ -739,11 +738,18 @@ class CellVisitor(NodeVisitor):
             self.unfinished_call = None
 
         if node.value in self.nodes:
+            self.env._nbapp.log.debug("[GraphVisitor] value of assign in nodes {0}".format(astor.dump_tree(node.value)))
             for trgt in node.targets:
-                self.env.graph.link(node.value, trgt, 
-                                    dest_type=self.env.resolve_type_flow(node.value, trgt))
-                self.nodes.add(trgt)
+                if isinstance(trgt, Tuple) or isinstance(trgt, List): # apparently multiple assignment the LHS is a Tuple/List type
+                    for elt in trgt.elts:
+                        self.env.graph.link(node.value, elt, dest_type=self.env.resolve_type_flow(node.value, trgt))
+                        self.nodes.add(elt)
+                else: 
+                    self.env.graph.link(node.value, trgt, 
+                                        dest_type=self.env.resolve_type_flow(node.value, trgt))
+                    self.nodes.add(trgt)
         if node.value not in self.nodes:
+            self.env._nbapp.log.debug("[GraphVisitor] value of assign not in nodes {0}".format(astor.dump_tree(node.value)))
             for trgt in node.targets:
                 if isinstance(trgt, Name):
                     self.nodes.discard(trgt)
@@ -760,7 +766,9 @@ class CellVisitor(NodeVisitor):
             self.env.graph.link(node.func, node)
             self.nodes.add(node)
         for arg in node.args:
+            self.env._nbapp.log.debug("[GraphVisitor] Visiting {0}".format(astor.dump_tree(node)))
             if arg in self.nodes:
+                self.env._nbapp.log.debug("[GraphVisitor] arg in call {0}".format(astor.dump_tree(arg)))
                 self.env.graph.link(arg, node,
                                     dest_type=self.env.resolve_type_flow(arg, node))
                 self.nodes.add(node)
@@ -790,6 +798,7 @@ class CellVisitor(NodeVisitor):
         """is name referencing a var we care about?"""
         name_node = self.env.graph.find_by_name(node)
         if name_node:
+            self.env._nbapp.log.debug("[GraphVisitor] linking name {0}".format(node.id))
             self.env.graph.link(name_node, node, dest_type=self.env.resolve_type_flow(name_node, node))
             self.nodes.add(node)
 
