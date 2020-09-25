@@ -82,84 +82,6 @@ class AnalysisEnvironment:
 
         return km, kc 
 
-    def sortilege(self, kernel_id, cell_id):
-        """
-        run the sortilege analyses, and return a list of options
-        formatted as {"type" : <wands | cups | swords | pentacles>,
-                      if "wands" 
-                        "op" : <sum | mean>, "num_col" <numeric column name>,
-                        "cat_col" : <categorical column name>
-                        "rank" : <where the variation ranks relative to other variances>
-                        "total" : <total variances>
-                      }
-        """
-        df = self.find_dataframe(kernel_id, cell_id)
-        if df is None: return None
-
-        output = wands(df)[:13]
-        output += cups(df)[:13]
-        output += swords(df)[:13]
-        output += pentacles(df)[:13]
- 
-        return output
- 
-    def colsim(self, kernel_id, cell_id):
-        """
-        see if any columns in the data resemble sensitive categories
-        return a list of options and list of weights
-        
-        options is a list of tuples w/ column and category, weights is
-        similarity score
-        """
-        df = self.find_dataframe(kernel_id, cell_id)
-
-        if df is None: return None
-        
-        cols = df.columns
-        categories = {"sex" : check_sex, "race" : check_race} # each value is function that takes colname and df as inputs
-        
-        options = []
-        weights = []
-
-        for c in cols:
-            for cat, cat_fn in categories.items():
-                options.append((c, cat))
-                weights.append(cat_fn(c, df))
-        return options, weights
- 
-    def find_dataframe(self, kernel_id, cell_id):
-        """
-        find the nearest/most recent dataframe variable
-        """
-        self._nbapp.log.debug(
-            "[ANALYSIS] looking for dataframes for cell {0} and kernel {1}".format(cell_id, kernel_id))
-        cell_code = self.db.get_code(kernel_id, cell_id)
-         
-        if not cell_code: 
-            self._nbapp.log.debug(
-                "[ANALYSIS] could not recover cell code")
-            return None
-        
-        cell_tree = parse(cell_code)
-        visitor = NearestDataframeFinder(self)
-        visitor.visit(cell_tree)
-
-        curr_ns = self.db.recent_ns()
-        curr_df = load_dfs(curr_ns)
-
-        if len(curr_df.keys()) == 0:
-            return None # nothing to be done since introspection not possible
-
-        if len(visitor.names) == 0 and len(curr_df.keys()) > 0:
-            poss_choices = list(curr_df.keys())
-        else:        
-            poss_choices = [var_name for var_name in visitor.names if var_name in curr_df.keys()]
-
-        var_name = choice(poss_choices)
-        self._nbapp.log.debug(
-            "[ANALYSIS] found dataframe {0} for cell {1}".format(var_name, cell_id))
-        return curr_df[var_name]       
- 
     def cell_exec(self, code, notebook, cell_id, exec_ct):
         """
         execute a cell and propagate the analysis
@@ -326,40 +248,6 @@ class AnalysisEnvironment:
         else:
             return self.get_col_names_callnode(obj)
 
-    def data_imbalance(self, obj, colnames):
-        output = {}
-        for col in colnames:
-            top_counts_expr = Call(Attribute(
-                                value=Call(
-                                    func=Attribute(
-                                        value=Subscript(value=obj, slice=Index(value=Str(s=col))),
-                                        attr="value_counts"),
-                                    args=[], keywords=[keyword(arg="normalize", value=NameConstant(value=True))]),
-                                attr="head"),args=[Num(n=10)],keywords=[])
-            low_counts_expr = Call(Attribute(
-                                value=Call(
-                                    func=Attribute(
-                                        value=Subscript(value=obj, slice=Index(value=Str(s=col))),
-                                        attr="value_counts"),
-                                    args=[], keywords=[keyword(arg="normalize", value=NameConstant(value=True))]),
-                                attr="tail"),args=[Num(n=10)],keywords=[])
- 
-            list_expr = List(elts=[top_counts_expr, low_counts_expr])
-            concat_call_expr = Call(
-                                func=Attribute(value=Name(id="pd"), attr="concat"),
-                                args=[list_expr], keywords=[])
-            value_counts_expr = Call(
-                                 func=Attribute(
-                                   value=concat_call_expr,
-                                   attr="to_dict"),
-                                 args=[], keywords=[])
-            resp = self._execute_code(astor.to_source(value_counts_expr))
-            output[col] = eval(resp)
-
-        return output 
-#    def data_null(self, obj, colnames):
-        
-#    def data_corr(self, obj, colnames):     
     def is_newdata_call(self, call_node):
         """is this call node a pd read function"""
         func = call_node.func
@@ -1042,29 +930,6 @@ class SnippetVisitor(NodeTransformer):
         if node.id in self.map:
             return copy_location(self.map[node.id], node)
         return node
-class NearestDataframeFinder(NodeVisitor):
-
-    def __init__(self, env):
-        super().__init__()
-        self.env = env
-        self.names = set()
-
-    def visit_Name(self, node):
-
-        q = [node]
-        
-        while len(q) > 0:
-
-            path_node = q.pop(0)
-
-            if self.env.graph.get_type(path_node) == DATAFRAME_TYPE:
-                if isinstance(path_node, Name): self.names.add(path_node.id)
-            else:
-                try:
-                    q.extend(self.env.graph.get_parents(path_node))
-                except KeyError:
-                    pass
-        self.generic_visit(node)
 
 class ModelVisitor(NodeVisitor):
 
