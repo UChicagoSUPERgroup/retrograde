@@ -155,7 +155,7 @@ class DbHandler(object):
 
         delta = timedelta(seconds=3) 
 
-        self.renew_connection()
+        #self.renew_connection()
         curs.execute(self.cmds["LINK_CELL"], (exec_ct,))
         results = curs.fetchall()
        
@@ -287,7 +287,7 @@ class RemoteDbHandler(DbHandler):
             self._local_conn = sqlite3.connect(db_path_resolved+dbname, 
                 detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
             self._local_conn.row_factory = sqlite3.Row
-            self._local_cursor = self._conn.cursor()
+            self._local_cursor = self._local_conn.cursor()
         else:
             if not os.path.isdir(db_path_resolved):
                os.mkdir(db_path_resolved)
