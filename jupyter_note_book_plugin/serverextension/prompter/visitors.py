@@ -3,8 +3,8 @@ These are AST visitors used primarily by the analysis environment
 """
 
 from ast import NodeVisitor
-from ast import Call, Attribute, Name, Str, Assign, Expr
-
+from ast import Call, Attribute, Name, Str, Assign, Expr, Num
+from ast import Index, Subscript, Slice, ExtSlice, List
 import pandas as pd
 
 PD_READ_FUNCS = ["read_csv", "read_fwf", "read_json", "read_html",
@@ -98,12 +98,10 @@ class DataFrameVisitor(BaseImportVisitor):
         if not lhs_has_df:
             for name in self.context["non_df_names"]:
                 try:
-                    self.assign_map[name].update(rhs_df_names)
-                    self.assign_map[name].update(rhs_non_dfs)
+                    self.assign_map[name].add(node.value)
                 except KeyError:
                     self.assign_map[name] = set()
-                    self.assign_map[name].update(rhs_df_names)
-                    self.assign_map[name].update(rhs_non_dfs)
+                    self.assign_map[name].add(node.value)
 
         self.context["df_names"] = []
         self.context["non_df_names"] = []
@@ -113,8 +111,311 @@ class DataFrameVisitor(BaseImportVisitor):
         self.context["info"] = []
         self.context["df_names"] = []
         self.context["non_df_names"] = []
-# class ModelVisitor(BaseImportVisitor):
+
+class ModelFitVisitor(BaseImportVisitor):
+
+    def __init__(self, model_names, namespace, assign_map):
+        # strings of known model variable names
+        self.model_names = model_names
+        self.ns = namespace # mapping of varname -> object
+        self.assignments = assign_map # map of name.id -> RHS of assign statement
+
+        self.models = {}
+        self.unmatched_call = None
+
+    def visit_Call(self, node):
+
+        self.generic_visit(node)
+        
+        if isinstance(node.func, Attribute) and node.func.attr == "fit":
+
+            x_cols = self.get_columns(node.args[0])
+            y_cols = self.get_columns(node.args[1])
+
+            open_names = [n for n in self.models.keys() if self.models[n] == {}]
+            
+            if open_names:
+                name = open_names.pop()
+                self.models[name] = {"x" : x_cols, "y" : y_cols}
+            else:
+                self.unmatched_call = {"x" : x_cols, "y" : y_cols}
+
+    def visit_Assign(self, node): 
+
+        self.generic_visit(node)
+        open_names = [n for n in self.models.keys() if self.models[n] == {}]
+
+        if open_names and self.unmatched_call: 
+
+            name = open_names.pop()
+            self.models[name] = self.unmatched_call
+            self.unmatched_call = None
+ 
+    def visit_Name(self, node):
+        if node.id in self.model_names and node.id not in self.models.keys():
+            self.models[node.id] = {}
+
+    def get_columns(self, node):
+        visitor = ColumnVisitor(self.ns, self.assignments)
+        visitor.visit(node)
+        
+        return visitor.cols
+
+class ColumnVisitor(NodeVisitor):
+    """
+    This has the job of, given a node, trying to find the
+    column names, if any, of the resulting dataframe
+    """
+
+    def __init__(self, ns, assignments):
+        # dfs is a dict where varname -> dataframe object
+        self.ns = ns
+
+        # mapping of name id -> RHS of assign statements
+        self.assign_vals = assignments
+
+        # written to during parsing
+        self.refs_df = False # is there a read from a dataframe type object?
+        self.cols = None # what are the active columns?
+        self.df_name = None
+
+        self.df_func_handlers = [
+            DropNaHandler(self.ns),
+            ToNumpyHandler(self.ns),
+            DropHandler(self.ns),
+        ]
+
+    def visit_Call(self, node):
+
+        self.generic_visit(node)
+
+        if self.refs_df:
+            for handler in self.df_func_handlers:
+                if handler.match(node):
+                    self.cols = handler.adjust(self.cols, node, self.ns[self.df_name])
+
+    def parse_regular(self, node):
+        # parse a subscript node referencing things like df["a"], df["a" : "c"], df[["a","b"]]
+        if isinstance(node.slice, Index) and isinstance(node.slice.value, Str):
+            if node.slice.value.s in self.cols:
+                self.cols = [node.slice.value.s] 
+        if isinstance(node.slice, Index) and isinstance(node.slice.value, Num):
+            if node.slice.value.n in self.cols:
+                self.cols = [node.slice.value.n]
+        if isinstance(node.slice, Index) and isinstance(node.slice.value, List):
+            # try resolving to strings
+            poss_selected = resolve_list(self.ns, node.slice.value)
+            if all([col_name in self.cols for col_name in poss_selected]):
+                self.cols = poss_selected
+        if isinstance(node.slice, Index) and isinstance(node.slice.value, Name):
+            # need to try to resolve name (may be boolean array, normal list of strings)
+            ref_obj = self.ns[node.slice.value.id]
+            if hasattr(ref_obj, "__iter__"):
+                if all([obj in self.cols for obj in ref_obj]):
+                    self.cols = list(ref_obj)
+            else:
+                if ref_obj in self.cols:
+                    self.cols = [ref_obj]
+
+    def parse_loc(self, node):
+        """
+        node is a subscript where the main item references the loc attribute
+        """
+        if isinstance(node.slice, ExtSlice):
+            # then we know the second element indexes columns
+            col_index_node = node.slice.dims[-1]
+        elif isinstance(node.slice, Index):
+            if isinstance(node.slice.value, Tuple):
+                col_index_node = node.slice.value.elts[-1]
+            else:
+                col_index_node = node.slice.value
+        else:
+            return
+        if isinstance(col_index_node, List):
+            poss_selected = resolve_list(self.ns, col_index_node)
+            if all([col_name in self.cols for col_name in poss_selected]):
+                self.cols = poss_selected
+        if isinstance(col_index_node, Name):
+            ref_obj = self.ns[col_index_node.id]
+            if hasattr(ref_obj, "__iter__"):
+                if all([obj in self.cols for obj in ref_obj]):
+                    self.cols = list(ref_obj)
+            else:
+                if ref_obj in self.cols:
+                    self.cols = [ref_obj]
+        if isinstance(col_index_node, Str):
+            if col_index_node.s in self.cols:
+                self.cols = [col_index_node.s]
+        if isinstance(col_index_node, Num): 
+            if col_index_node.n in self.cols:
+                self.cols = [col_index_node.n]
+    def parse_iloc(self, node):
+        pass
+#    def visit_Assign(self, node):
+    def visit_Subscript(self, node):
+        self.generic_visit(node)
+
+        if not self.refs_df:
+            return
+
+        if isinstance(node.value, Attribute) and node.value.attr == "loc":
+            self.parse_loc(node)
+        elif isinstance(node.value, Attribute) and node.value.attr == "iloc":
+            self.parse_iloc(node)
+        else:   
+            self.parse_regular(node)
+
+    def visit_Attribute(self, node):
+        self.generic_visit(node)
+    def visit_Name(self, node):
+
+        if node.id in self.ns.keys():
+            if isinstance(self.ns[node.id], pd.DataFrame):
+                self.refs_df = True
+                self.df_name = node.id
+                self.cols = list(self.ns[node.id].columns)
+            if isinstance(self.ns[node.id], pd.Series):
+                self.refs_df = True
+                self.df_name = node.id
+                self.cols = [self.ns[node.id].name]
+        if not self.refs_df and node.id in self.assign_vals.keys():
+            for rhs in self.assign_vals[node.id]:
+                self.visit(rhs)
+        #print("visited name {0}, refs_df {1}, df_name {2}, cols {3}".format(node.id, self.refs_df, self.df_name, self.cols))
+
+class CallHandler:
+    """
+    class for handling instances where dataframe type object is called
+    """
+    def __init__(self, namespace):
+        self.ns = namespace
+
+    def match(self, node):
+        """is node a call to the type of function the implementing class is meant to handle?"""
+        raise NotImplementedError
+    def adjust(self, columns, node, df):
+        """returns a list of columns in dataframe after call on dataframe of specific function"""
+        raise NotImplementedError
+
+class ToNumpyHandler(CallHandler):
+    def match(self, node):
+        return isinstance(node.func, Attribute) and node.func.attr == "to_numpy"
+    def adjust(self, columns, node, df):
+        return columns
+
+class DropNaHandler(CallHandler):
+
+    def match(self, node):
+        return isinstance(node.func, Attribute) and node.func.attr == "dropna"
+
+    def adjust(self, columns, node, df):
+
+        keywords = {k.arg : k.value for k in node.keywords}
+
+        if "axis" in keywords:
+            axis = keywords["axis"].n
+        else:
+            axis = 0
+        if axis == 0:
+            return columns
+
+        if "inplace" in keywords:
+            inplace = keywords["inplace"].value
+        else:
+            inplace = False
+        if inplace:
+            return []
+        
+        if "subset" in keywords:
+            if isinstance(keywords["subset"], List):
+                subset = []
+                for elt in keywords["subset"].elts:
+                    if isinstance(elt, Str):
+                        subset.append(elt.s)
+                    elif isinstance(elt, Name) and elt.id in self.ns:
+                        subset.append(self.ns[elt.id])
+ 
+            elif isinstance(keywords["subset"], Name) and keywords["subset"].id in self.ns:
+                subset = self.ns[keywords["subset"]]
+            else:
+                subset = None
+        else:
+            subset = None 
+        
+        if "how" in keywords:
+            how = keywords["how"].value
+        else:
+            how = "any"
+
+        if "thresh" in keywords:
+            thresh = keywords["thresh"].n
+        else:   
+            thresh = None
+        return df[columns].dropna(subset=subset, how=how, thresh=thresh).columns
+class DropHandler(CallHandler):
     
+    def match(self, node):
+        return isinstance(node.func, Attribute) and node.func.attr == "drop"
+
+    def adjust(self, columns, node, df):
+
+        keywords = {k.arg : k.value for k in node.keywords}
+
+        if "axis" in keywords:
+            axis = keywords["axis"].n
+        else:
+            axis = 0
+        if axis == 0 and "columns" not in keywords:
+            return columns
+
+        if "inplace" in keywords:
+            inplace = keywords["inplace"].value
+        else:
+            inplace = False
+        if inplace:
+            return []
+
+        drop_labels = []
+        drop_columns = []
+
+        if "columns" in keywords:
+            if isinstance(keywords["columns"], Str):
+                drop_columns = [keywords["columns"].s]
+            elif isinstance(keywords["columns"], Name) and keywords["columns"].id in self.ns:
+                drop_columns = [self.ns[keywords["columns"].id]] 
+            elif isinstance(keywords["columns"], List):
+                drop_columns = resolve_list(self.ns, keywords["columns"])
+        if "labels" in keywords:
+            if isinstance(keywords["labels"], Str):
+                drop_labels = [keywords["labels"].s]
+            elif isinstance(keywords["labels"], Name) and keywords["labels"].id in self.ns:
+                drop_labels = [self.ns[keywords["labels"].id]] 
+            elif isinstance(keywords["labels"], List):
+                drop_labels = resolve_list(self.ns, keywords["labels"])
+
+        if not drop_columns and not drop_labels:
+            arg = node.args[0]
+            if isinstance(arg, Str):
+                drop_columns = [arg.s]
+            elif isinstance(arg, Name) and arg.id in self.ns:
+                drop_columns = [self.ns[arg.id]] 
+            elif isinstance(arg, List):
+                drop_columns = resolve_list(self.ns, arg)
+        return [c for c in columns if c not in drop_columns + drop_labels]
+ 
+def resolve_list(namespace, list_node):
+    output = []
+    for elt in list_node.elts:
+        if isinstance(elt, Name) and elt.id in namespace:
+            output.append(namepsace[elt.id])
+        elif isinstance(elt, Str):
+            output.append(elt.s)
+        elif isinstance(elt, NameConstant):
+            output.append(elt.value)
+        elif isinstance(elt, Num):
+            output.append(elt.n)
+
+    return output 
 def is_newdata_call(node, pd_alias):
     """
     is node a read_* type function?
