@@ -114,7 +114,8 @@ class DataFrameVisitor(BaseImportVisitor):
 
 class ModelFitVisitor(BaseImportVisitor):
 
-    def __init__(self, model_names, namespace, assign_map):
+    def __init__(self, pd_alias, model_names, namespace, assign_map):
+        super().__init__(pd_alias)
         # strings of known model variable names
         self.model_names = model_names
         self.ns = namespace # mapping of varname -> object

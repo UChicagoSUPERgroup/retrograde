@@ -35,13 +35,13 @@ class EnabledNote(Notifications):
 
     def feasible(self, cell_id, env):
 
+        env._nbapp.log.debug("[ENABLEDNOTE] checking whether enabled")
         if self.start_message_recvd:
+            env._nbapp.log.debug("[ENABLEDNOTE] yes")
             return True 
 
         cell_code = self.db.get_code(env._kernel_id, cell_id)
         invocation_matcher = re.compile(r"#\W*%(\w+)\W+(\w+)")
-
-
         for line in cell_code.splitlines():
             mtch = invocation_matcher.search(line)
             if mtch and mtch.group(1) == "prompter_plugin"\
@@ -60,14 +60,16 @@ class OnetimeNote(EnabledNote):
         self.sent = False
 
     def feasible(self, cell_id, env):
-        return (not self.sent and super().feasible(cell_id, env))
+        enabled = super().feasible(cell_id, env)
+        env._nbapp.log.debug("[ONETIMENOTE] sent: {0}".format(self.sent))
+        env._nbapp.log.debug("[ONETIMENOTE] enabled: {0}".format(enabled))
+        return ((not self.sent) and enabled)
     
     def times_sent(self):
         return int(self.sent)
 
     def make_response(self, env, kernel_id, cell_id):
         self.sent = True
-
 
 class SensitiveColumnNote(OnetimeNote):
 
@@ -102,10 +104,10 @@ class ZipVarianceNote(OnetimeNote):
 
     def feasible(self, cell_id, env):
         if super().feasible(cell_id, env):
-
+            env._nbapp.log.debug("[ZipVar] checking columns")
             race_columns = self.db.get_columns("race") # hardcoded for experiment
             zip_columns = self.db.get_columns("zip")
-
+            env._nbapp.log.debug("[ZipVar] columns are {0}, {1}".format(race_columns, zip_columns))
             if race_columns and zip_columns: 
                 return True
             return False
