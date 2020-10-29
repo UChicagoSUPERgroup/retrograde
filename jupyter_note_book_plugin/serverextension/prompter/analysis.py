@@ -99,6 +99,7 @@ class AnalysisEnvironment:
             self.entry_points[df_name] = df_visitor.info[df_name]
             self.entry_points[df_name]["cell"] = cell_id
             self.entry_points[df_name]["name"] = df_name
+            self.entry_points[df_name]["kernel"] = self._kernel_id
 
             if df_name in full_ns:
                 df_obj = full_ns[df_name]
@@ -110,9 +111,17 @@ class AnalysisEnvironment:
                         self.entry_points[df_name]["columns"][c]["type"] = str(df_obj[c].dtypes)
         # new model fit calls? 
         new_models = model_visitor.models
-        for m in new_models.values():
-            m["cell"] = cell_id
-        self.models.update(new_models) 
+        for model_name in new_models.keys():
+            if model_name in self.models:
+                if ("x" in self.models[model_name] and\
+                    "x" in new_models[model_name]) or\
+                   ("y" in self.models[model_name] and\
+                    "y" in new_models[model_name]):
+                    self.models[model_name] = new_models[model_name]
+                    self.models[model_name]["cell"] = cell_id
+            else: 
+                self.models[model_name] = new_models[model_name]
+                self.models[model_name]["cell"] = cell_id
 
     def _wait_for_clear(self, client):
         """let's try polling the iopub channel until nothing queued up to execute"""
@@ -161,11 +170,7 @@ class AnalysisEnvironment:
     def get_models(self, cell_code):
 
         """are models in cell defined in this analysis?"""
-        cell_tree = parse(cell_code)
-        visitor = ModelVisitor(self.models)
-        visitor.visit(cell_tree)
-
-        return visitor.models
+        return self.models
 
 class Aliases:
     """

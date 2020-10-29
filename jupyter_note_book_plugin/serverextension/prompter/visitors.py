@@ -130,16 +130,18 @@ class ModelFitVisitor(BaseImportVisitor):
         
         if isinstance(node.func, Attribute) and node.func.attr == "fit":
 
-            x_cols = self.get_columns(node.args[0])
-            y_cols = self.get_columns(node.args[1])
+            x_cols, df_x_name = self.get_columns(node.args[0])
+            y_cols, df_y_name = self.get_columns(node.args[1])
 
             open_names = [n for n in self.models.keys() if self.models[n] == {}]
             
             if open_names:
                 name = open_names.pop()
-                self.models[name] = {"x" : x_cols, "y" : y_cols}
+                self.models[name] = {"x" : x_cols, "y" : y_cols, 
+                                     "x_df" : df_x_name, "y_df" : df_y_name}
             else:
-                self.unmatched_call = {"x" : x_cols, "y" : y_cols}
+                self.unmatched_call = {"x" : x_cols, "y" : y_cols,
+                                       "x_df" : df_x_name, "y_df" : df_y_name}
 
     def visit_Assign(self, node): 
 
@@ -160,7 +162,7 @@ class ModelFitVisitor(BaseImportVisitor):
         visitor = ColumnVisitor(self.ns, self.assignments)
         visitor.visit(node)
         
-        return visitor.cols
+        return visitor.cols, visitor.df_name
 
 class ColumnVisitor(NodeVisitor):
     """

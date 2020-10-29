@@ -215,31 +215,52 @@ class PerformanceNote(EnabledNote):
  
         for model_name in poss_models:
 
-            if not poss_models[model_name]:
+            if not poss_models[model_name]: 
+                env._nbapp.log.debug("[PERFORMANCENOTE] model {0} not defined".format(model_name))
                 continue
 
-            if "features" in poss_models[model_name] and "name" in poss_models[model_name]["features"]:
-                features_name = poss_models[model_name]["features"]["name"]
+            env._nbapp.log.debug("[PERFORMANCENOTE] model is: {0}".format(poss_models[model_name]))
+
+            if "x" in poss_models[model_name]:
+                features_cols = poss_models[model_name]["x"]
             else:
-                features_name = None
-            if "label" in poss_models[model_name] and "name" in poss_models[model_name]["label"]:
-                labels_name = poss_models[model_name]["label"]["name"]
+                features_cols = None
+
+            if "y" in poss_models[model_name]:
+                labels_cols = poss_models[model_name]["y"]
             else:
-                labels_name = None
+                labels_cols = None
+
+            if "y_df" in poss_models[model_name]:
+                labels_df = poss_models[model_name]["y_df"]
+            else:
+                labels_df = None
+                
+            if "x_df" in poss_models[model_name]:
+                features_df = poss_models[model_name]["x_df"]
+            else:   
+                features_df = None
 
             has_model = model_name in ns.keys()
-            has_features = features_name in dfs.keys() # implicit expectation that arguments are dataframes
-            has_labels = labels_name in dfs.keys()
+            has_features = features_df in dfs.keys() # implicit expectation that arguments are dataframes
+            has_labels = labels_df in dfs.keys()
 
-            
-
+            if has_features:
+                df = dfs[features_df]
+                has_feature_cols = all([f in df.columns for f in features_cols])
+            else:
+                has_feature_cols = False 
+            if has_labels:
+                df = dfs[labels_df]
+                has_label_cols = all([f in df.columns for f in label_cols])
+            else:
+                has_label_cols = False
             env._nbapp.log.debug(
                 "[PERFORMANCENOTE] model {0} has_model {1}, has_features {2}, has_labels {3}".format(model_name, has_model, has_features, has_labels))
 
-            if (has_model and has_features and has_labels):
-                models.append((model_name, ns[model_name], dfs[features_name], 
-                               dfs[labels_name], poss_models[model_name]["features"]["name_ind"],
-                               poss_models[model_name]["label"]["name_ind"]))
+            if (has_model and has_features and has_labels and has_feature_cols and has_label_cols):
+                models.append((model_name, ns[model_name], dfs[features_df], 
+                               dfs[labels_df], features_cols, label_cols))
 
         self.models = models
 
