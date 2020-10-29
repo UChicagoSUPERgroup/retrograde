@@ -243,30 +243,56 @@ class PerformanceNote(EnabledNote):
 
             has_model = model_name in ns.keys()
             has_features = features_df in dfs.keys() # implicit expectation that arguments are dataframes
-            has_labels = labels_df in dfs.keys()
+            has_labels = (labels_df in dfs.keys()) or (labels_df in ns.keys()) 
 
             if has_features:
-                df = dfs[features_df]
-                has_feature_cols = all([f in df.columns for f in features_cols])
+                feature_df = dfs[features_df]
+                subset_features = self.get_df(feature_df, features_cols) 
             else:
-                has_feature_cols = False 
-            if has_labels:
-                df = dfs[labels_df]
-                has_label_cols = all([f in df.columns for f in label_cols])
+                feature_df = None
+            if has_labels and (labels_df in dfs.keys()):
+                label_df = dfs[labels_df]
+                subset_labels = self.get_df(label_df, labels_cols)
+            elif has_labels and isinstance(ns[labels_df], pd.Series):
+                label_df = None
+                subset_labels = ns[labels_df]
             else:
-                has_label_cols = False
-            env._nbapp.log.debug(
-                "[PERFORMANCENOTE] model {0} has_model {1}, has_features {2}, has_labels {3}".format(model_name, has_model, has_features, has_labels))
+                label_df = None
+#            env._nbapp.log.debug(
+#                "[PERFORMANCENOTE] model {0} has_model {1}, has_features {2}, has_labels {3}".format(model_name, has_model, has_features, has_labels))
 
-            if (has_model and has_features and has_labels and has_feature_cols and has_label_cols):
-                models.append((model_name, ns[model_name], dfs[features_df], 
-                               dfs[labels_df], features_cols, label_cols))
-
+            if (has_model and has_features and has_labels and (subset_features is not None) and (subset_labels is not None)):
+                models.append((model_name, ns[model_name], subset_features, subset_labels, feature_df, label_df)) 
         self.models = models
 
         if models: return True
         return False 
 
+    def try_align(self, feature_df, candidate_df, col_name):
+        """
+        try and see if column of col_name in candidate_df, or feature df
+        if in feature_df return column
+        if in candidate_df return column if it is same length as feature df
+        """
+
+        if col_name in feature_df.columns: return feature_df[col_name]
+        elif candidate_df is not None and col_name in candidate_df.columns:
+            if len(candidate_df[col_name]) == len(feature_df): 
+                return candidate_df[col_name]
+            return None
+        else:
+            return None
+
+    def get_df(self, df, cols):
+        if not cols:
+            return None
+        if all([f in df.columns for f in cols]):
+            if len(cols) == 1:
+                return df[cols[0]]
+            else:
+                return df[cols]
+        return None
+         
     def times_sent(self):
         if not hasattr(self, "sent"):
             self.sent = 0
@@ -285,58 +311,55 @@ class PerformanceNote(EnabledNote):
 
     def make_response(self, env, kernel_id, cell_id):
 
-        model_name, model, features, labels, features_list, labels_list = choice(self.models) # lets mix it up a little
+        model_name, model, features_df, labels_df, full_feature, full_label = choice(self.models) # lets mix it up a little
 
         resp = {"type" : "model_perf"}
         resp["model_name"] = model_name
 
-        if features_list:
-            if len(features_list) == 1:
-                features_df = features[features_list[0]]
-            else:
-                features_df = features[features_list]
-        else:
-            features_df = features
-
-        env._nbapp.log.debug("[PERFORMANCENOTE] features_list {0}".format(features_list))
         env._nbapp.log.debug("[PERFORMENCENOTE] Input columns {0}".format(features_df.columns))
 
-        if labels_list:
-            if len(labels_list) == 1:
-                labels_df = labels[labels_list[0]]
-            else:
-                labels_df = labels[labels_list]
-        else:
-            labels_df = labels
-       
         subgroups = []
-         
-        if "race" in features.columns: 
-            subgroups.append("race")
-        if "sex" in features.columns:
-            subgroups.append("sex")
+                 
+        r_col = self.try_align(features_df, full_feature, "race")
+        if r_col is not None: subgroups.append(r_col)
+
+        s_col = self.try_align(features_df, full_feature, "sex")
+        if s_col is not None: subgroups.append(s_col)
 
         if len(subgroups) == 0: # fall back to this option
+
             env._nbapp.log.debug("[NOTIFICATIONS] PerfNote.make_response, cannot find sensitive columns falling back to categorical vars")
-            subgroups = [c for c in column if is_categorical(features[c])]
 
-        env._nbapp.log.debug("[NOTIFICATIONS] Perfnote.make_response analyzing columns {0}".format(subgroups))
+            input_cols = [c for c in features_df.columns if is_categorical(features_df[c])]
+            poss_cor_cols = [c for c in full_feature.columns if c not in input_cols and is_categorical(full_feature[c])]
 
-        preds = model.predict(features_df)
-      
+            cor_cols = [self.try_align(features_df, full_feature, c) for c in poss_cor_cols]
+            subgroups.extend([features_df[c] for c in input_cols])
+            subgroups.extend([c for c in cor_cols if c is not None])
+
+        env._nbapp.log.debug("[NOTIFICATIONS] Perfnote.make_response analyzing columns {0}".format([subgrp.name for subgrp in subgroups]))
+
+        try:
+            preds = model.predict(features_df)
+        except ValueError:
+            env._nbapp.log.warning("[NOTIFICATIONS] PerfNote.make_response features does not match model")
+            env._nbapp.log.debug("[NOTIFICATIONS] PerfNote.make_response features {0}, model {1}".format(features_df.columns, model))
+            return
+
         pos = model.classes_[0]
         neg = model.classes_[1]
 
         resp["values"] = {"pos" : str(pos), "neg" : str(neg)}
         resp["columns"] = {}
  
-        for col_name in subgroups:
+        for col in subgroups:
 
+            col_name = col.name
             resp["columns"][col_name] = {} 
 
-            for val in features[col_name].unique():
+            for val in col.unique():
 
-                mask = (features[col_name] == val)
+                mask = (col == val)
 
                 fp = sum((preds[mask] == pos) & (labels_df[mask] == neg))
                 fp = fp/(sum(labels_df[mask] == neg))
