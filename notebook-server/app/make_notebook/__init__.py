@@ -53,7 +53,7 @@ def start_notebook(prolific_id=None, mode=None):
     )
     while (container.status == 'restarting' or container.status == 'created'):
         container.reload()
-    return notebook_port, container.id, env["TOKEN"]
+    return notebook_port, container.id
 
 def stop_notebook(container_id):
     client = docker.from_env()

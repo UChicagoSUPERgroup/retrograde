@@ -48,7 +48,7 @@ class MainView(FlaskView):
             if running:
                 #if the container is running, redirect to the container
                 port = UsersContainers.get_port(prolific_id)
-                redirect_url = f'{HOST}{port}/?token={prolific_id}/lab?'
+                redirect_url = f'{HOST}:{port}/?token={prolific_id}'
                 return redirect(redirect_url)
             else:
                 #this user with has completed survey. Return message saying they are done
