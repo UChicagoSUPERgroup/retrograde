@@ -11,4 +11,5 @@ RUN chmod +x run_image.sh
 #Run the installation script
 RUN pip install -r /requirements.txt
 RUN  /docker_build.sh
-#RUN  /run_image.sh
+
+# call run_image on container start -> access env variables

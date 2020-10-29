@@ -33,8 +33,10 @@ class MainView(FlaskView):
         prolific_id_exists = UsersContainers.check_if_prolific_id_exists(prolific_id)
         if not prolific_id_exists:
             #this is a new user, create a container
-            port, container = start_notebook(prolific_id=prolific_id, mode=mode)
-            redirect_url = HOST+":"+str(port)
+            port, container, token = start_notebook(prolific_id=prolific_id, mode=mode)
+
+            redirect_url = HOST+":"+str(port)+"/?token="+token
+
             UsersContainers.handle_new_entry(prolific_id, container, port, True)
             print('redirecting...')
             #Sleep for 10 seconds to make sure jupyter lab is booted

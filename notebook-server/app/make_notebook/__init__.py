@@ -2,6 +2,7 @@ import docker
 import psutil
 from random import randint
 import time
+import secrets
 
 IMAGE = 'gsamharrison/plugin-test:1.6-debug'
 
@@ -35,11 +36,13 @@ def start_notebook(prolific_id=None, mode=None):
         env["JP_PLUGIN_USER"] = "UNTRACKED_USER-"+str(notebook_port)+str(randint(0,50))
     else:
         env["JP_PLUGIN_USER"] = prolific_id
-
+    
     if not mode:
         env["MODE"] = "EXP_END"
     else:
         env["MODE"] = mode
+
+    env["TOKEN"] = secrets.token_urlsafe(24)
 
     container = client.containers.run(image=IMAGE,
      # ports={8888:notebook_port},
@@ -50,7 +53,7 @@ def start_notebook(prolific_id=None, mode=None):
     )
     while (container.status == 'restarting' or container.status == 'created'):
         container.reload()
-    return notebook_port, container.id
+    return notebook_port, container.id, env["TOKEN"]
 
 def stop_notebook(container_id):
     client = docker.from_env()
