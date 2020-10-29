@@ -33,9 +33,9 @@ class MainView(FlaskView):
         prolific_id_exists = UsersContainers.check_if_prolific_id_exists(prolific_id)
         if not prolific_id_exists:
             #this is a new user, create a container
-            port, container, token = start_notebook(prolific_id=prolific_id, mode=mode)
+            port, container = start_notebook(prolific_id=prolific_id, mode=mode)
 
-            redirect_url = HOST+":"+str(port)+"/?token="+token
+            redirect_url = HOST+":"+str(port)+"/?token="+prolific_id
 
             UsersContainers.handle_new_entry(prolific_id, container, port, True)
             print('redirecting...')
@@ -48,7 +48,7 @@ class MainView(FlaskView):
             if running:
                 #if the container is running, redirect to the container
                 port = UsersContainers.get_port(prolific_id)
-                redirect_url = f'{HOST}{port}/lab?'
+                redirect_url = f'{HOST}{port}/?token={prolific_id}/lab?'
                 return redirect(redirect_url)
             else:
                 #this user with has completed survey. Return message saying they are done

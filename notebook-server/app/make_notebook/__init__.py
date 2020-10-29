@@ -42,7 +42,7 @@ def start_notebook(prolific_id=None, mode=None):
     else:
         env["MODE"] = mode
 
-    env["TOKEN"] = secrets.token_urlsafe(24)
+    env["TOKEN"] = prolific_id
 
     container = client.containers.run(image=IMAGE,
      # ports={8888:notebook_port},
