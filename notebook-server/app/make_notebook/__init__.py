@@ -4,7 +4,7 @@ from random import randint
 import time
 import secrets
 
-IMAGE = 'gsamharrison/plugin-test:1.9'
+IMAGE = 'gsamharrison/plugin-test:1.9.1'
 
 def get_free_port():
     lower_port = 8000
