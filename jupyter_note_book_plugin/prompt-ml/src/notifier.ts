@@ -290,7 +290,7 @@ export class Prompter {
 
     var_line_1.innerHTML = "The dataframe <b>"+df_name+"</b> contains a column <b>"+col_name+"</b>";
 
-    var_line_2.innerHTML = "Using this column may be discrimnatory";
+    var_line_2.innerHTML = "Using this column may be discriminatory";
     
     var [body, area] = this._makeContainer();
     area.appendChild(var_line_1);
