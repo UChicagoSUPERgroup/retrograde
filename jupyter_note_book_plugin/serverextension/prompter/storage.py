@@ -10,7 +10,6 @@ import json
 from datetime import datetime, timedelta
 from mysql.connector import connect
 from mysql.connector.errors import IntegrityError
-from _mysql_connector import MySQLInterfaceError
 
 from .config import DB_DIR, DB_NAME, table_query
 

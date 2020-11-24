@@ -84,7 +84,7 @@ class ForkingKernel(IPythonKernel):
                 else:
                     self.log.debug(
                         "[FORKINGKERNEL] could not pickle {0}, problem items {1}".format(
-                            k, dill.detect.baditems(var)))
+                            k, dill.detect.badobjects(var)))
         return better_ns
 
     def _cache_ns(self, code):
