@@ -9,6 +9,9 @@ from random import choice
 from .storage import load_dfs
 from .sortilege import is_categorical
 
+LAST_SENT = None
+WAIT_TIME = 5 # How many turns should notes wait before becoming active again?
+
 class Notifications:
 
     def __init__(self, db):
@@ -26,7 +29,7 @@ class Notifications:
     def make_response(self, env, kernel_id, cell_id):
         """form the response to send to the frontend""" 
         raise NotImplementedError
- 
+
 class EnabledNote(Notifications):
 
     def __init__(self, db):
@@ -50,7 +53,26 @@ class EnabledNote(Notifications):
                 env._nbapp.log.debug("[ENABLEDNOTE] model training started")
         return self.start_message_recvd
 
-class OnetimeNote(EnabledNote):
+class SpacedNote(EnabledNote):
+
+    def __init__(self, db):
+        super().__init__(db)
+    
+    def feasible(self, cell_id, env):
+        # TODO: want to have a counter shared among instances of subclasses
+        # that gets incremented every time one is sent.
+        if not super().feasible(cell_id, env):
+            return False
+ 
+        global LAST_SENT
+        if not LAST_SENT or LAST_SENT > WAIT_TIME:
+            return True 
+        LAST_SENT += 1 # this is a hack, based on number of notes
+        return False 
+
+    def make_response(self, env, kernel_id, cell_id):
+        LAST_SENT = 0
+class OnetimeNote(SpacedNote):
     """
     A notification that is sent exactly once
     """
@@ -69,6 +91,7 @@ class OnetimeNote(EnabledNote):
         return int(self.sent)
 
     def make_response(self, env, kernel_id, cell_id):
+        super().make_response(env, kernel_id, cell_id)
         self.sent = True
 
 class SensitiveColumnNote(OnetimeNote):
@@ -197,9 +220,12 @@ class OutliersNote(OnetimeNote):
 
         self.db.store_response(kernel_id, cell_id, resp) 
 
-class PerformanceNote(EnabledNote):
+class PerformanceNote(SpacedNote):
 
     def feasible(self, cell_id, env):
+
+        if not super().feasible(cell_id, env):
+            return False
 
         cell_code = self.db.get_code(env._kernel_id, cell_id)
         if not cell_code: return False
@@ -311,6 +337,8 @@ class PerformanceNote(EnabledNote):
 
     def make_response(self, env, kernel_id, cell_id):
 
+        super().make_response(env, kernel_id, cell_id)
+
         model_name, model, features_df, labels_df, full_feature, full_label = choice(self.models) # lets mix it up a little
 
         resp = {"type" : "model_perf"}
@@ -341,6 +369,8 @@ class PerformanceNote(EnabledNote):
 
         try:
             preds = model.predict(features_df)
+            score = model.score(features_df, labels_df)
+
         except ValueError:
             env._nbapp.log.warning("[NOTIFICATIONS] PerfNote.make_response features does not match model")
             env._nbapp.log.debug("[NOTIFICATIONS] PerfNote.make_response features {0}, model {1}".format(features_df.columns, model))
@@ -349,6 +379,7 @@ class PerformanceNote(EnabledNote):
         pos = model.classes_[0]
         neg = model.classes_[1]
 
+        resp["acc"] = score
         resp["values"] = {"pos" : str(pos), "neg" : str(neg)}
         resp["columns"] = {}
  
