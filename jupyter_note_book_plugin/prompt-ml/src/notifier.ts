@@ -330,6 +330,11 @@ export class Prompter {
 
   private _makePerformanceMsg(notice : any) {
 
+    let msg_l1 = document.createElement("p");
+    msg_l1.innerHTML = "The model "+notice["model_name"]+" has an accuracy of "+notice["acc"];
+    let msg_l2 = document.createElement("p");
+    msg_l2.innerHTML = "The mistakes it makes break down as follows";
+
     let table_elt = document.createElement("table");
     let header = document.createElement("tr");
 
@@ -381,6 +386,9 @@ export class Prompter {
     }
 
     var [body, area] = this._makeContainer();
+
+    area.appendChild(msg_l1);
+    area.appendChild(msg_l2);
     area.appendChild(table_elt);
 
     return body; 
