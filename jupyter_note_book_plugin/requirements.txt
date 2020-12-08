@@ -22,6 +22,7 @@ jupyter-client==6.1.6
 jupyter-core==4.6.3
 jupyterlab==2.2.0
 jupyterlab-server==1.2.0
+matplotlib
 MarkupSafe==1.1.1
 mistune==0.8.4
 mysql-connector-python
