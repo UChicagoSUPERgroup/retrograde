@@ -109,7 +109,7 @@ export class Prompter {
       return this._makeVarMsg(notice["zip1"], notice["zip2"], notice["demo"]).outerHTML;
     }
     if (notice["type"] == "outliers") {
-      return this._makeOutliersMsg(notice["col_name"], notice["value"], notice["std_dev"]).outerHTML;
+      return this._makeOutliersMsg(notice["col_name"], notice["value"], notice["std_dev"], notice["df_name"]).outerHTML;
     }
     if (notice["type"] == "model_perf") {
       return this._makePerformanceMsg(notice).outerHTML;
@@ -313,12 +313,12 @@ export class Prompter {
 
     return body;
   }
-  private _makeOutliersMsg(col_name : string, value : number, std_dev : number) {
+  private _makeOutliersMsg(col_name : string, value : number, std_dev : number, df_name :string) {
 
     let var_line_1 = document.createElement("p");
     let var_line_2 = document.createElement("p");
 
-    var_line_1.innerHTML = "The column <b>"+col_name+"</b> contains values greater than "+value;
+    var_line_1.innerHTML = "The column <b>"+col_name+"</b> in data frame <b>"+df_name+"</b> contains values greater than "+value;
     var_line_2.innerHTML = value + " is "+std_dev.toString().slice(0,5)+" standard deviations above the average for that column";
 
     var [body, area] = this._makeContainer();
@@ -331,7 +331,7 @@ export class Prompter {
   private _makePerformanceMsg(notice : any) {
 
     let msg_l1 = document.createElement("p");
-    msg_l1.innerHTML = "The model "+notice["model_name"]+" has an accuracy of "+notice["acc"];
+    msg_l1.innerHTML = "The model "+notice["model_name"]+" has a training accuracy of "+notice["acc"];
     let msg_l2 = document.createElement("p");
     msg_l2.innerHTML = "The mistakes it makes break down as follows";
 
@@ -344,8 +344,8 @@ export class Prompter {
     let fpr_header = document.createElement("th");
     let fnr_header = document.createElement("th");
 
-    fpr_header.innerHTML = "Pr[&#374;="+notice["values"]["pos"] +"|Y="+notice["values"]["neg"]+"]";
-    fnr_header.innerHTML = "Pr[&#374;="+notice["values"]["neg"] +"|Y="+notice["values"]["pos"]+"]";
+    fpr_header.innerHTML = "Pr[Predicted ="+notice["values"]["pos"] +"|Actual="+notice["values"]["neg"]+"]";
+    fnr_header.innerHTML = "Pr[Predicted ="+notice["values"]["neg"] +"|Actual="+notice["values"]["pos"]+"]";
 
     header.appendChild(fpr_header);
     header.appendChild(fnr_header);

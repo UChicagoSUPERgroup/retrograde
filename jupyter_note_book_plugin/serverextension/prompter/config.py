@@ -74,7 +74,7 @@ _make_namespace({0}, {1})
 import os
 
 if not os.getenv("MODE"):
-    MODE = "EXP_END" # the sorts of responses the plugin should provide. options are "SORT" for sortilege, "SIM" for column similarity, and None
+    MODE = "EXP_CTS" # the sorts of responses the plugin should provide. options are "SORT" for sortilege, "SIM" for column similarity, and None
 else:
     MODE = os.getenv("MODE")
 if not os.getenv("DOCKER_HOST_IP"):

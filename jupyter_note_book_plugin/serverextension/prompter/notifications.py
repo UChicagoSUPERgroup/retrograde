@@ -10,7 +10,7 @@ from .storage import load_dfs
 from .sortilege import is_categorical
 
 LAST_SENT = None
-WAIT_TIME = 5 # How many turns should notes wait before becoming active again?
+WAIT_TIME = 8 # How many turns should notes wait before becoming active again?
 
 class Notifications:
 
@@ -217,6 +217,7 @@ class OutliersNote(OnetimeNote):
         resp["col_name"] = "principal"
         resp["value"] = float(df["principal"].iloc[index])
         resp["std_dev"] = float(scores[index])
+        resp["df_name"] = df_name
 
         self.db.store_response(kernel_id, cell_id, resp) 
 
