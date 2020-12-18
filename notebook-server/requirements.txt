@@ -1,0 +1,8 @@
+Flask==1.1.1
+Flask-Classy==0.6.10
+Flask-SQLAlchemy==2.4.1
+docker
+psutil
+PyYAML
+PyMySQL
+crpytography 
