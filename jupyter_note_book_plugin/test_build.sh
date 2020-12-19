@@ -16,10 +16,13 @@ pipenv run jupyter labextension install
 cd ..
 cd ./serverextension
 
-
 pipenv run python3 setup.py sdist bdist_wheel
 pipenv run pip3 install -U -I dist/prompter-0.1-py3-none-any.whl
 pipenv run jupyter serverextension enable --py prompter --debug
+
+mysql -u root -p < prompter/make_db.sql
+mysql -u root -p notebooks < prompter/make_tables.sql
+
 cd ..
 pipenv run jupyter kernelspec install prompt_kernel
 pipenv run jupyter lab ../evaluation_task --log-level=DEBUG --ip=127.0.0.1 --watch 
