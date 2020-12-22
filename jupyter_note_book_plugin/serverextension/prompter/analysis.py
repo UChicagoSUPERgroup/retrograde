@@ -47,22 +47,6 @@ class AnalysisEnvironment:
 
         self.ptr_set = {}
 
-    def fork(self, msg_id, db):
-        """
-        spawn a kernel with the namespace of the main kernel just after msg id
-        """
-        self._nbapp.log.debug("[FORK] spawning new kernel with msg id {0}".format(msg_id))
-        km, kc = start_new_kernel()
-        ns_loading_code = NAMESPACE_CODE.format(msg_id, db.dir) 
-
-        self._nbapp.log.debug("[FORK] reconstructing namespace for {0}".format(msg_id))
-        
-        output = run_code(kc, km, ns_loading_code, self._nbapp.log)
-
-        self._nbapp.log.debug("[FORK] reconstructed namespace, output {0}".format(output))
-
-        return km, kc 
-
     def cell_exec(self, code, notebook, cell_id, exec_ct):
         """
         rewrite of code execution 
