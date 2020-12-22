@@ -73,14 +73,16 @@ export class Listener {
 	      id = cell.model.id;
           k_id = this.tracker.currentWidget.sessionContext.session.kernel.id;
           exec_ct = (cell as CodeCell).model.executionCount;
- 
 //          console.log(this.tracker.currentWidget.content.contentFactory);
           this.client.request(
             "exec", "POST", 
             JSON.stringify({
                 "type" : "execute",
                 "contents" : contents, 
-                "cell_id" : id, "kernel" : k_id, "exec_ct" : exec_ct}),
+                "cell_id" : id,
+                "kernel" : k_id,
+                "exec_ct" : exec_ct,
+                "metadata" : JSON.stringify(cell.model.metadata)}),
 	        ServerConnection.makeSettings()).
 	    then(value => { 
               console.log("received: ",value);
