@@ -28,7 +28,21 @@ Right now it just responds to the GET requests.
 
 It will need to store the contents of the cells in a database as well as contain a mechanism for determining which cells need characterization.
 
-# Build Instructions
+
+# Up and Running. Making the Test Environment
+
+To create a test environment, first install [miniconda3](https://docs.conda.io/projects/conda/en/latest/user-guide/install/macos.html) and mysql. 
+
+Once miniconda and mysql have been installed, run the following command to create a conda environment for the jupyter kernal which contains numpy, sci-py, and scikit-learn (the reason these are installed outside of pip [is discussed here](https://github.com/scikit-learn/scikit-learn/issues/18852)).
+
+	conda create -n plugin_conda python=3.9 numpy scipy scikit-learn
+	
+Once your conda environment is created, run the `test_build.sh` script to build install the jupyter lab plugin and serverextension, and configure the server extension to connect to your local mysql database. 
+
+	source ./test_build.sh
+
+
+# Build Instruction
 
 This extension is best developed using a python virtual environment.
 This is because fully testing the front and back end requires installing the backend as a library accessible to jupyter.
