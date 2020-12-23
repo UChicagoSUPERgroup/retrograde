@@ -25,12 +25,12 @@ def get_free_port():
         raise ValueError('All ports in use...')
     return port
 
-def start_notebook(prolific_id=None, mode=None):
+def start_notebook(prolific_id=None, mode=None, test_configuration = True):
     #start a docker on a random port from range container and detach from it 
     notebook_port = get_free_port()
     client = docker.from_env()
 
-    env = {"DOCKER_HOST_IP" : "127.0.0.1", "PLUGIN_PORT" : notebook_port}
+    env = {"DOCKER_HOST_IP" : "127.0.0.1"}
      
     if not prolific_id:
         env["JP_PLUGIN_USER"] = "UNTRACKED_USER-"+str(notebook_port)+str(randint(0,50))
@@ -43,9 +43,19 @@ def start_notebook(prolific_id=None, mode=None):
         env["MODE"] = mode
 
     env["TOKEN"] = prolific_id
-
+    if test_configuration:
+        #run on docker port 8888 and map port 8888 to notebook port
+        env.update({"PLUGIN_PORT" : 8888})
+        container = client.containers.run(image=IMAGE,
+          ports={8888:notebook_port},
+          command="bash ./run_image.sh",
+          detach = True,
+          environment = env, 
+        )
+    else:
+        #run docker in host mode and run on notebook port
+        env.update({"PLUGIN_PORT" : notebook_port})
     container = client.containers.run(image=IMAGE,
-     # ports={8888:notebook_port},
       command="bash ./run_image.sh",
       detach = True,
       network_mode = "host",
