@@ -1,5 +1,5 @@
 from flask_classy import FlaskView, route
-from flask import Flask, redirect
+from flask import Flask, redirect, current_app
 import requests
 from app.make_notebook import start_notebook, stop_notebook
 from .models import UsersContainers
@@ -12,7 +12,6 @@ INVALID_PROLIFIC_ID_ERROR = 'Error, Invalid Prolific ID Specified'
 CONTAINER_STOPPED_MESSAGE = 'Container Stopped'
 CONTAINER_ALREADY_STOPPED_MESSAGE = 'Container was already stopped'
 
-HOST = "http://notebooks.cs.uchicago.edu"
 
 class MainView(FlaskView):
     route_base = '/'
@@ -28,15 +27,16 @@ class MainView(FlaskView):
         a prolific ID's container is not running, then it is assumed that the user
         has completed the survey.
         '''
+
+        hostname = current_app.config['HOSTNAME']
+
         if prolific_id is None:
             return INVALID_PROLIFIC_ID_ERROR, 404       
         prolific_id_exists = UsersContainers.check_if_prolific_id_exists(prolific_id)
         if not prolific_id_exists:
             #this is a new user, create a container
             port, container = start_notebook(prolific_id=prolific_id, mode=mode)
-
-            redirect_url = HOST+":"+str(port)+"/?token="+prolific_id
-
+            redirect_url = f'{hostname}:{str(port)}/?token={prolific_id}'
             UsersContainers.handle_new_entry(prolific_id, container, port, True)
             print('redirecting...')
             #Sleep for 10 seconds to make sure jupyter lab is booted
@@ -48,7 +48,7 @@ class MainView(FlaskView):
             if running:
                 #if the container is running, redirect to the container
                 port = UsersContainers.get_port(prolific_id)
-                redirect_url = f'{HOST}:{port}/?token={prolific_id}'
+                redirect_url = f'{hostname}:{port}/?token={prolific_id}'
                 return redirect(redirect_url)
             else:
                 #this user with has completed survey. Return message saying they are done
