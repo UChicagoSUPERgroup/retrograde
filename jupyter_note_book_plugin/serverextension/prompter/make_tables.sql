@@ -3,6 +3,7 @@ CREATE TABLE IF NOT EXISTS cells(
     kernel TEXT, 
     id VARCHAR(255) PRIMARY KEY, 
     contents TEXT, 
+    metadata TEXT,
     num_exec INT, 
     last_exec TIMESTAMP
 );

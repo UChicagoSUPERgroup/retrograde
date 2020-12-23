@@ -15,8 +15,8 @@ from .config import DB_DIR, DB_NAME, table_query
 
 SQL_CMDS = {
   "GET_CODE" : """SELECT contents FROM cells WHERE id = ? AND kernel = ? AND user = ?""",
-  "INSERT_CELLS" : """INSERT INTO cells(id, contents, num_exec, last_exec, kernel, user) VALUES (?,?,?,?,?,?);""",
-  "UPDATE_CELLS" : """UPDATE cells SET contents = ?, num_exec = num_exec + 1, last_exec = ?, kernel = ? WHERE id = ? AND user = ?;""",
+  "INSERT_CELLS" : """INSERT INTO cells(id, contents, num_exec, last_exec, kernel, user, metadata) VALUES (?,?,?,?,?,?,?);""",
+  "UPDATE_CELLS" : """UPDATE cells SET contents = ?, num_exec = num_exec + 1, last_exec = ?, kernel = ?, metadata = ? WHERE id = ? AND user = ?;""",
   "INSERT_VERSIONS" : """INSERT INTO versions(user, kernel, id, version, time, contents, exec_ct) VALUES (?,?,?,?,?,?,?);""",
   "DATA_VERSIONS" : """SELECT kernel, source, name, version, user FROM data WHERE source = ? AND name = ? AND user = ? ORDER BY version""",
   "ADD_DATA" : """INSERT INTO data(kernel, cell, version, source, name, user) VALUES (?, ?, ?, ?, ?, ?)""",
@@ -109,10 +109,10 @@ class DbHandler(object):
         self.renew_connection()
         try:
           #if the cell already exists, this will raise an integrity error
-          self._cursor.execute(self.cmds["INSERT_CELLS"], (cell['cell_id'], cell['contents'], 1, datetime.now(), cell["kernel"], self.user))
+          self._cursor.execute(self.cmds["INSERT_CELLS"], (cell['cell_id'], cell['contents'], 1, datetime.now(), cell["kernel"], self.user, cell['metadata']))
         except (sqlite3.IntegrityError, IntegrityError) as e:
           #value for cell already exists in cells, so update as needed
-          self._cursor.execute(self.cmds["UPDATE_CELLS"], (cell['contents'], datetime.now(), cell["kernel"], cell['cell_id'], self.user))
+          self._cursor.execute(self.cmds["UPDATE_CELLS"], (cell['contents'], datetime.now(), cell["kernel"], cell['metadata'], cell['cell_id'], self.user))
 
         #this is adding the versions row if it doesnt exist. If it 
         #does exist then do nothing.
