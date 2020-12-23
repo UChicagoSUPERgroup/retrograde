@@ -368,10 +368,3 @@ class TestModelVisitor(unittest.TestCase):
         visitor.visit(parse(snippet_loc))
         
         self.assertEqual(visitor.models, expected)
-
-    def test_onehot_enc(self):
-        snippet=\
-        """encoder = OneHotEncoder()\n"""+\
-        """encoder.fit(X)"""
-
-        expected = {}
