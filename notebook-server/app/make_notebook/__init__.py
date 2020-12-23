@@ -4,8 +4,6 @@ from random import randint
 import time
 import secrets
 
-IMAGE = 'gsamharrison/plugin-test:1.9.3'
-
 def get_free_port():
     lower_port = 8000
     upper_port = 9000
@@ -25,7 +23,7 @@ def get_free_port():
         raise ValueError('All ports in use...')
     return port
 
-def start_notebook(prolific_id=None, mode=None, test_configuration = True):
+def start_notebook(docker_image, prolific_id=None, mode=None, test_configuration = True):
     #start a docker on a random port from range container and detach from it 
     notebook_port = get_free_port()
     client = docker.from_env()
@@ -46,7 +44,7 @@ def start_notebook(prolific_id=None, mode=None, test_configuration = True):
     if test_configuration:
         #run on docker port 8888 and map port 8888 to notebook port
         env.update({"PLUGIN_PORT" : 8888})
-        container = client.containers.run(image=IMAGE,
+        container = client.containers.run(image=docker_image,
           ports={8888:notebook_port},
           command="bash ./run_image.sh",
           detach = True,
@@ -55,7 +53,7 @@ def start_notebook(prolific_id=None, mode=None, test_configuration = True):
     else:
         #run docker in host mode and run on notebook port
         env.update({"PLUGIN_PORT" : notebook_port})
-    container = client.containers.run(image=IMAGE,
+        container = client.containers.run(image=docker_image,
       command="bash ./run_image.sh",
       detach = True,
       network_mode = "host",

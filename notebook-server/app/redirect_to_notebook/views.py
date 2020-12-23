@@ -30,13 +30,14 @@ class MainView(FlaskView):
 
         hostname = current_app.config['HOSTNAME']
         is_testing = current_app.config['TESTING']
+        docker_image = current_app.config['IMAGE']
 
         if prolific_id is None:
             return INVALID_PROLIFIC_ID_ERROR, 404       
         prolific_id_exists = UsersContainers.check_if_prolific_id_exists(prolific_id)
         if not prolific_id_exists:
             #this is a new user, create a container
-            port, container = start_notebook(prolific_id=prolific_id, mode=mode, test_configuration=is_testing)
+            port, container = start_notebook(docker_image = docker_image, prolific_id=prolific_id, mode=mode, test_configuration=is_testing)
             redirect_url = f'{hostname}:{str(port)}/?token={prolific_id}'
             UsersContainers.handle_new_entry(prolific_id, container, port, True)
             print(f'redirecting to "{redirect_url}"...')
