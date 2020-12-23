@@ -78,13 +78,16 @@ class ForkingKernel(IPythonKernel):
             if isinstance(var, pd.DataFrame):
                 better_ns["_forking_kernel_dfs"][k] = dill.dumps(var)
             else:
-                bad_objs = dill.detect.badobjects(var)
-                if bad_objs is None:
-                    better_ns[k] = var
-                else:
-                    self.log.debug(
-                        "[FORKINGKERNEL] could not pickle {0}, problem items {1}".format(
-                            k, dill.detect.badobjects(var)))
+                try:
+                    bad_objs = dill.detect.badobjects(var)
+                    if bad_objs is None:
+                        better_ns[k] = var
+                    else:
+                        self.log.debug(
+                            "[FORKINGKERNEL] could not pickle {0}, problem items {1}".format(
+                             k, dill.detect.badobjects(var)))
+                except ValueError:
+                    self.log.error("[FORKINGKERNEL] exception pickling {0}".format(k))
         return better_ns
 
     def _cache_ns(self, code):
