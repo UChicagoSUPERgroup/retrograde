@@ -51,8 +51,9 @@ class AnalysisManager:
         self._nb.log.debug("[MANAGER] received {0}".format(request))
 
         if request["type"] != "execute":
-            print(request)
+            self._nb.log.info("[MANAGER] received non-execution request {0}".format(request))
             return
+
         kernel_id = request["kernel"]
         cell_id = request["cell_id"]
         code = request["contents"]
@@ -73,33 +74,42 @@ class AnalysisManager:
             self._nb.log.error("[MANAGER] Analysis environment encountered exception {0}, call back {1}".format(e, sys.exc_info()[0]))
 
         self.new_data(kernel_id) # add columns and data to db
+
+        self.update_notifications(kernel_id, cell_id)
+        self.new_notifications(kernel_id, cell_id, cell_mode)
+        self.send_notifications(kernel_id, cell_id)
+ 
         response = self.make_response(kernel_id, cell_id, mode=MODE)
         self._nb.log.info("[MANAGER] sending response {0}".format(response))
+
         return response
+    def update_notifications(self, kernel_id, cell_id):
 
-    def check_submit(self, kernel_id, cell_id):
+        # TODO, should go through any active notifications associated with
+        # this cell and then then check if the information is still good
 
-        code = self.db.get_code(kernel_id, cell_id)
-        invocation_matcher = re.compile(r"#\W*%(\w+)\W+(\w+)")
-        matches = invocation_matcher.findall(code)
+        pass
+    def new_notifications(kernel_id, cell_id, cell_mode):
+        # Start here tomorrow, you were moving things out of make_response
+        # and run_rules to parcel things out. 
+        # what should the mechanism for enforcing cell_mode restrictions be?        
+        self._nb.log.debug("[MANAGER] running rules for cell {0}, kernel {1}".format(cell_id, kernel_id)) 
+        env = self.analyses[kernel_id]
+ 
+        feasible_rules = [r for r in self.rules.values() if r.feasible(cell_id, env)]
+        self._nb.log.debug("[MANAGER] There are {0} feasible rules".format(len(feasible_rules)))
+        
+        if feasible_rules:
 
-        for match in matches:
-            if match[0] == "prompter_plugin" and match[1] == "submit":
-                return True
-        return False
-
+            chosen_rule = choice(feasible_rules)
+            chosen_rule.make_response(self.analyses[kernel_id], kernel_id, cell_id)
+            self._nb.log.debug("[MANAGER] chose rule {0}".format(chosen_rule))
     def make_response(self, kernel_id, cell_id, mode=None):
         """
         form the body of the response to send back to plugin, in the form of a dictionary
         """
         resp = {}
 
-        if mode == "SORT":
-            resp["info"] = self.run_sortilege(kernel_id, cell_id)
-        if mode == "SIM":
-            ans = self.run_colsim(kernel_id, cell_id)
-            if ans:
-                resp["info"] = ans
         if mode == "EXP_CTS":
             ans = self.run_rules(kernel_id, cell_id)
 
@@ -113,7 +123,6 @@ class AnalysisManager:
 
             ans = self.run_rules(kernel_id, cell_id)
 
-            if self.check_submit(kernel_id, cell_id):
 
                 self._nb.log.info("[MANAGER] model submission")                
                 resp["info"] = ans
@@ -143,31 +152,6 @@ class AnalysisManager:
 
         return responses 
 
-    def run_sortilege(self, kernel_id, cell_id):
-        """run the sortilege analsysis and drop in a pattern"""
-        env = self.analyses[kernel_id]
-        options = env.sortilege(kernel_id, cell_id) # run the analyses on closest df
-                                         # options is list of individual responses
-        self._nb.log.debug("[MANAGER] there are %s options to choose from" % len(options))
-
-        if len(options) == 0: return None
-
-        return choice(options)
-
-    def run_colsim(self, kernel_id, cell_id):
-        """see if any of the columns resemble sensitive categories"""
-        env = self.analyses[kernel_id]
-
-        options, weights = env.colsim(cell_id)
-        index = weights.index(max(weights))
-
-        if weights[index] > 0.5: # Do we need a better notification decision mechanism?
-
-            resp = {"type" : "resemble"}
-            resp["column"] = options[index][0]
-            resp["category"] = options[index][1]
-            return resp
-        return None           
     def new_data(self, kernel_id): 
         """ check if data in the env is new, and if so, register and send event"""
         env = self.analyses[kernel_id]
