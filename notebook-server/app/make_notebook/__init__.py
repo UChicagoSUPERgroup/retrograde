@@ -69,7 +69,4 @@ def stop_notebook(container_id):
     #wait 1 second to stop container, default is 10
     container.stop(timeout = 1)
 
-if __name__ == '__main__':
-    start_notebook()
-
 #docker run -p 8888:8888 jupyter/scipy-notebook:2c80cf3537ca
