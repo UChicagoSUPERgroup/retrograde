@@ -124,11 +124,30 @@ class ModelFitVisitor(BaseImportVisitor):
         self.models = {}
         self.unmatched_call = None
 
+    def is_model_fit(self, call_node):
+        # test if func node is a call to Classifier.fit
+        # note that there are other calls to non-clfs and non-model objects 
+        # in sklearn. So we need to test if the object is actually a clf name
+        if isinstance(call_node.func, Attribute) and call_node.func.attr == "fit" and len(call_node.args) > 1:
+            if isinstance(call_node.func.value, Name) and call_node.func.value.id in self.model_names:
+                return True
+            elif isinstance(call_node.func.value, Call):
+                # this is ambiguous, use IsSklearnClfVisitor to resolve
+                return True
+                # TODO: this is a hack and if e.g. someone does
+                # something like encoder = OneHotEncoder().fit(X,y), it would
+                # treat the OneHotEncoder as a model fit call
+            
+
+                # the better way to do things would be to inspect the call 
+                # for any references to a list of acceptable module names/functions
+                # in sklearn that create classifiers
+        return False 
     def visit_Call(self, node):
 
         self.generic_visit(node)
         
-        if isinstance(node.func, Attribute) and node.func.attr == "fit":
+        if self.is_model_fit(node): 
 
             x_cols, df_x_name = self.get_columns(node.args[0])
             y_cols, df_y_name = self.get_columns(node.args[1])
@@ -285,7 +304,6 @@ class ColumnVisitor(NodeVisitor):
             for rhs in self.assign_vals[node.id]:
                 self.visit(rhs)
         #print("visited name {0}, refs_df {1}, df_name {2}, cols {3}".format(node.id, self.refs_df, self.df_name, self.cols))
-
 class CallHandler:
     """
     class for handling instances where dataframe type object is called
