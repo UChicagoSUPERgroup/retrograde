@@ -11,6 +11,7 @@ import time
 INVALID_PROLIFIC_ID_ERROR = 'Error, Invalid Prolific ID Specified'
 CONTAINER_STOPPED_MESSAGE = 'Container Stopped'
 CONTAINER_ALREADY_STOPPED_MESSAGE = 'Container was already stopped'
+NOTEBOOK_NAME = "notebook_dist.ipynb"
 
 HOST = "http://notebooks.cs.uchicago.edu"
 
@@ -31,11 +32,12 @@ class MainView(FlaskView):
         if prolific_id is None:
             return INVALID_PROLIFIC_ID_ERROR, 404       
         prolific_id_exists = UsersContainers.check_if_prolific_id_exists(prolific_id)
+        build_redirect_url = lambda hostname, port, prolific_id : f'{hostname}:{port}/lab/tree/{NOTEBOOK_NAME}?token={prolific_id}'
         if not prolific_id_exists:
             #this is a new user, create a container
             port, container = start_notebook(prolific_id=prolific_id, mode=mode)
 
-            redirect_url = HOST+":"+str(port)+"/?token="+prolific_id
+            redirect_url = build_redirect_url(hostname, port, prolific_id)
 
             UsersContainers.handle_new_entry(prolific_id, container, port, True)
             print('redirecting...')
@@ -48,7 +50,7 @@ class MainView(FlaskView):
             if running:
                 #if the container is running, redirect to the container
                 port = UsersContainers.get_port(prolific_id)
-                redirect_url = f'{HOST}:{port}/?token={prolific_id}'
+                redirect_url = build_redirect_url(hostname, port, prolific_id)
                 return redirect(redirect_url)
             else:
                 #this user with has completed survey. Return message saying they are done
