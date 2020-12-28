@@ -13,7 +13,7 @@ CONTAINER_STOPPED_MESSAGE = 'Container Stopped'
 CONTAINER_ALREADY_STOPPED_MESSAGE = 'Container was already stopped'
 NOTEBOOK_NAME = "notebook_dist.ipynb"
 
-HOST = "http://notebooks.cs.uchicago.edu"
+hostname = "http://notebooks.cs.uchicago.edu"
 
 class MainView(FlaskView):
     route_base = '/'
