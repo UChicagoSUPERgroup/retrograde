@@ -30,6 +30,12 @@ class MainView(FlaskView):
 
         hostname = current_app.config['HOSTNAME']
         is_testing = current_app.config['TESTING']
+        if is_testing.lower() == 'true':
+            is_testing = True
+        elif is_testing.lower() == 'false':
+            is_testing = False
+        else:
+            raise ValueError("Testing Configuration Variable must be string 'True' or 'False'")
         docker_image = current_app.config['IMAGE']
 
         if prolific_id is None:
