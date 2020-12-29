@@ -1,5 +1,5 @@
 from flask_classy import FlaskView, route
-from flask import Flask, redirect, current_app
+from flask import Flask, redirect, current_app, render_template
 import requests
 from app.make_notebook import start_notebook, stop_notebook
 from .models import UsersContainers
@@ -51,8 +51,9 @@ class MainView(FlaskView):
             print(f'redirecting to "{redirect_url}"...')
             #Sleep for 10 seconds to make sure jupyter lab is booted
             #TODO: find a non-hacky way to do this
-            time.sleep(10)
-            return redirect(redirect_url)
+            return render_template('redirect.html', 
+                                   redirect_url=redirect_url,
+                                   time_till_redirect=10)
         else:
             running = UsersContainers.check_if_container_running(prolific_id)
             if running:
