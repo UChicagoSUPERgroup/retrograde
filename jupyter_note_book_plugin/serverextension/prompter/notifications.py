@@ -12,6 +12,14 @@ from .sortilege import is_categorical
 LAST_SENT = None
 WAIT_TIME = 8 # How many turns should notes wait before becoming active again?
 
+# TODO: generic update method, work out storage format, make response writes out 
+# active status, cell associated with, and other info 
+# need a method note.on_cell -> returns true or false if note associated with cell
+# need a method get_response (w/ arg cell_id) that renders the response associated with
+# the cell
+
+# also need notifications meant for the EXP_END condition
+
 class Notifications:
 
     def __init__(self, db):

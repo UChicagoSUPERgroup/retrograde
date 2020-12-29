@@ -15,3 +15,20 @@ else:
     remote_config = {"db_user" : "prompter_user", "host" : os.getenv("DOCKER_HOST_IP"), "password" : "user_pw", "database" : "notebooks"}
 
 table_query = pkg_resources.read_text(__package__, "make_tables.sql")
+
+if MODE == "EXP_CTS":
+    NOTE_RULES = {
+        "intro" :[],
+        "tutorial" : [],
+        "null_clean" : [],
+        "model" : [],
+        "end" : []
+    }
+if MODE == "EXP_END":
+    NOTE_RULES = {
+        "intro" :[],
+        "tutorial" : [],
+        "null_clean" : [],
+        "model" : [],
+        "end" : []
+    }

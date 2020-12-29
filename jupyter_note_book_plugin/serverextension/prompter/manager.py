@@ -10,7 +10,7 @@ from random import choice
 
 from .storage import DbHandler, RemoteDbHandler
 from .analysis import AnalysisEnvironment
-from .config import MODE, remote_config
+from .config import MODE, remote_config, NOTE_RULES
 from .notifications import SensitiveColumnNote, ZipVarianceNote, OutliersNote, PerformanceNote
 
 class AnalysisManager:
@@ -35,15 +35,8 @@ class AnalysisManager:
             self.db = DbHandler()
         self.analyses = {}
         self._nb = nbapp
-        self.rules = {} # rules used to trigger notifications
+        self.rules = {s : [note(self.db) for note in notes] for s, notes in NOTE_RULES.items()} # rules used to trigger notifications
     
-        if MODE == "EXP_CTS" or MODE == "EXP_END":
-            self.rules = {
-                "column" : SensitiveColumnNote(self.db),
-                "variance" : ZipVarianceNote(self.db),
-                "outliers" : OutliersNote(self.db),
-                "performance" : PerformanceNote(self.db)
-            }
     def handle_request(self, request):
         """
         handle a request (json object with "content", "id", and "kernel" fields)
@@ -77,12 +70,23 @@ class AnalysisManager:
 
         self.update_notifications(kernel_id, cell_id)
         self.new_notifications(kernel_id, cell_id, cell_mode)
-        self.send_notifications(kernel_id, cell_id)
+        response = self.send_notifications(kernel_id, cell_id)
  
-        response = self.make_response(kernel_id, cell_id, mode=MODE)
+#        response = self.make_response(kernel_id, cell_id, mode=MODE)
         self._nb.log.info("[MANAGER] sending response {0}".format(response))
 
         return response
+    def send_notifications(kernel_id, cell_id):
+
+        resp = {}
+        resp["info"] = {}
+        resp["info"]["cell"] = cell_id
+
+        for notes in self.rules.items():
+            for note in notes:
+                if note.on_cell(cell_id):
+                    resp["info"][cell_id] = note.get_response(cell_id)
+        return resp 
     def update_notifications(self, kernel_id, cell_id):
 
         # TODO, should go through any active notifications associated with
@@ -95,8 +99,12 @@ class AnalysisManager:
         # what should the mechanism for enforcing cell_mode restrictions be?        
         self._nb.log.debug("[MANAGER] running rules for cell {0}, kernel {1}".format(cell_id, kernel_id)) 
         env = self.analyses[kernel_id]
- 
-        feasible_rules = [r for r in self.rules.values() if r.feasible(cell_id, env)]
+
+        if cell_mode not in self.rules:
+            self._nb.log.warning("[MANAGER] Cell mode {0} not in configured rules {1}".format(cell_mode, self.rules.keys()))
+            return
+
+        feasible_rules = [r for r in self.rules[cell_mode] if r.feasible(cell_id, env)]
         self._nb.log.debug("[MANAGER] There are {0} feasible rules".format(len(feasible_rules)))
         
         if feasible_rules:
@@ -104,6 +112,7 @@ class AnalysisManager:
             chosen_rule = choice(feasible_rules)
             chosen_rule.make_response(self.analyses[kernel_id], kernel_id, cell_id)
             self._nb.log.debug("[MANAGER] chose rule {0}".format(chosen_rule))
+
     def make_response(self, kernel_id, cell_id, mode=None):
         """
         form the body of the response to send back to plugin, in the form of a dictionary
