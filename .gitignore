@@ -16,3 +16,4 @@ package-lock.json
 **/yarn.lock
 **/tsconfig.tsbuildinfo
 venv/
+jupyter_note_book_plugin/evaluation_task/*
