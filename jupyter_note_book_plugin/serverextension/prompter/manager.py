@@ -3,6 +3,7 @@ we need a global session manager which handles
 routing of code analyses and handles failures
 """
 import sys, os, re
+import json
 
 import mysql.connector
 
@@ -10,8 +11,8 @@ from random import choice
 
 from .storage import DbHandler, RemoteDbHandler
 from .analysis import AnalysisEnvironment
-from .config import MODE, remote_config, NOTE_RULES
-from .notifications import SensitiveColumnNote, ZipVarianceNote, OutliersNote, PerformanceNote
+from .config import MODE, remote_config
+from .note_config import NOTE_RULES
 
 class AnalysisManager:
     """
@@ -50,6 +51,8 @@ class AnalysisManager:
         kernel_id = request["kernel"]
         cell_id = request["cell_id"]
         code = request["contents"]
+        metadata = json.loads(request["metadata"])
+        cell_mode = metadata.get("section")
 
         self._nb.log.info("[MANAGER] Analyzing cell {0} with kernel {1}".format(cell_id, kernel_id))
 
@@ -70,30 +73,39 @@ class AnalysisManager:
 
         self.update_notifications(kernel_id, cell_id)
         self.new_notifications(kernel_id, cell_id, cell_mode)
-        response = self.send_notifications(kernel_id, cell_id)
+        response = self.send_notifications(kernel_id, cell_id, request["exec_ct"])
  
 #        response = self.make_response(kernel_id, cell_id, mode=MODE)
         self._nb.log.info("[MANAGER] sending response {0}".format(response))
 
         return response
-    def send_notifications(kernel_id, cell_id):
+
+    def send_notifications(self, kernel_id, cell_id, exec_ct):
 
         resp = {}
         resp["info"] = {}
         resp["info"]["cell"] = cell_id
+        resp["info"][cell_id] = []
 
-        for notes in self.rules.items():
+        for notes in self.rules.values():
             for note in notes:
                 if note.on_cell(cell_id):
-                    resp["info"][cell_id] = note.get_response(cell_id)
+                    resp["info"][cell_id].append(note.get_response(cell_id))
+
+        for response in resp["info"][cell_id]:
+            self.db.store_response(kernel_id, cell_id, exec_ct, response)  
+         
+        resp["type"] = "multiple"
+
         return resp 
+
     def update_notifications(self, kernel_id, cell_id):
 
         # TODO, should go through any active notifications associated with
         # this cell and then then check if the information is still good
 
         pass
-    def new_notifications(kernel_id, cell_id, cell_mode):
+    def new_notifications(self, kernel_id, cell_id, cell_mode):
         # Start here tomorrow, you were moving things out of make_response
         # and run_rules to parcel things out. 
         # what should the mechanism for enforcing cell_mode restrictions be?        
@@ -110,56 +122,8 @@ class AnalysisManager:
         if feasible_rules:
 
             chosen_rule = choice(feasible_rules)
-            chosen_rule.make_response(self.analyses[kernel_id], kernel_id, cell_id)
+            chosen_rule.make_response(self.analyses[kernel_id], kernel_id, cell_id) # this should store the response
             self._nb.log.debug("[MANAGER] chose rule {0}".format(chosen_rule))
-
-    def make_response(self, kernel_id, cell_id, mode=None):
-        """
-        form the body of the response to send back to plugin, in the form of a dictionary
-        """
-        resp = {}
-
-        if mode == "EXP_CTS":
-            ans = self.run_rules(kernel_id, cell_id)
-
-            if cell_id in ans:
-                resp["info"] = {cell_id : ans[cell_id]}
-            else:
-                resp["info"] = {}
-            resp["type"] = "multiple"
-
-        if mode == "EXP_END":
-
-            ans = self.run_rules(kernel_id, cell_id)
-
-
-                self._nb.log.info("[MANAGER] model submission")                
-                resp["info"] = ans
-                resp["type"] = "multiple"
-
-        if "info" not in resp:
-            resp["info"] = {}
-
-        resp["info"]["cell"] = cell_id
-        return resp
-
-    def run_rules(self, kernel_id, cell_id):
-
-        self._nb.log.debug("[MANAGER] running rules for cell {0}, kernel {1}".format(cell_id, kernel_id)) 
-        env = self.analyses[kernel_id]
- 
-        feasible_rules = [r for r in self.rules.values() if r.feasible(cell_id, env)]
-        self._nb.log.debug("[MANAGER] There are {0} feasible rules".format(len(feasible_rules)))
-        
-        if feasible_rules:
-
-            chosen_rule = choice(feasible_rules)
-            chosen_rule.make_response(self.analyses[kernel_id], kernel_id, cell_id)
-            self._nb.log.debug("[MANAGER] chose rule {0}".format(chosen_rule))
-
-        responses = self.db.get_responses(kernel_id)
-
-        return responses 
 
     def new_data(self, kernel_id): 
         """ check if data in the env is new, and if so, register and send event"""

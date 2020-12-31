@@ -20,10 +20,13 @@ WAIT_TIME = 8 # How many turns should notes wait before becoming active again?
 
 # also need notifications meant for the EXP_END condition
 
-class Notifications:
+class Notification:
 
     def __init__(self, db):
         self.db = db
+        self.data = {}
+
+        # data format is cell id -> {note info}
 
     def feasible(self, cell_id, env):
         """is it feasible to send this notification?"""
@@ -35,52 +38,16 @@ class Notifications:
         return 0 
 
     def make_response(self, env, kernel_id, cell_id):
-        """form the response to send to the frontend""" 
+        """form and store the response to send to the frontend""" 
         raise NotImplementedError
-
-class EnabledNote(Notifications):
-
-    def __init__(self, db):
-        super().__init__(db)
-        self.start_message_recvd = False
-
-    def feasible(self, cell_id, env):
-
-        env._nbapp.log.debug("[ENABLEDNOTE] checking whether enabled")
-        if self.start_message_recvd:
-            env._nbapp.log.debug("[ENABLEDNOTE] yes")
-            return True 
-
-        cell_code = self.db.get_code(env._kernel_id, cell_id)
-        invocation_matcher = re.compile(r"#\W*%(\w+)\W+(\w+)")
-        for line in cell_code.splitlines():
-            mtch = invocation_matcher.search(line)
-            if mtch and mtch.group(1) == "prompter_plugin"\
-                    and mtch.group(2) == "model_training":
-                self.start_message_recvd = True
-                env._nbapp.log.debug("[ENABLEDNOTE] model training started")
-        return self.start_message_recvd
-
-class SpacedNote(EnabledNote):
-
-    def __init__(self, db):
-        super().__init__(db)
     
-    def feasible(self, cell_id, env):
-        # TODO: want to have a counter shared among instances of subclasses
-        # that gets incremented every time one is sent.
-        if not super().feasible(cell_id, env):
-            return False
- 
-        global LAST_SENT
-        if not LAST_SENT or LAST_SENT > WAIT_TIME:
-            return True 
-        LAST_SENT += 1 # this is a hack, based on number of notes
-        return False 
+    def on_cell(self, cell_id):
+        """has this note been triggered on this cell?"""
+        return False
+    def get_response(self, cell_id):
+        return {}
 
-    def make_response(self, env, kernel_id, cell_id):
-        LAST_SENT = 0
-class OnetimeNote(SpacedNote):
+class OnetimeNote(Notification):
     """
     A notification that is sent exactly once
     """
@@ -90,16 +57,12 @@ class OnetimeNote(SpacedNote):
         self.sent = False
 
     def feasible(self, cell_id, env):
-        enabled = super().feasible(cell_id, env)
-        env._nbapp.log.debug("[ONETIMENOTE] sent: {0}".format(self.sent))
-        env._nbapp.log.debug("[ONETIMENOTE] enabled: {0}".format(enabled))
-        return ((not self.sent) and enabled)
+        return (not self.sent)
     
     def times_sent(self):
         return int(self.sent)
 
     def make_response(self, env, kernel_id, cell_id):
-        super().make_response(env, kernel_id, cell_id)
         self.sent = True
 
 class SensitiveColumnNote(OnetimeNote):
@@ -117,6 +80,10 @@ class SensitiveColumnNote(OnetimeNote):
                 return True
             return False
         return False
+    def on_cell(self, cell_id):
+        return cell_id in self.data
+    def get_response(self, cell_id): 
+        return self.data.get(cell_id)
 
     def make_response(self, env, kernel_id, cell_id):
 
@@ -125,11 +92,14 @@ class SensitiveColumnNote(OnetimeNote):
         resp = {"type" : "resemble"}
         resp["col"] = "race"
         resp["category"] = "race"
+
         if hasattr(self, "df_name"):
             resp["df"] = self.df_name
         else:
             resp["df"] = "unnamed"
-        self.db.store_response(kernel_id, cell_id, resp)
+        self.data[cell_id] = resp
+
+#        self.db.store_response(kernel_id, cell_id, resp)
 
 class ZipVarianceNote(OnetimeNote):
 
@@ -229,7 +199,7 @@ class OutliersNote(OnetimeNote):
 
         self.db.store_response(kernel_id, cell_id, resp) 
 
-class PerformanceNote(SpacedNote):
+class PerformanceNote(Notification):
 
     def feasible(self, cell_id, env):
 

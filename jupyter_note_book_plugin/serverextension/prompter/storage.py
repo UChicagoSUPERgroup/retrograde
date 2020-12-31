@@ -23,9 +23,8 @@ SQL_CMDS = {
   "ADD_COLS" : """INSERT INTO columns VALUES (?, ?, ?, ?, ?, ?, ?)""",
   "GET_VERSIONS" : """SELECT contents, version FROM versions WHERE kernel = ? AND id = ? AND user = ? ORDER BY version DESC LIMIT 1""",
   "GET_COLS" : """SELECT * FROM columns WHERE user = ? AND col_name = ?""",
-  "STORE_RESP" : """INSERT INTO notifications(kernel, user, cell, resp) VALUES (?, ?, ?, ?)""",
+  "STORE_RESP" : """INSERT INTO notifications(kernel, user, cell, resp, exec_ct) VALUES (?, ?, ?, ?, ?)""",
   "GET_RESPS" : """SELECT cell, resp FROM notifications WHERE kernel = ? AND user = ?""",
-  "UPDATE_RESP" : """UPDATE notifications SET resp = ? WHERE kernel = ? AND user = ? AND resp =?;"""
 }
 
 LOCAL_SQL_CMDS = { # cmds that will always get executed locally
@@ -224,17 +223,11 @@ class DbHandler(object):
         self._cursor.execute(self.cmds["GET_COLS"], (self.user, name))
         return self._cursor.fetchall()
   
-    def store_response(self, kernel_id, cell_id, response):
+    def store_response(self, kernel_id, cell_id, exec_ct, response):
 
         self.renew_connection()
 
-        self._cursor.execute(self.cmds["STORE_RESP"], (kernel_id, self.user, cell_id, json.dumps(response)))
-        self._conn.commit()
-
-    def update_response(self, kernel_id, cell_id, old_resp, response):
-
-        self.renew_connection()
-        self._cursor.execute(self.cmds["UPDATE_RESP"], (json.dumps(response), kernel_id, self.user, json.dumps(old_resp)))
+        self._cursor.execute(self.cmds["STORE_RESP"], (kernel_id, self.user, cell_id, json.dumps(response), exec_ct))
         self._conn.commit()
 
     def get_responses(self, kernel_id):

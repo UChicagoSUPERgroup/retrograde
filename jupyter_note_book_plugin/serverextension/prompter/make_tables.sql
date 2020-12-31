@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS notifications(
     kernel VARCHAR(255),
     user VARCHAR(255),
     cell VARCHAR(255),
+    exec_ct INT, 
     resp LONGTEXT);
 
 CREATE TABLE IF NOT EXISTS UsersContainers(

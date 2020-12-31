@@ -1,5 +1,6 @@
 import os
 import importlib.resources as pkg_resources
+#from .notifications import SensitiveColumnNote
 
 DB_DIR = "~/.promptml/"
 DB_NAME = "cells.db"
@@ -16,19 +17,3 @@ else:
 
 table_query = pkg_resources.read_text(__package__, "make_tables.sql")
 
-if MODE == "EXP_CTS":
-    NOTE_RULES = {
-        "intro" :[],
-        "tutorial" : [],
-        "null_clean" : [],
-        "model" : [],
-        "end" : []
-    }
-if MODE == "EXP_END":
-    NOTE_RULES = {
-        "intro" :[],
-        "tutorial" : [],
-        "null_clean" : [],
-        "model" : [],
-        "end" : []
-    }
