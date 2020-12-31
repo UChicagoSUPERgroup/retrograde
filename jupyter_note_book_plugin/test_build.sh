@@ -19,5 +19,5 @@ jupyter kernelspec install prompt_kernel
 cd ./evaluation_task
 python build_task.py
 cd ../
-jupyter lab ./evaluation_task/build --log-level=DEBUG --ip=127.0.0.1 --watch 
+jupyter lab ./evaluation_task --log-level=DEBUG --ip=127.0.0.1 --watch 
 
