@@ -1,6 +1,9 @@
 import json
+import os
+from shutil import copyfile
 
 TASK_NAME = 'notebook_dist'
+BUILD_DIR_NAME = 'build'
 
 data = {}
 with open(f'{TASK_NAME}.ipynb', 'r') as f:
@@ -14,6 +17,7 @@ SECTION_START_KEYS = {
     'end_start' : 'end'
 }
 
+FILES_TO_COPY = ['loan_data.csv']
 
 current_section = SECTION_START_KEYS['intro_start']
 
@@ -29,7 +33,13 @@ for cell in data['cells']:
         current_section = SECTION_START_KEYS[cell['metadata']["new_section"]]
     cell['metadata']['section'] = current_section
 
-with open(f'{TASK_NAME}_build.ipynb', 'w') as f:
+if not os.path.exists(BUILD_DIR_NAME):
+    os.makedirs(BUILD_DIR_NAME)
+
+for file in FILES_TO_COPY:
+    copyfile(file, f'{BUILD_DIR_NAME}/{file}')
+
+with open(f'{BUILD_DIR_NAME}/{TASK_NAME}.ipynb', 'w') as f:
 	json.dump(data, f, indent = 1)
 
-print(f'Built task in: {TASK_NAME}_build.ipynb')
+print(f'Built task in: {TASK_NAME}.ipynb')
