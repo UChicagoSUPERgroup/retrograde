@@ -194,8 +194,7 @@ class OutliersNote(OnetimeNote):
         resp["value"] = float(df["principal"].iloc[index])
         resp["std_dev"] = float(scores[index])
         resp["df_name"] = df_name
-
-        self.db.store_response(kernel_id, cell_id, resp) 
+        self.data[cell_id] = resp
 
 class PerformanceNote(Notification):
 
