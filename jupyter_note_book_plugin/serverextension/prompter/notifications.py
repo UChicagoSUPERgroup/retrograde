@@ -208,7 +208,16 @@ class PerformanceNote(Notification):
 
         models = []
         env._nbapp.log.debug("[PERFORMANCENOTE] there are {0} possible models".format(len(poss_models)))
- 
+
+
+        # cell_models is used to ensure that we're not generating a new note
+        # for a model that's already had a note generated for it
+
+        if cell_id in self.data: 
+            cell_models = [model.get("model_name") for model in self.data.get(cell_id)]
+        else:
+            cell_models = []
+
         for model_name in poss_models:
 
             if not poss_models[model_name]: 
@@ -256,11 +265,17 @@ class PerformanceNote(Notification):
                 label_df = None
 #            env._nbapp.log.debug(
 #                "[PERFORMANCENOTE] model {0} has_model {1}, has_features {2}, has_labels {3}".format(model_name, has_model, has_features, has_labels))
+            # note that feasible method checks if it is feasible to generate a *new* model
+            # rather than update an old one. 
+
+            # therefore, only look to see if models defined do not already have notes
+            # associated with them
 
             if (has_model and has_features and has_labels and (subset_features is not None) and (subset_labels is not None)):
-                models.append((model_name, ns[model_name], subset_features, subset_labels, feature_df, label_df)) 
-        self.models = models
+                if model_name not in cell_models: 
+                    models.append((model_name, ns[model_name], subset_features, subset_labels, feature_df, label_df)) 
 
+        self.models = models
         if models: return True
         return False 
 
@@ -294,21 +309,7 @@ class PerformanceNote(Notification):
             self.sent = 0
         return self.sent
 
-    def new_model_name(self, kernel_id, cell_id, model_name):
-        """are we updating an old model perf or creating a new one?"""
-        # TODO this needs to change
-        responses = self.db.get_responses(kernel_id)
-
-        if cell_id not in responses: return None
-
-        for resp in responses[cell_id]: 
-            if resp["type"] == "model_perf" and resp["model_name"] == model_name:
-                return resp
-        return None
-
     def make_response(self, env, kernel_id, cell_id):
-
-        super().make_response(env, kernel_id, cell_id) # TODO does this need to change?
 
         model_name, model, features_df, labels_df, full_feature, full_label = choice(self.models) # lets mix it up a little
 
@@ -325,7 +326,7 @@ class PerformanceNote(Notification):
         s_col = self.try_align(features_df, full_feature, "sex")
         if s_col is not None: subgroups.append(s_col)
 
-        if len(subgroups) == 0: # fall back to this option
+        if len(subgroups) == 0: # fall back to this option if no sensitive cols
 
             env._nbapp.log.debug("[NOTIFICATIONS] PerfNote.make_response, cannot find sensitive columns falling back to categorical vars")
 
@@ -373,11 +374,7 @@ class PerformanceNote(Notification):
 
         env._nbapp.log.debug("[PERFORMANCENOTE] notification is {0}".format(resp))
 
-        # TODO does this need to change?
-
-        old_resp = self.new_model_name(kernel_id, cell_id, model_name) 
-
-        if not old_resp: 
-            self.db.store_response(kernel_id, cell_id, resp) 
+        if cell_id in self.data:
+            self.data[cell_id].append(resp)
         else:
-            self.db.update_response(kernel_id, cell_id, old_resp, resp) 
+            self.data[cell_id] = [resp]  

@@ -1,4 +1,4 @@
-from .notifications import SensitiveColumnNote, ZipVarianceNote, OutliersNote
+from .notifications import SensitiveColumnNote, ZipVarianceNote, OutliersNote, PerformanceNote
 from .config import MODE
 
 if MODE == "EXP_CTS":
@@ -6,7 +6,7 @@ if MODE == "EXP_CTS":
         "intro" :[],
         "tutorial" : [OutliersNote],
         "null_clean" : [],
-        "model" : [],
+        "model" : [ZipVarianceNote, PerformanceNote],
         "end" : []
     }
 if MODE == "EXP_END":
