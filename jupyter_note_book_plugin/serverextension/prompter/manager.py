@@ -90,7 +90,7 @@ class AnalysisManager:
         for notes in self.rules.values():
             for note in notes:
                 if note.on_cell(cell_id):
-                    resp["info"][cell_id].append(note.get_response(cell_id))
+                    resp["info"][cell_id].extend(note.get_response(cell_id))
 
         for response in resp["info"][cell_id]:
             self.db.store_response(kernel_id, cell_id, exec_ct, response)  

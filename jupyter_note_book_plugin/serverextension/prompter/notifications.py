@@ -95,7 +95,7 @@ class SensitiveColumnNote(OnetimeNote):
             resp["df"] = self.df_name
         else:
             resp["df"] = "unnamed"
-        self.data[cell_id] = resp
+        self.data[cell_id] = [resp]
 
 #        self.db.store_response(kernel_id, cell_id, resp)
 
@@ -152,7 +152,7 @@ class ZipVarianceNote(OnetimeNote):
         resp["zip2"] = 60611 
 
         resp["demo"] = {60637 : int(rate_df["black"][60637]*100), 60611 : int(rate_df["white"][60611]*100)}
-        self.data[cell_id] = resp
+        self.data[cell_id] = [resp]
 
 class OutliersNote(OnetimeNote):
 
@@ -191,7 +191,7 @@ class OutliersNote(OnetimeNote):
         resp["value"] = float(df["principal"].iloc[index])
         resp["std_dev"] = float(scores[index])
         resp["df_name"] = df_name
-        self.data[cell_id] = resp
+        self.data[cell_id] = [resp]
 
 class PerformanceNote(Notification):
 
