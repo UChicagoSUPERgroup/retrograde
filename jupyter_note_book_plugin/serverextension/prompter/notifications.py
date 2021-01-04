@@ -65,6 +65,11 @@ class OnetimeNote(Notification):
     def make_response(self, env, kernel_id, cell_id):
         self.sent = True
 
+    def on_cell(self, cell_id):
+        return cell_id in self.data
+    def get_response(self, cell_id): 
+        return self.data.get(cell_id)
+
 class SensitiveColumnNote(OnetimeNote):
 
     """
@@ -80,10 +85,6 @@ class SensitiveColumnNote(OnetimeNote):
                 return True
             return False
         return False
-    def on_cell(self, cell_id):
-        return cell_id in self.data
-    def get_response(self, cell_id): 
-        return self.data.get(cell_id)
 
     def make_response(self, env, kernel_id, cell_id):
 
@@ -117,8 +118,6 @@ class ZipVarianceNote(OnetimeNote):
     def make_response(self, env, kernel_id, cell_id):
 
         super().make_response(env, kernel_id, cell_id)
-
-        # TODO: what does the response need to be?
 
         resp = {"type" : "variance"}
 
@@ -156,8 +155,7 @@ class ZipVarianceNote(OnetimeNote):
         resp["zip2"] = 60611 
 
         resp["demo"] = {60637 : int(rate_df["black"][60637]*100), 60611 : int(rate_df["white"][60611]*100)}
-
-        self.db.store_response(kernel_id, cell_id, resp)
+        self.data[cell_id] = resp
 
 class OutliersNote(OnetimeNote):
 

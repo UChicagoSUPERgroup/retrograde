@@ -1,12 +1,12 @@
-from .notifications import SensitiveColumnNote
+from .notifications import SensitiveColumnNote, ZipVarianceNote
 from .config import MODE
 
 if MODE == "EXP_CTS":
     NOTE_RULES = {
         "intro" :[],
-        "tutorial" : [SensitiveColumnNote],
-        "null_clean" : [],
-        "model" : [SensitiveColumnNote],
+        "tutorial" : [],
+        "null_clean" : [ZipVarianceNote],
+        "model" : [],
         "end" : []
     }
 if MODE == "EXP_END":
