@@ -42,10 +42,12 @@ class Notification:
         raise NotImplementedError
     
     def on_cell(self, cell_id):
-        """has this note been triggered on this cell?"""
-        return False
-    def get_response(self, cell_id):
-        return {}
+        """has this note been associated with the cell with this id?"""
+        return cell_id in self.data
+
+    def get_response(self, cell_id): 
+        """what response was associated with this cell, return None if no response"""
+        return self.data.get(cell_id)
 
 class OnetimeNote(Notification):
     """
@@ -64,11 +66,6 @@ class OnetimeNote(Notification):
 
     def make_response(self, env, kernel_id, cell_id):
         self.sent = True
-
-    def on_cell(self, cell_id):
-        return cell_id in self.data
-    def get_response(self, cell_id): 
-        return self.data.get(cell_id)
 
 class SensitiveColumnNote(OnetimeNote):
 
@@ -200,9 +197,6 @@ class PerformanceNote(Notification):
 
     def feasible(self, cell_id, env):
 
-        if not super().feasible(cell_id, env):
-            return False
-
         cell_code = self.db.get_code(env._kernel_id, cell_id)
         if not cell_code: return False
 
@@ -302,6 +296,7 @@ class PerformanceNote(Notification):
 
     def new_model_name(self, kernel_id, cell_id, model_name):
         """are we updating an old model perf or creating a new one?"""
+        # TODO this needs to change
         responses = self.db.get_responses(kernel_id)
 
         if cell_id not in responses: return None
@@ -313,7 +308,7 @@ class PerformanceNote(Notification):
 
     def make_response(self, env, kernel_id, cell_id):
 
-        super().make_response(env, kernel_id, cell_id)
+        super().make_response(env, kernel_id, cell_id) # TODO does this need to change?
 
         model_name, model, features_df, labels_df, full_feature, full_label = choice(self.models) # lets mix it up a little
 
@@ -377,6 +372,8 @@ class PerformanceNote(Notification):
                 resp["columns"][col_name][str(val)] = {"fpr" : fp, "fnr" : fn}
 
         env._nbapp.log.debug("[PERFORMANCENOTE] notification is {0}".format(resp))
+
+        # TODO does this need to change?
 
         old_resp = self.new_model_name(kernel_id, cell_id, model_name) 
 
