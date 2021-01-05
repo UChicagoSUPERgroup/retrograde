@@ -42,6 +42,9 @@ class Notification:
     def get_response(self, cell_id): 
         """what response was associated with this cell, return None if no response"""
         return self.data.get(cell_id)
+    def update(self, env, kernel_id, cell_id):
+        """check whether the note on this cell needs to be updated"""
+        raise NotImplementedError
 
 class OnetimeNote(Notification):
     """
@@ -94,7 +97,6 @@ class SensitiveColumnNote(OnetimeNote):
         else:
             resp["df"] = "unnamed"
         self.data[cell_id] = [resp]
-
 class ZipVarianceNote(OnetimeNote):
     """
     A notification that measures the variance in race between the
