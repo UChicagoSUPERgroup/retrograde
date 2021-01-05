@@ -11,6 +11,7 @@ from datetime import datetime
 import sqlite3
 import os
 import dill
+import re
 
 import pandas as pd
 
@@ -70,10 +71,17 @@ class ForkingKernel(IPythonKernel):
         boiler_plate_keys = [ # defs that are just part of kernel exec env
             "__name__", "__doc__", "__package__", "__loader__",
             "__spec__", "_ih", "_oh", "_dh", "In", "Out",
-            "_", "__", "___", "_i", "_ii", "_iii", "_i1", "_exit_code"]
-
+            "_", "__", "___", "_i", "_ii", "_iii", "_exit_code"]
+        boiler_plate_exp = [ # environment history elements that aren't needed
+            re.compile("_i\d+"),
+            re.compile("_\d+")
+        ]
+        
         for k, var in self.shell.user_ns.items():
             if k in boiler_plate_keys:
+                continue
+            matches = [exp.fullmatch(k) for exp in boiler_plate_exp]
+            if not all([m is None for m in matches]):
                 continue
             if isinstance(var, pd.DataFrame):
                 better_ns["_forking_kernel_dfs"][k] = dill.dumps(var)
