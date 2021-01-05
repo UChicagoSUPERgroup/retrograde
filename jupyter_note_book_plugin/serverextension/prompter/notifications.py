@@ -296,6 +296,7 @@ class OutliersNote(OnetimeNote):
 
                 if len(other_dfs) == 0:
                     del self.data[cell_id]
+                    self.sent = False
                     continue
             
                 df_name = other_dfs[0]
@@ -305,6 +306,7 @@ class OutliersNote(OnetimeNote):
             else:
                 df = dfs[df_name]
             note["value"], note["std_dev"] = self.compute_outliers(df, col_name)
+           
 class PerformanceNote(Notification):
     """
     A note that computes the false positive rate and false negative rate of
@@ -437,7 +439,7 @@ class PerformanceNote(Notification):
 
         resp = {"type" : "model_perf"}
         resp["model_name"] = model_name
-
+        
         env._nbapp.log.debug("[PERFORMENCENOTE] Input columns {0}".format(features_df.columns))
 
         subgroups = []
@@ -500,3 +502,24 @@ class PerformanceNote(Notification):
             self.data[cell_id].append(resp)
         else:
             self.data[cell_id] = [resp]  
+
+    def update(self, env, kernel_id, cell_id):
+        """
+        check if the model referenced in the current note needs to be updated
+
+        since PerformanceNote is not a OneTimeNote subclass, we don't need
+        to look for another available model here. We only need to check if the
+        model named in the note needs updating.  
+        """
+
+        ns = self.db.recent_ns()
+        dfs = load_dfs(ns)
+
+        ns = dill.loads(ns["namespace"]) 
+
+        for note in self.data[cell_id]:
+            model_name = note["model_name"]
+          
+        # TODO: this function and module we expect to change significantly
+        # to use AIF 360 to recommend corrections 
+        pass               
