@@ -122,6 +122,8 @@ class SensitiveColumnNote(OnetimeNote):
                     note["df"] = other_df
                     return
             del self.data[cell_id]
+            self.sent = False # unset this so it can be sent again
+
 class ZipVarianceNote(OnetimeNote):
     """
     A notification that measures the variance in race between the
