@@ -97,6 +97,31 @@ class SensitiveColumnNote(OnetimeNote):
         else:
             resp["df"] = "unnamed"
         self.data[cell_id] = [resp]
+
+    def update(self, env, kernel_id, cell_id):
+        """
+        check if column with RACE_COL_NAME is still in df.columns
+        if so, nothing happens, if RACE_COL_NAME still defined, but no longer
+        in df of df_name, update df name
+        if no longer in namespace, remove note altogether
+        """
+
+        ns = self.db.recent_ns()
+        dfs = load_dfs(ns)
+
+        for note in self.data[cell_id]:
+
+            col_name = note["col"]
+            df_name = note["df"]
+
+            if df_name in dfs.keys():
+                if col_name in dfs[df_name].columns:
+                    return
+            for other_df in dfs.keys():
+                if col_name in dfs[other_df].columns:
+                    note["df"] = other_df
+                    return
+            del self.data[cell_id]
 class ZipVarianceNote(OnetimeNote):
     """
     A notification that measures the variance in race between the

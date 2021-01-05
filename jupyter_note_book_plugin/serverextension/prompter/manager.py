@@ -105,8 +105,9 @@ class AnalysisManager:
         are there notes associated with this cell that need to be updated?
         """
         for notes in self.notes.values():
-            if note.on_cell(cell_id):
-                note.update(self.analyses[kernel_id], kernel_id, cell_id)
+            for note in notes:
+                if note.on_cell(cell_id):
+                    note.update(self.analyses[kernel_id], kernel_id, cell_id)
 
     def new_notifications(self, kernel_id, cell_id, cell_mode):
         """
