@@ -9,19 +9,8 @@ from random import choice
 from .storage import load_dfs
 from .sortilege import is_categorical
 
-LAST_SENT = None
-WAIT_TIME = 8 # How many turns should notes wait before becoming active again?
-
-# TODO: generic update method, work out storage format, make response writes out 
-# active status, cell associated with, and other info 
-# need a method note.on_cell -> returns true or false if note associated with cell
-# need a method get_response (w/ arg cell_id) that renders the response associated with
-# the cell
-
-# also need notifications meant for the EXP_END condition
-
 class Notification:
-
+    """Abstract base class for all notifications"""
     def __init__(self, db):
         self.db = db
         self.data = {}
@@ -30,7 +19,6 @@ class Notification:
 
     def feasible(self, cell_id, env):
         """is it feasible to send this notification?"""
-        # nb. bake in timing + whether prerequisites exist here
         return False
    
     def times_sent(self):
@@ -51,7 +39,7 @@ class Notification:
 
 class OnetimeNote(Notification):
     """
-    A notification that is sent exactly once
+    Abstract base class for notification that is sent exactly once
     """
 
     def __init__(self, db):
@@ -71,7 +59,11 @@ class SensitiveColumnNote(OnetimeNote):
 
     """
     a class that indicates whether a sensitive column is present in
-    an active dataframe
+    an active dataframe.
+
+    data format is {"type" : "resemble", 
+                    "col" : "race", "category" : "race"
+                    "df" : <df name or "unnamed">}
     """
 
     def feasible(self, cell_id, env):
@@ -97,10 +89,16 @@ class SensitiveColumnNote(OnetimeNote):
             resp["df"] = "unnamed"
         self.data[cell_id] = [resp]
 
-#        self.db.store_response(kernel_id, cell_id, resp)
-
 class ZipVarianceNote(OnetimeNote):
+    """
+    A notification that measures the variance in race between the
+    zip codes 60637 and 60611
 
+    Format is {"type" : "variance", 
+               "zip1" : 60637, "zip2" : 60611,
+               "demo" : {60637 : <pct applications by black ppl>,
+                         60611 : <pct applications by white ppl>}}
+    """
     def feasible(self, cell_id, env):
         if super().feasible(cell_id, env):
             env._nbapp.log.debug("[ZipVar] checking columns")
@@ -155,7 +153,14 @@ class ZipVarianceNote(OnetimeNote):
         self.data[cell_id] = [resp]
 
 class OutliersNote(OnetimeNote):
+    """
+    A note that is computes whether there are outliers in the column
+    named principal
 
+    format is {"type" : "outliers", "col_name" : "principal",
+               "value" : <max outlier value>, "std_dev" : <std_dev of value>,
+               "df_name" : <name of dataframe column belongs to>}
+    """
     def feasible(self, cell_id, env):
         if super().feasible(cell_id, env):
 
@@ -194,7 +199,19 @@ class OutliersNote(OnetimeNote):
         self.data[cell_id] = [resp]
 
 class PerformanceNote(Notification):
+    """
+    A note that computes the false positive rate and false negative rate of
+    the model on training data
 
+    Format: {"type" : "model_perf", "model_name" : <name of model>,
+             "acc" : <training accuracy>, 
+             "values" : {"pos" : <value treated as positive, as string>,
+                         "neg" : <value treated as neg, as string>},
+             "columns" : {
+                <name of column to break down on> : {
+                    <value of column> : {"fpr" : <training fpr on subset of data when column == value>,
+                                         "fnr" : <training fnr on subset of data when column == value>}}}
+    """
     def feasible(self, cell_id, env):
 
         cell_code = self.db.get_code(env._kernel_id, cell_id)
@@ -263,8 +280,6 @@ class PerformanceNote(Notification):
                 subset_labels = ns[labels_df]
             else:
                 label_df = None
-#            env._nbapp.log.debug(
-#                "[PERFORMANCENOTE] model {0} has_model {1}, has_features {2}, has_labels {3}".format(model_name, has_model, has_features, has_labels))
             # note that feasible method checks if it is feasible to generate a *new* model
             # rather than update an old one. 
 
