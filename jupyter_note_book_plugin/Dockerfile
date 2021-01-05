@@ -7,6 +7,7 @@ RUN apt-get -y install nodejs
 #Install pipenv and run the build script
 ADD . /
 RUN chmod +x docker_build.sh
+#run the docker image in jupyter_note_book_plugin/evaluation_task/
 RUN chmod +x run_image.sh
 #Run the installation script
 RUN pip install -r /requirements.txt

@@ -16,8 +16,8 @@ mysql -u root -p < prompter/make_db.sql
 mysql -u root -p notebooks < prompter/make_tables.sql
 cd ..
 jupyter kernelspec install prompt_kernel
-cd ../evaluation_task
+cd ./evaluation_task
 python build_task.py
-cd ../jupyter_note_book_plugin
-jupyter lab ../evaluation_task --log-level=DEBUG --ip=127.0.0.1 --watch 
+cd ../
+jupyter lab ./evaluation_task --log-level=DEBUG --ip=127.0.0.1 --watch 
 

@@ -4,8 +4,6 @@ from random import randint
 import time
 import secrets
 
-IMAGE = 'gsamharrison/plugin-test:1.9.3'
-
 def get_free_port():
     lower_port = 8000
     upper_port = 9000
@@ -25,12 +23,12 @@ def get_free_port():
         raise ValueError('All ports in use...')
     return port
 
-def start_notebook(prolific_id=None, mode=None):
+def start_notebook(docker_image, prolific_id=None, mode=None, test_configuration = True):
     #start a docker on a random port from range container and detach from it 
     notebook_port = get_free_port()
     client = docker.from_env()
 
-    env = {"DOCKER_HOST_IP" : "127.0.0.1", "PLUGIN_PORT" : notebook_port}
+    env = {"DOCKER_HOST_IP" : "127.0.0.1"}
      
     if not prolific_id:
         env["JP_PLUGIN_USER"] = "UNTRACKED_USER-"+str(notebook_port)+str(randint(0,50))
@@ -43,9 +41,19 @@ def start_notebook(prolific_id=None, mode=None):
         env["MODE"] = mode
 
     env["TOKEN"] = prolific_id
-
-    container = client.containers.run(image=IMAGE,
-     # ports={8888:notebook_port},
+    if test_configuration:
+        #run on docker port 8888 and map port 8888 to notebook port
+        env.update({"PLUGIN_PORT" : 8888})
+        container = client.containers.run(image=docker_image,
+          ports={8888:notebook_port},
+          command="bash ./run_image.sh",
+          detach = True,
+          environment = env, 
+        )
+    else:
+        #run docker in host mode and run on notebook port
+        env.update({"PLUGIN_PORT" : notebook_port})
+        container = client.containers.run(image=docker_image,
       command="bash ./run_image.sh",
       detach = True,
       network_mode = "host",
@@ -60,8 +68,5 @@ def stop_notebook(container_id):
     container = client.containers.get(container_id)
     #wait 1 second to stop container, default is 10
     container.stop(timeout = 1)
-
-if __name__ == '__main__':
-    start_notebook()
 
 #docker run -p 8888:8888 jupyter/scipy-notebook:2c80cf3537ca
