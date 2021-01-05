@@ -101,11 +101,12 @@ class AnalysisManager:
         return resp 
 
     def update_notifications(self, kernel_id, cell_id):
-
-        # TODO, should go through any active notifications associated with
-        # this cell and then then check if the information is still good
-
-        pass
+        """
+        are there notes associated with this cell that need to be updated?
+        """
+        for notes in self.notes.values():
+            if note.on_cell(cell_id):
+                note.update(self.analyses[kernel_id], kernel_id, cell_id)
     def new_notifications(self, kernel_id, cell_id, cell_mode):
         """
         check if it is feasible to add any new note, and if so select
