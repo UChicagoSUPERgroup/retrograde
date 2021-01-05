@@ -138,28 +138,3 @@ class AnalysisManager:
                 env._nbapp.log.debug("[MANAGER] Adding new data {0}".format(info))
                 self.db.add_data(info, 1)
         return new_data_response
-
-    def new_models(self, kernel_id, cell_id):
-        """check if model is new, and if so register and send event"""
-        env = self.analyses[kernel_id]
-        new_model_response = {}
-
-        for name, info in env.models.items():
-            model_entry = self.db.find_model(name, info, kernel_id)
-            if not model_entry:
-                new_model_response[name] = info
-                self.db.add_model(name, info, kernel_id)
-
-        return new_model_response
-
-    def changed_data(self, kernel_id, cell_id):
-        """is data changed? if so notify of differences"""
-        env = self.analyses[kernel_id]
-        changed_data = {}
-    
-        for name, info in env.models.items():
-            data_entry = self.db.find_data(name, info, kernel_id)
-            if data_entry and data_entry != {name : info}:
-                changed_data[name] = {data_entry.values()[0] : info, "new" : info}
-                self.db.add_data(name, info, kernel_id)
-        return changed_data 
