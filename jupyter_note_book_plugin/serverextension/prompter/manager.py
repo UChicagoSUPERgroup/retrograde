@@ -77,7 +77,6 @@ class AnalysisManager:
         self.new_notifications(kernel_id, cell_id, cell_mode)
         response = self.send_notifications(kernel_id, cell_id, request["exec_ct"])
  
-#        response = self.make_response(kernel_id, cell_id, mode=MODE)
         self._nb.log.info("[MANAGER] sending response {0}".format(response))
 
         return response
@@ -108,9 +107,10 @@ class AnalysisManager:
 
         pass
     def new_notifications(self, kernel_id, cell_id, cell_mode):
-        # Start here tomorrow, you were moving things out of make_response
-        # and run_rules to parcel things out. 
-        # what should the mechanism for enforcing cell_mode restrictions be?        
+        """
+        check if it is feasible to add any new note, and if so select
+        and generate data for that note
+        """ 
         self._nb.log.debug("[MANAGER] running rules for cell {0}, kernel {1}".format(cell_id, kernel_id)) 
         env = self.analyses[kernel_id]
 
@@ -124,7 +124,7 @@ class AnalysisManager:
         if feasible_rules:
 
             chosen_rule = choice(feasible_rules)
-            chosen_rule.make_response(self.analyses[kernel_id], kernel_id, cell_id) # this should store the response
+            chosen_rule.make_response(self.analyses[kernel_id], kernel_id, cell_id)
             self._nb.log.debug("[MANAGER] chose rule {0}".format(chosen_rule))
 
     def new_data(self, kernel_id): 
@@ -163,10 +163,3 @@ class AnalysisManager:
                 changed_data[name] = {data_entry.values()[0] : info, "new" : info}
                 self.db.add_data(name, info, kernel_id)
         return changed_data 
-    def changed_models(self, kernel_id, cell_id):
-        """is model changed? if so notify of differences"""
-        pass # TODO                
-    def restore_session(self, kernel_id, cell_id):
-        # TODO
-        pass
-

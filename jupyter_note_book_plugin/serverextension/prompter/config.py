@@ -1,6 +1,5 @@
 import os
 import importlib.resources as pkg_resources
-#from .notifications import SensitiveColumnNote
 
 DB_DIR = "~/.promptml/"
 DB_NAME = "cells.db"
