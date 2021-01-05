@@ -9,6 +9,12 @@ from random import choice
 from .storage import load_dfs
 from .sortilege import is_categorical
 
+RACE_COL_NAME = "race"
+PROXY_COL_NAME = "zip"
+ZIP_1 = 60637
+ZIP_2 = 60611
+OUTLIER_COL = "principal"
+ 
 class Notification:
     """Abstract base class for all notifications"""
     def __init__(self, db):
@@ -68,7 +74,7 @@ class SensitiveColumnNote(OnetimeNote):
 
     def feasible(self, cell_id, env):
         if super().feasible(cell_id, env):
-            columns = self.db.get_columns("race") # hardcoded for experiment
+            columns = self.db.get_columns(RACE_COL_NAME)
             if columns: 
                 self.df_name = columns[0]["name"]
                 return True
@@ -80,8 +86,8 @@ class SensitiveColumnNote(OnetimeNote):
         super().make_response(env, kernel_id, cell_id)
 
         resp = {"type" : "resemble"}
-        resp["col"] = "race"
-        resp["category"] = "race"
+        resp["col"] = RACE_COL_NAME
+        resp["category"] = RACE_COL_NAME
 
         if hasattr(self, "df_name"):
             resp["df"] = self.df_name
@@ -102,8 +108,8 @@ class ZipVarianceNote(OnetimeNote):
     def feasible(self, cell_id, env):
         if super().feasible(cell_id, env):
             env._nbapp.log.debug("[ZipVar] checking columns")
-            race_columns = self.db.get_columns("race") # hardcoded for experiment
-            zip_columns = self.db.get_columns("zip")
+            race_columns = self.db.get_columns(RACE_COL_NAME)
+            zip_columns = self.db.get_columns(PROXY_COL_NAME)
             env._nbapp.log.debug("[ZipVar] columns are {0}, {1}".format(race_columns, zip_columns))
             if race_columns and zip_columns: 
                 return True
@@ -116,8 +122,8 @@ class ZipVarianceNote(OnetimeNote):
 
         resp = {"type" : "variance"}
 
-        race_columns = self.db.get_columns("race")
-        zip_columns = self.db.get_columns("zip")
+        race_columns = self.db.get_columns(RACE_COL_NAME)
+        zip_columns = self.db.get_columns(PROXY_COL_NAME)
         
         df_name = None
  
@@ -138,18 +144,18 @@ class ZipVarianceNote(OnetimeNote):
 
         df = dfs[df_name]
 
-        if "race" not in df.columns or "zip" not in df.columns:
+        if RACE_COL_NAME not in df.columns or PROXY_COL_NAME not in df.columns:
             env._nbapp.log.warning("[NOTIFICATIONS] ZipVarianceNote.make_response: race or zip not in dataframe columns")
             return
-        panel_df = pd.get_dummies(df["race"])
-        panel_df["zip"] = df["zip"]
+        panel_df = pd.get_dummies(df[RACE_COL_NAME])
+        panel_df[PROXY_COL_NAME] = df[PROXY_COL_NAME]
 
-        rate_df = panel_df.groupby(["zip"]).mean() 
+        rate_df = panel_df.groupby([PROXY_COL_NAME]).mean() 
 
-        resp["zip1"] = 60637 # use this to highlight redlining
-        resp["zip2"] = 60611 
+        resp["zip1"] = ZIP_1
+        resp["zip2"] = ZIP_2 
 
-        resp["demo"] = {60637 : int(rate_df["black"][60637]*100), 60611 : int(rate_df["white"][60611]*100)}
+        resp["demo"] = {ZIP_1 : int(rate_df["black"][ZIP_1]*100), ZIP_2 : int(rate_df["white"][ZIP_2]*100)}
         self.data[cell_id] = [resp]
 
 class OutliersNote(OnetimeNote):
@@ -164,7 +170,7 @@ class OutliersNote(OnetimeNote):
     def feasible(self, cell_id, env):
         if super().feasible(cell_id, env):
 
-            columns = self.db.get_columns("principal") # hardcoded for experiment
+            columns = self.db.get_columns(OUTLIER_COL) 
             if columns: 
                 return True
             return False
@@ -174,7 +180,7 @@ class OutliersNote(OnetimeNote):
         super().make_response(env, kernel_id, cell_id)
 
         resp = {"type" : "outliers"}
-        cols = self.db.get_columns("principal")
+        cols = self.db.get_columns(OUTLIER_COL)
       
         if not cols:
             env._nbapp.log.warning("[NOTIFICATIONS] OutlierNote.make_response: cannot find column named principal") 
@@ -189,11 +195,11 @@ class OutliersNote(OnetimeNote):
             return
 
         df = dfs[df_name]
-        scores = np.absolute(zscore(df["principal"]))
+        scores = np.absolute(zscore(df[OUTLIER_COL]))
         index = np.argmax(scores)
 
-        resp["col_name"] = "principal"
-        resp["value"] = float(df["principal"].iloc[index])
+        resp["col_name"] = OUTLIER_COL
+        resp["value"] = float(df[OUTLIER_COL].iloc[index])
         resp["std_dev"] = float(scores[index])
         resp["df_name"] = df_name
         self.data[cell_id] = [resp]
