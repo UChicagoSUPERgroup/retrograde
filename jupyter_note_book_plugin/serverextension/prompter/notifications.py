@@ -9,17 +9,22 @@ from random import choice
 from .storage import load_dfs
 from .sortilege import is_categorical
 
-LAST_SENT = None
-WAIT_TIME = 8 # How many turns should notes wait before becoming active again?
-
-class Notifications:
-
+RACE_COL_NAME = "race"
+PROXY_COL_NAME = "zip"
+ZIP_1 = 60637
+ZIP_2 = 60611
+OUTLIER_COL = "principal"
+ 
+class Notification:
+    """Abstract base class for all notifications"""
     def __init__(self, db):
         self.db = db
+        self.data = {}
+
+        # data format is cell id -> {note info}
 
     def feasible(self, cell_id, env):
         """is it feasible to send this notification?"""
-        # nb. bake in timing + whether prerequisites exist here
         return False
    
     def times_sent(self):
@@ -27,54 +32,20 @@ class Notifications:
         return 0 
 
     def make_response(self, env, kernel_id, cell_id):
-        """form the response to send to the frontend""" 
+        """form and store the response to send to the frontend""" 
         raise NotImplementedError
-
-class EnabledNote(Notifications):
-
-    def __init__(self, db):
-        super().__init__(db)
-        self.start_message_recvd = False
-
-    def feasible(self, cell_id, env):
-
-        env._nbapp.log.debug("[ENABLEDNOTE] checking whether enabled")
-        if self.start_message_recvd:
-            env._nbapp.log.debug("[ENABLEDNOTE] yes")
-            return True 
-
-        cell_code = self.db.get_code(env._kernel_id, cell_id)
-        invocation_matcher = re.compile(r"#\W*%(\w+)\W+(\w+)")
-        for line in cell_code.splitlines():
-            mtch = invocation_matcher.search(line)
-            if mtch and mtch.group(1) == "prompter_plugin"\
-                    and mtch.group(2) == "model_training":
-                self.start_message_recvd = True
-                env._nbapp.log.debug("[ENABLEDNOTE] model training started")
-        return self.start_message_recvd
-
-class SpacedNote(EnabledNote):
-
-    def __init__(self, db):
-        super().__init__(db)
     
-    def feasible(self, cell_id, env):
-        # TODO: want to have a counter shared among instances of subclasses
-        # that gets incremented every time one is sent.
-        if not super().feasible(cell_id, env):
-            return False
- 
-        global LAST_SENT
-        if not LAST_SENT or LAST_SENT > WAIT_TIME:
-            return True 
-        LAST_SENT += 1 # this is a hack, based on number of notes
-        return False 
+    def on_cell(self, cell_id):
+        """has this note been associated with the cell with this id?"""
+        return cell_id in self.data
 
-    def make_response(self, env, kernel_id, cell_id):
-        LAST_SENT = 0
-class OnetimeNote(SpacedNote):
+    def get_response(self, cell_id): 
+        """what response was associated with this cell, return None if no response"""
+        return self.data.get(cell_id)
+
+class OnetimeNote(Notification):
     """
-    A notification that is sent exactly once
+    Abstract base class for notification that is sent exactly once
     """
 
     def __init__(self, db):
@@ -82,28 +53,28 @@ class OnetimeNote(SpacedNote):
         self.sent = False
 
     def feasible(self, cell_id, env):
-        enabled = super().feasible(cell_id, env)
-        env._nbapp.log.debug("[ONETIMENOTE] sent: {0}".format(self.sent))
-        env._nbapp.log.debug("[ONETIMENOTE] enabled: {0}".format(enabled))
-        return ((not self.sent) and enabled)
+        return (not self.sent)
     
     def times_sent(self):
         return int(self.sent)
 
     def make_response(self, env, kernel_id, cell_id):
-        super().make_response(env, kernel_id, cell_id)
         self.sent = True
 
 class SensitiveColumnNote(OnetimeNote):
 
     """
     a class that indicates whether a sensitive column is present in
-    an active dataframe
+    an active dataframe.
+
+    data format is {"type" : "resemble", 
+                    "col" : "race", "category" : "race"
+                    "df" : <df name or "unnamed">}
     """
 
     def feasible(self, cell_id, env):
         if super().feasible(cell_id, env):
-            columns = self.db.get_columns("race") # hardcoded for experiment
+            columns = self.db.get_columns(RACE_COL_NAME)
             if columns: 
                 self.df_name = columns[0]["name"]
                 return True
@@ -115,21 +86,30 @@ class SensitiveColumnNote(OnetimeNote):
         super().make_response(env, kernel_id, cell_id)
 
         resp = {"type" : "resemble"}
-        resp["col"] = "race"
-        resp["category"] = "race"
+        resp["col"] = RACE_COL_NAME
+        resp["category"] = RACE_COL_NAME
+
         if hasattr(self, "df_name"):
             resp["df"] = self.df_name
         else:
             resp["df"] = "unnamed"
-        self.db.store_response(kernel_id, cell_id, resp)
+        self.data[cell_id] = [resp]
 
 class ZipVarianceNote(OnetimeNote):
+    """
+    A notification that measures the variance in race between the
+    zip codes 60637 and 60611
 
+    Format is {"type" : "variance", 
+               "zip1" : 60637, "zip2" : 60611,
+               "demo" : {60637 : <pct applications by black ppl>,
+                         60611 : <pct applications by white ppl>}}
+    """
     def feasible(self, cell_id, env):
         if super().feasible(cell_id, env):
             env._nbapp.log.debug("[ZipVar] checking columns")
-            race_columns = self.db.get_columns("race") # hardcoded for experiment
-            zip_columns = self.db.get_columns("zip")
+            race_columns = self.db.get_columns(RACE_COL_NAME)
+            zip_columns = self.db.get_columns(PROXY_COL_NAME)
             env._nbapp.log.debug("[ZipVar] columns are {0}, {1}".format(race_columns, zip_columns))
             if race_columns and zip_columns: 
                 return True
@@ -140,12 +120,10 @@ class ZipVarianceNote(OnetimeNote):
 
         super().make_response(env, kernel_id, cell_id)
 
-        # TODO: what does the response need to be?
-
         resp = {"type" : "variance"}
 
-        race_columns = self.db.get_columns("race")
-        zip_columns = self.db.get_columns("zip")
+        race_columns = self.db.get_columns(RACE_COL_NAME)
+        zip_columns = self.db.get_columns(PROXY_COL_NAME)
         
         df_name = None
  
@@ -166,27 +144,33 @@ class ZipVarianceNote(OnetimeNote):
 
         df = dfs[df_name]
 
-        if "race" not in df.columns or "zip" not in df.columns:
+        if RACE_COL_NAME not in df.columns or PROXY_COL_NAME not in df.columns:
             env._nbapp.log.warning("[NOTIFICATIONS] ZipVarianceNote.make_response: race or zip not in dataframe columns")
             return
-        panel_df = pd.get_dummies(df["race"])
-        panel_df["zip"] = df["zip"]
+        panel_df = pd.get_dummies(df[RACE_COL_NAME])
+        panel_df[PROXY_COL_NAME] = df[PROXY_COL_NAME]
 
-        rate_df = panel_df.groupby(["zip"]).mean() 
+        rate_df = panel_df.groupby([PROXY_COL_NAME]).mean() 
 
-        resp["zip1"] = 60637 # use this to highlight redlining
-        resp["zip2"] = 60611 
+        resp["zip1"] = ZIP_1
+        resp["zip2"] = ZIP_2 
 
-        resp["demo"] = {60637 : int(rate_df["black"][60637]*100), 60611 : int(rate_df["white"][60611]*100)}
-
-        self.db.store_response(kernel_id, cell_id, resp)
+        resp["demo"] = {ZIP_1 : int(rate_df["black"][ZIP_1]*100), ZIP_2 : int(rate_df["white"][ZIP_2]*100)}
+        self.data[cell_id] = [resp]
 
 class OutliersNote(OnetimeNote):
+    """
+    A note that is computes whether there are outliers in the column
+    named principal
 
+    format is {"type" : "outliers", "col_name" : "principal",
+               "value" : <max outlier value>, "std_dev" : <std_dev of value>,
+               "df_name" : <name of dataframe column belongs to>}
+    """
     def feasible(self, cell_id, env):
         if super().feasible(cell_id, env):
 
-            columns = self.db.get_columns("principal") # hardcoded for experiment
+            columns = self.db.get_columns(OUTLIER_COL) 
             if columns: 
                 return True
             return False
@@ -196,7 +180,7 @@ class OutliersNote(OnetimeNote):
         super().make_response(env, kernel_id, cell_id)
 
         resp = {"type" : "outliers"}
-        cols = self.db.get_columns("principal")
+        cols = self.db.get_columns(OUTLIER_COL)
       
         if not cols:
             env._nbapp.log.warning("[NOTIFICATIONS] OutlierNote.make_response: cannot find column named principal") 
@@ -211,22 +195,30 @@ class OutliersNote(OnetimeNote):
             return
 
         df = dfs[df_name]
-        scores = np.absolute(zscore(df["principal"]))
+        scores = np.absolute(zscore(df[OUTLIER_COL]))
         index = np.argmax(scores)
 
-        resp["col_name"] = "principal"
-        resp["value"] = float(df["principal"].iloc[index])
+        resp["col_name"] = OUTLIER_COL
+        resp["value"] = float(df[OUTLIER_COL].iloc[index])
         resp["std_dev"] = float(scores[index])
         resp["df_name"] = df_name
+        self.data[cell_id] = [resp]
 
-        self.db.store_response(kernel_id, cell_id, resp) 
+class PerformanceNote(Notification):
+    """
+    A note that computes the false positive rate and false negative rate of
+    the model on training data
 
-class PerformanceNote(SpacedNote):
-
+    Format: {"type" : "model_perf", "model_name" : <name of model>,
+             "acc" : <training accuracy>, 
+             "values" : {"pos" : <value treated as positive, as string>,
+                         "neg" : <value treated as neg, as string>},
+             "columns" : {
+                <name of column to break down on> : {
+                    <value of column> : {"fpr" : <training fpr on subset of data when column == value>,
+                                         "fnr" : <training fnr on subset of data when column == value>}}}
+    """
     def feasible(self, cell_id, env):
-
-        if not super().feasible(cell_id, env):
-            return False
 
         cell_code = self.db.get_code(env._kernel_id, cell_id)
         if not cell_code: return False
@@ -239,7 +231,16 @@ class PerformanceNote(SpacedNote):
 
         models = []
         env._nbapp.log.debug("[PERFORMANCENOTE] there are {0} possible models".format(len(poss_models)))
- 
+
+
+        # cell_models is used to ensure that we're not generating a new note
+        # for a model that's already had a note generated for it
+
+        if cell_id in self.data: 
+            cell_models = [model.get("model_name") for model in self.data.get(cell_id)]
+        else:
+            cell_models = []
+
         for model_name in poss_models:
 
             if not poss_models[model_name]: 
@@ -285,13 +286,17 @@ class PerformanceNote(SpacedNote):
                 subset_labels = ns[labels_df]
             else:
                 label_df = None
-#            env._nbapp.log.debug(
-#                "[PERFORMANCENOTE] model {0} has_model {1}, has_features {2}, has_labels {3}".format(model_name, has_model, has_features, has_labels))
+            # note that feasible method checks if it is feasible to generate a *new* model
+            # rather than update an old one. 
+
+            # therefore, only look to see if models defined do not already have notes
+            # associated with them
 
             if (has_model and has_features and has_labels and (subset_features is not None) and (subset_labels is not None)):
-                models.append((model_name, ns[model_name], subset_features, subset_labels, feature_df, label_df)) 
-        self.models = models
+                if model_name not in cell_models: 
+                    models.append((model_name, ns[model_name], subset_features, subset_labels, feature_df, label_df)) 
 
+        self.models = models
         if models: return True
         return False 
 
@@ -325,20 +330,7 @@ class PerformanceNote(SpacedNote):
             self.sent = 0
         return self.sent
 
-    def new_model_name(self, kernel_id, cell_id, model_name):
-        """are we updating an old model perf or creating a new one?"""
-        responses = self.db.get_responses(kernel_id)
-
-        if cell_id not in responses: return None
-
-        for resp in responses[cell_id]: 
-            if resp["type"] == "model_perf" and resp["model_name"] == model_name:
-                return resp
-        return None
-
     def make_response(self, env, kernel_id, cell_id):
-
-        super().make_response(env, kernel_id, cell_id)
 
         model_name, model, features_df, labels_df, full_feature, full_label = choice(self.models) # lets mix it up a little
 
@@ -355,7 +347,7 @@ class PerformanceNote(SpacedNote):
         s_col = self.try_align(features_df, full_feature, "sex")
         if s_col is not None: subgroups.append(s_col)
 
-        if len(subgroups) == 0: # fall back to this option
+        if len(subgroups) == 0: # fall back to this option if no sensitive cols
 
             env._nbapp.log.debug("[NOTIFICATIONS] PerfNote.make_response, cannot find sensitive columns falling back to categorical vars")
 
@@ -403,9 +395,7 @@ class PerformanceNote(SpacedNote):
 
         env._nbapp.log.debug("[PERFORMANCENOTE] notification is {0}".format(resp))
 
-        old_resp = self.new_model_name(kernel_id, cell_id, model_name) 
-
-        if not old_resp: 
-            self.db.store_response(kernel_id, cell_id, resp) 
+        if cell_id in self.data:
+            self.data[cell_id].append(resp)
         else:
-            self.db.update_response(kernel_id, cell_id, old_resp, resp) 
+            self.data[cell_id] = [resp]  
