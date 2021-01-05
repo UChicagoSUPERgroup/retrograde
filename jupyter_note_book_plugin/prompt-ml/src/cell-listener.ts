@@ -32,6 +32,7 @@ export class Listener {
   private client: CodeCellClient;
   private tracker : INotebookTracker;
   private _infoSignal : Signal<this, any> = new Signal<this, any>(this);
+  private notebook : Notebook;
 
   constructor(client: CodeCellClient, tracker : INotebookTracker) {
 
@@ -46,6 +47,9 @@ export class Listener {
   }
 
   private async init() {
+    console.log("In Init");
+    await this.tracker.currentWidget.revealed;
+    this.notebook = this.tracker.currentWidget.content;
     this.listen();
     this._ready.resolve(undefined);
   }
@@ -57,8 +61,12 @@ export class Listener {
     var id: string;
     var k_id: string;
     var exec_ct : ExecutionCount;
-//    var notebook: Notebook;
-//    var resp: string;
+    console.log("In Listen");
+    this.notebook.model.cells.changed.connect(
+      (sender: any, data: IObservableList.IChangedArgs<ICellModel>) => {
+        console.log("Cell list change type: ", data.type);
+        /*TODO: add change type handling*/
+     });
 
     NotebookActions.executed.connect(
       (signal: any, bunch: object) => {
