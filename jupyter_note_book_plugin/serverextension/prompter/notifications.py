@@ -259,15 +259,52 @@ class OutliersNote(OnetimeNote):
             return
 
         df = dfs[df_name]
-        scores = np.absolute(zscore(df[OUTLIER_COL]))
-        index = np.argmax(scores)
 
         resp["col_name"] = OUTLIER_COL
-        resp["value"] = float(df[OUTLIER_COL].iloc[index])
-        resp["std_dev"] = float(scores[index])
         resp["df_name"] = df_name
+
+        resp["value"], resp["std_dev"] = self.compute_outliers(df, OUTLIER_COL)
+
         self.data[cell_id] = [resp]
 
+    def compute_outliers(self, df, col_name):
+        
+        scores = np.absolute(zscore(df[col_name]))
+        index = np.argmax(scores)
+
+        return float(df[col_name].iloc[index]), float(scores[index])
+
+    def update(self, env, kernel_id, cell_id):
+        """
+        Check that df is still defined, still has outlier column in it,
+        if not, try to find another df with outlier column in it
+        
+        Then recalculate the zscores 
+        """
+
+        ns = self.db.recent_ns()
+        dfs = load_dfs(ns)
+        
+        for note in self.data[cell_id]:
+
+            df_name = note["df_name"]
+            col_name = note["col_name"]
+            
+            if df_name not in dfs.keys():
+
+                other_dfs = [df_name for df_name in dfs.keys() if col_name in dfs[df_name].columns]
+
+                if len(other_dfs) == 0:
+                    del self.data[cell_id]
+                    continue
+            
+                df_name = other_dfs[0]
+                df = dfs[df_name]
+                note["df_name"] = df_name
+ 
+            else:
+                df = dfs[df_name]
+            note["value"], note["std_dev"] = self.compute_outliers(df, col_name)
 class PerformanceNote(Notification):
     """
     A note that computes the false positive rate and false negative rate of
