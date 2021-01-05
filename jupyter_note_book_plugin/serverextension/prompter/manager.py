@@ -36,7 +36,9 @@ class AnalysisManager:
             self.db = DbHandler()
         self.analyses = {}
         self._nb = nbapp
-        self.rules = {s : [note(self.db) for note in notes] for s, notes in NOTE_RULES.items()} # rules used to trigger notifications
+
+        # mapping of notebook section -> notes to look for
+        self.notes = {s : [note_type(self.db) for note_type in allowed_notes] for s, allowed_notes in NOTE_RULES.items()}
     
     def handle_request(self, request):
         """
@@ -87,7 +89,7 @@ class AnalysisManager:
         resp["info"]["cell"] = cell_id
         resp["info"][cell_id] = []
 
-        for notes in self.rules.values():
+        for notes in self.notes.values():
             for note in notes:
                 if note.on_cell(cell_id):
                     resp["info"][cell_id].extend(note.get_response(cell_id))
@@ -112,11 +114,11 @@ class AnalysisManager:
         self._nb.log.debug("[MANAGER] running rules for cell {0}, kernel {1}".format(cell_id, kernel_id)) 
         env = self.analyses[kernel_id]
 
-        if cell_mode not in self.rules:
-            self._nb.log.warning("[MANAGER] Cell mode {0} not in configured rules {1}".format(cell_mode, self.rules.keys()))
+        if cell_mode not in self.notes:
+            self._nb.log.warning("[MANAGER] Cell mode {0} not in configured rules {1}".format(cell_mode, self.notes.keys()))
             return
 
-        feasible_rules = [r for r in self.rules[cell_mode] if r.feasible(cell_id, env)]
+        feasible_rules = [r for r in self.notes[cell_mode] if r.feasible(cell_id, env)]
         self._nb.log.debug("[MANAGER] There are {0} feasible rules".format(len(feasible_rules)))
         
         if feasible_rules:
