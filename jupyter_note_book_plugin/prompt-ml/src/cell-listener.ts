@@ -1,5 +1,4 @@
 import { 
-  NotebookPanel, 
   Notebook, 
   NotebookActions,
 } from "@jupyterlab/notebook";
@@ -25,6 +24,8 @@ import { ServerConnection } from "@jupyterlab/services";
 import { PromiseDelegate } from "@lumino/coreutils";
 import { CodeCellClient } from "./client";
 
+const FIRST_SECTION_NAME = 'intro'
+
 export class Listener {
   /*
    This listens on a notebook and records changes to cells on execution
@@ -47,7 +48,7 @@ export class Listener {
   }
 
   private async init() {
-    console.log("In Init");
+    //await a notebook widget to render, and then begin listening for cell eventss
     await this.tracker.currentWidget.revealed;
     this.notebook = this.tracker.currentWidget.content;
     this.listen();
@@ -55,17 +56,33 @@ export class Listener {
   }
 
   private listen() {
-
     var cell: Cell;
     var contents: string;
     var id: string;
     var k_id: string;
     var exec_ct : ExecutionCount;
-    console.log("In Listen");
+    //listen to cell change events on notebook model
     this.notebook.model.cells.changed.connect(
       (sender: any, data: IObservableList.IChangedArgs<ICellModel>) => {
-        console.log("Cell list change type: ", data.type);
-        /*TODO: add change type handling*/
+        //add section metadata to newly added cells
+        if (data.type == 'add') {
+          let cell = undefined;
+          let current_section = FIRST_SECTION_NAME;
+          let iterator = sender.iter();
+          //use lumino ArrayIterator API to traverse
+          //notebook cells. There is most likely a more natural way
+          //to do this, but lumino is poorly documented. Here is the 
+          //section of code I am using if you are interested in rewriting this loop
+          //https://github.com/jupyterlab/lumino/blob/11ec996c7e7599af38c3b28d546033c578f71e4f/packages/algorithm/src/iter.ts#L387
+          while ((cell = iterator.next()) !== undefined) {
+            if (cell.metadata.get('section') !== undefined){
+                current_section = cell.metadata.get('section');
+            }
+            else{
+              cell.metadata.set('section',current_section);
+            };
+          };
+        };
      });
 
     NotebookActions.executed.connect(
