@@ -84,21 +84,16 @@ export class Listener {
           };
         };
      });
-
+    //listen for cell execution events
     NotebookActions.executed.connect(
       (signal: any, bunch: object) => {
-       
         cell = (Object(bunch)["cell"] as Cell);
-//        notebook = (Object(bunch)["notebook"] as Notebook);
-
         if (cell instanceof CodeCell) {
-
           console.log("sent ", cell);
           contents = cell.model.value.text;
 	      id = cell.model.id;
           k_id = this.tracker.currentWidget.sessionContext.session.kernel.id;
           exec_ct = (cell as CodeCell).model.executionCount;
-//          console.log(this.tracker.currentWidget.content.contentFactory);
           this.client.request(
             "exec", "POST", 
             JSON.stringify({
