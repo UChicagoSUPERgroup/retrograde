@@ -1,0 +1,22 @@
+{
+	"gender":{
+		"overview" : "test overview gender",
+		"legal" : "test legal gender"
+	},
+	"race":{
+		"overview" : "test overview race",
+		"legal" : "test legal race"
+	},
+	"age":{
+		"overview" : "test overview age",
+		"legal" : "test legal age"
+	},
+	"religion":{
+		"overview" : "test overview religion",
+		"legal" : "test legal religion"
+	},
+	"sexual_orientation":{
+		"overview" : "test overview sexual_orientation", 
+		"legal" : "test legal sexual_orientation"
+	}
+}
