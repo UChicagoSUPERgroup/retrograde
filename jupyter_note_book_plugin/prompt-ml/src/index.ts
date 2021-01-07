@@ -29,6 +29,7 @@ const extension: JupyterFrontEndPlugin<void> = {
   requires: [INotebookTracker, NotebookPanel.IContentFactory],
   activate: (app: JupyterFrontEnd, tracker : INotebookTracker, factory : NotebookPanel.IContentFactory) => {
     const client = new CodeCellClient();
+    app.restored.then(() => {
     const listener = new Listener(client, tracker);
     console.log("init listener", listener);
     const prompter = new Prompter(listener, tracker, app, factory);
@@ -47,6 +48,7 @@ const extension: JupyterFrontEndPlugin<void> = {
        console.log(widget); 
     }
 
+  })
   }
 }
 
