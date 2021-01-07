@@ -42,6 +42,9 @@ class Notification:
     def get_response(self, cell_id): 
         """what response was associated with this cell, return None if no response"""
         return self.data.get(cell_id)
+    def update(self, env, kernel_id, cell_id):
+        """check whether the note on this cell needs to be updated"""
+        raise NotImplementedError
 
 class OnetimeNote(Notification):
     """
@@ -95,12 +98,40 @@ class SensitiveColumnNote(OnetimeNote):
             resp["df"] = "unnamed"
         self.data[cell_id] = [resp]
 
+    def update(self, env, kernel_id, cell_id):
+        """
+        check if column with RACE_COL_NAME is still in df.columns
+        if so, nothing happens, if RACE_COL_NAME still defined, but no longer
+        in df of df_name, update df name
+        if no longer in namespace, remove note altogether
+        """
+
+        ns = self.db.recent_ns()
+        dfs = load_dfs(ns)
+
+        for note in self.data[cell_id]:
+
+            col_name = note["col"]
+            df_name = note["df"]
+
+            if df_name in dfs.keys():
+                if col_name in dfs[df_name].columns:
+                    continue
+            for other_df in dfs.keys():
+                if col_name in dfs[other_df].columns:
+                    note["df"] = other_df
+                    break
+            if note["df"] != df_name:
+                continue
+            del self.data[cell_id]
+            self.sent = False # unset this so it can be sent again
+
 class ZipVarianceNote(OnetimeNote):
     """
     A notification that measures the variance in race between the
     zip codes 60637 and 60611
 
-    Format is {"type" : "variance", 
+    Format is {"type" : "variance", "df" : <name of df cols are in>,
                "zip1" : 60637, "zip2" : 60611,
                "demo" : {60637 : <pct applications by black ppl>,
                          60611 : <pct applications by white ppl>}}
@@ -143,21 +174,54 @@ class ZipVarianceNote(OnetimeNote):
             return
 
         df = dfs[df_name]
+        resp["df"] = df_name
 
         if RACE_COL_NAME not in df.columns or PROXY_COL_NAME not in df.columns:
             env._nbapp.log.warning("[NOTIFICATIONS] ZipVarianceNote.make_response: race or zip not in dataframe columns")
             return
-        panel_df = pd.get_dummies(df[RACE_COL_NAME])
-        panel_df[PROXY_COL_NAME] = df[PROXY_COL_NAME]
-
-        rate_df = panel_df.groupby([PROXY_COL_NAME]).mean() 
 
         resp["zip1"] = ZIP_1
         resp["zip2"] = ZIP_2 
 
-        resp["demo"] = {ZIP_1 : int(rate_df["black"][ZIP_1]*100), ZIP_2 : int(rate_df["white"][ZIP_2]*100)}
+        resp["demo"] = self.compute_var(df, PROXY_COL_NAME, RACE_COL_NAME)
         self.data[cell_id] = [resp]
 
+    def compute_var(self, df, proxy_col, race_col):
+
+        panel_df = pd.get_dummies(df[race_col])
+        panel_df[proxy_col] = df[proxy_col]
+        rate_df = panel_df.groupby([proxy_col]).mean()
+
+        return {ZIP_1 : int(rate_df["black"][ZIP_1]*100), ZIP_2 : int(rate_df["white"][ZIP_2]*100)}
+        
+    def update(self, env, kernel_id, cell_id):
+        """
+        check that df is still defined, still has race and zip code columns, and
+        if so, recalculate whether rates are still the same
+        """
+
+        ns = self.db.recent_ns()
+        dfs = load_dfs(ns)
+        
+        for note in self.data[cell_id]:
+
+            df = note["df"]
+
+            if df in dfs.keys() and\
+               PROXY_COL_NAME in dfs[df].columns  and\
+               RACE_COL_NAME in dfs[df].columns:
+                note["demo"] = self.compute_var(dfs[df], PROXY_COL_NAME, RACE_COL_NAME)
+                continue
+            for other_df in dfs.keys():
+                if PROXY_COL_NAME in dfs[other_df].columns and\
+                   RACE_COL_NAME in dfs[other_df].columns:
+                    note["df"] = other_df
+                    note["demo"] = self.compute_var(dfs[other_df], PROXY_COL_NAME, RACE_COL_NAME) 
+                    break
+            if df != note["df"]:
+                continue
+            del self.data[cell_id]
+            self.sent = False    
 class OutliersNote(OnetimeNote):
     """
     A note that is computes whether there are outliers in the column
@@ -195,15 +259,54 @@ class OutliersNote(OnetimeNote):
             return
 
         df = dfs[df_name]
-        scores = np.absolute(zscore(df[OUTLIER_COL]))
-        index = np.argmax(scores)
 
         resp["col_name"] = OUTLIER_COL
-        resp["value"] = float(df[OUTLIER_COL].iloc[index])
-        resp["std_dev"] = float(scores[index])
         resp["df_name"] = df_name
+
+        resp["value"], resp["std_dev"] = self.compute_outliers(df, OUTLIER_COL)
+
         self.data[cell_id] = [resp]
 
+    def compute_outliers(self, df, col_name):
+        
+        scores = np.absolute(zscore(df[col_name]))
+        index = np.argmax(scores)
+
+        return float(df[col_name].iloc[index]), float(scores[index])
+
+    def update(self, env, kernel_id, cell_id):
+        """
+        Check that df is still defined, still has outlier column in it,
+        if not, try to find another df with outlier column in it
+        
+        Then recalculate the zscores 
+        """
+
+        ns = self.db.recent_ns()
+        dfs = load_dfs(ns)
+        
+        for note in self.data[cell_id]:
+
+            df_name = note["df_name"]
+            col_name = note["col_name"]
+            
+            if df_name not in dfs.keys():
+
+                other_dfs = [df_name for df_name in dfs.keys() if col_name in dfs[df_name].columns]
+
+                if len(other_dfs) == 0:
+                    del self.data[cell_id]
+                    self.sent = False
+                    continue
+            
+                df_name = other_dfs[0]
+                df = dfs[df_name]
+                note["df_name"] = df_name
+ 
+            else:
+                df = dfs[df_name]
+            note["value"], note["std_dev"] = self.compute_outliers(df, col_name)
+           
 class PerformanceNote(Notification):
     """
     A note that computes the false positive rate and false negative rate of
@@ -336,7 +439,7 @@ class PerformanceNote(Notification):
 
         resp = {"type" : "model_perf"}
         resp["model_name"] = model_name
-
+        
         env._nbapp.log.debug("[PERFORMENCENOTE] Input columns {0}".format(features_df.columns))
 
         subgroups = []
@@ -399,3 +502,16 @@ class PerformanceNote(Notification):
             self.data[cell_id].append(resp)
         else:
             self.data[cell_id] = [resp]  
+
+    def update(self, env, kernel_id, cell_id):
+        """
+        check if the model referenced in the current note needs to be updated
+
+        since PerformanceNote is not a OneTimeNote subclass, we don't need
+        to look for another available model here. We only need to check if the
+        model named in the note needs updating.  
+        """
+          
+        # TODO: this function and module we expect to change significantly
+        # to use AIF 360 to recommend corrections 
+        raise NotImplementedError
