@@ -511,15 +511,7 @@ class PerformanceNote(Notification):
         to look for another available model here. We only need to check if the
         model named in the note needs updating.  
         """
-
-        ns = self.db.recent_ns()
-        dfs = load_dfs(ns)
-
-        ns = dill.loads(ns["namespace"]) 
-
-        for note in self.data[cell_id]:
-            model_name = note["model_name"]
           
         # TODO: this function and module we expect to change significantly
         # to use AIF 360 to recommend corrections 
-        pass               
+        raise NotImplementedError
