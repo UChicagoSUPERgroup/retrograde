@@ -17,7 +17,7 @@ SECTION_START_KEYS = {
     'end_start' : 'end'
 }
 
-FILES_TO_COPY = ['loan_data.csv']
+FILES_TO_COPY = ['loan_data.csv', 'protected_columns.json']
 
 current_section = SECTION_START_KEYS['intro_start']
 
