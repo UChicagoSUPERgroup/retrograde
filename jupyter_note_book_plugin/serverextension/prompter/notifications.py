@@ -432,7 +432,18 @@ class PerformanceNote(Notification):
         if not hasattr(self, "sent"):
             self.sent = 0
         return self.sent
+    def run_preprocess(self, X, y, model, prot_attr_cols):
+        """run the preprocessing reweighing correction on the model"""
 
+    def run_postprocess(self, X, y, model, prot_attr_cols):
+        """run postprocessing Eq Odds correction on the model"""
+    def make_index(self, X, y, prot_attr_cols):
+        """
+        aif360 requires that sensitive attribute be a level in the index
+        
+        this function adds them to X and y
+        """
+    
     def make_response(self, env, kernel_id, cell_id):
 
         model_name, model, features_df, labels_df, full_feature, full_label = choice(self.models) # lets mix it up a little
