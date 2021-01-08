@@ -4,14 +4,28 @@ from fuzzywuzzy import fuzz
 PROTECTED_MATCH_THRESHOLD = 90
 PROTECTED_PROXY_MATCH_THRESHOLD = 80
 PATH_PROTECTED_JSON = './protected_columns.json'
+PATH_PROTECTED_JSON_FULL = 'evaluation_task/build/protected_columns.json'
 
-#read in the protected values corpus
-with open(PATH_PROTECTED_JSON) as f:
-  PROTECTED_VALUES = json.load(f)
 
-def check_for_protected(column_name):
-    '''check to see if a column name contains a protected group'''
-    return _fuzzy_string_across_dict(column_name.lower(), PROTECTED_VALUES, PROTECTED_MATCH_THRESHOLD)
+def check_for_protected(column_names):
+    '''check to see if a list of column names contains any protected groups'''
+    protected_corpus = _get_protected()
+    results = []
+    for column_name in column_names:
+        next_results = _fuzzy_string_across_dict(column_name.lower(), protected_corpus, PROTECTED_MATCH_THRESHOLD)
+        results.extend(next_results)
+    return results
+
+def _get_protected():
+    '''read in the protected values corpus'''
+    protected_values = {}
+    try:
+        with open(PATH_PROTECTED_JSON) as f:
+            protected_values = json.load(f)
+    except FileNotFoundError:
+        with open(PATH_PROTECTED_JSON_FULL) as f:
+            protected_values = json.load(f)
+    return protected_values
 
 def _fuzzy_string_across_dict(candidate_string, reference_dict, threshold):
     '''return list of dictionary keys that have a fuzzy match with a candidate string'''
