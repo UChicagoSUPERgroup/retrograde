@@ -65,10 +65,10 @@ class OnetimeNote(Notification):
     def make_response(self, env, kernel_id, cell_id):
         self.sent = True
 
-class SensitiveColumnNote(OnetimeNote):
+class ProtectedColumnNote(OnetimeNote):
 
     """
-    a class that indicates whether a sensitive column is present in
+    a class that indicates whether a protected column is present in
     an active dataframe.
 
     data format is {"type" : "resemble", 
@@ -463,9 +463,9 @@ class PerformanceNote(Notification):
         s_col = self.try_align(features_df, full_feature, "sex")
         if s_col is not None: subgroups.append(s_col)
 
-        if len(subgroups) == 0: # fall back to this option if no sensitive cols
+        if len(subgroups) == 0: # fall back to this option if no protected cols
 
-            env._nbapp.log.debug("[NOTIFICATIONS] PerfNote.make_response, cannot find sensitive columns falling back to categorical vars")
+            env._nbapp.log.debug("[NOTIFICATIONS] PerfNote.make_response, cannot find protected columns falling back to categorical vars")
 
             input_cols = [c for c in features_df.columns if is_categorical(features_df[c])]
             poss_cor_cols = [c for c in full_feature.columns if c not in input_cols and is_categorical(full_feature[c])]
