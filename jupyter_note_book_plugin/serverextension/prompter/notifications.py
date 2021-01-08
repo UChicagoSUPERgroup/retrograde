@@ -7,6 +7,7 @@ from scipy.stats import zscore
 from random import choice
 
 from .storage import load_dfs
+from .string_compare import check_for_protected
 from .sortilege import is_categorical
 
 RACE_COL_NAME = "race"
@@ -77,9 +78,14 @@ class SensitiveColumnNote(OnetimeNote):
 
     def feasible(self, cell_id, env):
         if super().feasible(cell_id, env):
-            columns = self.db.get_columns(RACE_COL_NAME)
-            if columns: 
-                self.df_name = columns[0]["name"]
+            columns = self.db.get_columns()
+            columns_names = [entry['col_name'] for entry in columns]
+            protected_columns = check_for_protected(columns_names)
+            if protected_columns:
+                #get the dataframe name with protected column
+                #this is poorly written, but works
+                df_name = [entry['name'] for entry in columns if entry['col_name']==protected_columns[0][0]][0]
+                self.df_name = df_name
                 return True
             return False
         return False
@@ -87,10 +93,17 @@ class SensitiveColumnNote(OnetimeNote):
     def make_response(self, env, kernel_id, cell_id):
 
         super().make_response(env, kernel_id, cell_id)
-
+        #get list of protected columns, this is ineffcient as this is also
+        #computed in feasible method. Consider rewriting if this causes performance
+        #issues.
+        columns = self.db.get_columns()
+        columns_names = [entry['col_name'] for entry in columns]
+        protected_columns = check_for_protected(columns_names)
         resp = {"type" : "resemble"}
-        resp["col"] = RACE_COL_NAME
-        resp["category"] = RACE_COL_NAME
+        #using protected columns found in csv build string to display in notification
+        protected_columns_string = ', '.join([p[0] for p in protected_columns])
+        resp["col"] = protected_columns_string
+        resp["category"] = protected_columns_string
 
         if hasattr(self, "df_name"):
             resp["df"] = self.df_name
