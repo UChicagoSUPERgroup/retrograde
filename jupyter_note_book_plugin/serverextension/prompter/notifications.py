@@ -1,10 +1,10 @@
+from random import choice
+
 import pandas as pd
 import numpy as np
 import dill
-import re
 
 from scipy.stats import zscore
-from random import choice
 
 from .storage import load_dfs
 from .string_compare import check_for_protected
@@ -19,6 +19,7 @@ OUTLIER_COL = "principal"
 class Notification:
     """Abstract base class for all notifications"""
     def __init__(self, db):
+        self._feasible = False
         self.db = db
         self.data = {}
 
@@ -26,7 +27,9 @@ class Notification:
 
     def feasible(self, cell_id, env):
         """is it feasible to send this notification?"""
-        return False
+        ret_value = self.check_feasible(cell_id, env)
+        self._feasible = ret_value 
+        return ret_value
    
     def times_sent(self):
         """the number of times this notification has been sent"""
@@ -34,7 +37,8 @@ class Notification:
 
     def make_response(self, env, kernel_id, cell_id):
         """form and store the response to send to the frontend""" 
-        raise NotImplementedError
+        if not self._feasible:
+            raise Exception("Cannot call make_response on notification that is not feasible")
     
     def on_cell(self, cell_id):
         """has this note been associated with the cell with this id?"""
@@ -46,7 +50,9 @@ class Notification:
     def update(self, env, kernel_id, cell_id):
         """check whether the note on this cell needs to be updated"""
         raise NotImplementedError
-
+    def check_feasible(self, cell_id, env):
+        """check feasibility of implementing class"""
+        raise NotImplementedError("check_feasible must be overridden") 
 class OnetimeNote(Notification):
     """
     Abstract base class for notification that is sent exactly once
@@ -56,13 +62,14 @@ class OnetimeNote(Notification):
         super().__init__(db)
         self.sent = False
 
-    def feasible(self, cell_id, env):
+    def check_feasible(self, cell_id, env):
         return (not self.sent)
     
     def times_sent(self):
         return int(self.sent)
 
     def make_response(self, env, kernel_id, cell_id):
+        super().make_response(env, kernel_id, cell_id)
         self.sent = True
 
 class ProtectedColumnNote(OnetimeNote):
@@ -75,17 +82,28 @@ class ProtectedColumnNote(OnetimeNote):
                     "col" : "race", "category" : "race"
                     "df" : <df name or "unnamed">}
     """
+    def __init__(self, db):
 
-    def feasible(self, cell_id, env):
-        if super().feasible(cell_id, env):
-            columns = self.db.get_columns()
-            columns_names = [entry['col_name'] for entry in columns]
-            protected_columns = check_for_protected(columns_names)
-            if protected_columns:
-                #get the dataframe name with protected column
-                #this is poorly written, but works
-                df_name = [entry['name'] for entry in columns if entry['col_name']==protected_columns[0][0]][0]
-                self.df_name = df_name
+        super().__init__(db)
+        self.df_protected_cols = {}
+
+    def check_feasible(self, cell_id, env):
+        if super().check_feasible(cell_id, env):
+
+            ns = self.db.recent_ns()
+            dfs = load_dfs(ns)
+       
+            df_cols = {}
+
+            for df_name, df in dfs.items():
+                 df_cols[df_name] = [col for col in df.columns] 
+
+            for df_name, cols in dfs.items():
+
+                protected_columns = check_for_protected(cols)
+                self.df_protected_cols[df_name] = protected_columns
+
+            if self.df_protected_cols:
                 return True
             return False
         return False
@@ -93,22 +111,17 @@ class ProtectedColumnNote(OnetimeNote):
     def make_response(self, env, kernel_id, cell_id):
 
         super().make_response(env, kernel_id, cell_id)
-        #get list of protected columns, this is ineffcient as this is also
-        #computed in feasible method. Consider rewriting if this causes performance
-        #issues.
-        columns = self.db.get_columns()
-        columns_names = [entry['col_name'] for entry in columns]
-        protected_columns = check_for_protected(columns_names)
         resp = {"type" : "resemble"}
         #using protected columns found in csv build string to display in notification
-        protected_columns_string = ', '.join([p[0] for p in protected_columns])
-        resp["col"] = protected_columns_string
-        resp["category"] = protected_columns_string
+        df_name = choice(list(self.df_protected_cols.keys()))
 
-        if hasattr(self, "df_name"):
-            resp["df"] = self.df_name
-        else:
-            resp["df"] = "unnamed"
+        protected_columns_string = ', '.join([p["original_name"] for p in self.df_protected_cols[df_name]])
+        protected_values_string = ', '.join([p["protected_value"] for p in self.df_protected_cols[df_name]]) 
+
+        resp["df"] = df_name
+        resp["col"] = protected_columns_string
+        resp["category"] = protected_values_string
+
         self.data[cell_id] = [resp]
 
     def update(self, env, kernel_id, cell_id):
@@ -149,8 +162,8 @@ class ZipVarianceNote(OnetimeNote):
                "demo" : {60637 : <pct applications by black ppl>,
                          60611 : <pct applications by white ppl>}}
     """
-    def feasible(self, cell_id, env):
-        if super().feasible(cell_id, env):
+    def check_feasible(self, cell_id, env):
+        if super().check_feasible(cell_id, env):
             env._nbapp.log.debug("[ZipVar] checking columns")
             race_columns = self.db.get_columns(RACE_COL_NAME)
             zip_columns = self.db.get_columns(PROXY_COL_NAME)
@@ -244,8 +257,8 @@ class OutliersNote(OnetimeNote):
                "value" : <max outlier value>, "std_dev" : <std_dev of value>,
                "df_name" : <name of dataframe column belongs to>}
     """
-    def feasible(self, cell_id, env):
-        if super().feasible(cell_id, env):
+    def check_feasible(self, cell_id, env):
+        if super().check_feasible(cell_id, env):
 
             columns = self.db.get_columns(OUTLIER_COL) 
             if columns: 
@@ -334,8 +347,8 @@ class PerformanceNote(Notification):
                     <value of column> : {"fpr" : <training fpr on subset of data when column == value>,
                                          "fnr" : <training fnr on subset of data when column == value>}}}
     """
-    def feasible(self, cell_id, env):
-
+    def check_feasible(self, cell_id, env):
+        
         cell_code = self.db.get_code(env._kernel_id, cell_id)
         if not cell_code: return False
 
