@@ -323,10 +323,7 @@ class PerformanceNote(Notification):
     """
     def feasible(self, cell_id, env):
 
-        cell_code = self.db.get_code(env._kernel_id, cell_id)
-        if not cell_code: return False
-
-        poss_models = env.get_models(cell_code)
+        poss_models = env.get_models()
         ns = self.db.recent_ns()
         dfs = load_dfs(ns)
 
@@ -533,17 +530,14 @@ class EqualizedOddsNote(Notification):
         return dictionary of model names in cell that are defined in the namespace
         and that do not already have a note issued about them
         """  
-
-        cell_code = self.db.get_code(env._kernel_id, cell_id)
-        if not cell_code: return {}
-
-        poss_models = env.get_models(cell_code)
+        poss_models = env.get_models()
         non_dfs_ns = dill.loads(ns["namespace"])
                 
         if cell_id in self.data:
             cell_models = [model.get("model_name") for model in self.data.get(cell_id)]
         else:
             cell_models = []
+        
                 
     def feasible(self, cell_id, env):
         
