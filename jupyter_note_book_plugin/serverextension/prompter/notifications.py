@@ -586,6 +586,7 @@ class EqualizedOddsNote(Notification):
                 return df[cols[0]]
         else:
             return df[cols]
+
     def feasible(self, cell_id, env):
         
         ns = self.db.recent_ns()
@@ -600,7 +601,13 @@ class EqualizedOddsNote(Notification):
             self.defined_models = defined_models
             return True                            
         return False
- 
+
+    def make_response(self, env, kernel_id, cell_id):
+        
+        super().make_response(env, kernel_id, cell_id):
+        
+    def update(self):
+
     def run_preprocess(self, X, y, model, prot_attr_cols):
         """run the preprocessing reweighing correction on the model"""
 
