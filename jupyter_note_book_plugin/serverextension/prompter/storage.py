@@ -23,6 +23,7 @@ SQL_CMDS = {
   "ADD_COLS" : """INSERT INTO columns VALUES (?, ?, ?, ?, ?, ?, ?)""",
   "GET_VERSIONS" : """SELECT contents, version FROM versions WHERE kernel = ? AND id = ? AND user = ? ORDER BY version DESC LIMIT 1""",
   "GET_COLS" : """SELECT * FROM columns WHERE user = ? AND col_name = ?""",
+  "GET_ALL_COLS" : """SELECT * FROM columns""",
   "STORE_RESP" : """INSERT INTO notifications(kernel, user, cell, resp, exec_ct) VALUES (?, ?, ?, ?, ?)""",
   "GET_RESPS" : """SELECT cell, resp FROM notifications WHERE kernel = ? AND user = ?""",
 }
@@ -215,11 +216,13 @@ class DbHandler(object):
         self._cursor.executemany(self.cmds["ADD_COLS"], cols)
         self._conn.commit()
     
-    def get_columns(self, name):
+    def get_columns(self, name = None):
         """does a column with that name exist?"""
-
+        if not name:
+            self.renew_connection()
+            self._cursor.execute(self.cmds["GET_ALL_COLS"])
+            return self._cursor.fetchall()
         self.renew_connection()
-
         self._cursor.execute(self.cmds["GET_COLS"], (self.user, name))
         return self._cursor.fetchall()
   

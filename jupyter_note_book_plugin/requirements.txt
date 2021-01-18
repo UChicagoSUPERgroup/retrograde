@@ -1,3 +1,11 @@
+#manually added requirments
+
+fuzzywuzzy
+python-Levenshtein
+
+
+#frozen requirements --- TODO Prune these 
+
 appnope==0.1.0
 astor==0.8.1
 attrs==19.3.0
