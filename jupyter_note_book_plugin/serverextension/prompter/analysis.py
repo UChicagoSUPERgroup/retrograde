@@ -151,8 +151,7 @@ class AnalysisEnvironment:
         self._nbapp.log.debug("[ANALYSIS] Executed {0}, output {1}".format(code, output))
         return output
 
-    def get_models(self, cell_code):
-
+    def get_models(self):
         """are models in cell defined in this analysis?"""
         return self.models
 
