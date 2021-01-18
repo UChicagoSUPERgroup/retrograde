@@ -349,67 +349,6 @@ class KernelException(RuntimeError):
     def __init__(self, traceback):
         RuntimeError.__init__(self, "Kernel encountered exception with traceback {0}".format(traceback))
 
-class ModelVisitor(NodeVisitor):
-
-    def __init__(self, models):
-
-        self.defined_models = models
-        self.models = {}
-
-    def visit_Name(self, node):
-        if node.id in self.defined_models:
-            if "placeholder" in self.models:
-                self.models[node.id] = self.models["placeholder"]
-                del self.models["placeholder"]
-            else:
-                self.models[node.id] = None
-
-    def try_get_info(self, arg):
-        """try to get name of dataframe and columns"""
-
-        resp = {"name" : None, "name_ind" : None}
-
-        if isinstance(arg, Subscript):
-            if isinstance(arg.value, Name):
-                resp["name"] = arg.value.id
-                if isinstance(arg.slice.value, List):
-                    elt_list = arg.slice.value.elts
-                    if all([isinstance(elt, Str) for elt in elt_list]):
-                        resp["name_ind"] = [elt.s for elt in elt_list]
-                    else:
-                        resp["name_ind"] = None
-                elif isinstance(arg.slice.value, Str):
-                   resp["name_ind"] = [arg.slice.value.s]
-                else:
-                    resp["name_ind"] = None
-            else: resp["name"] = None
-
-        if isinstance(arg, Name):
-
-            resp["name"] = arg.id
-            resp["name_ind"] = None 
-
-        return resp 
-        
-    def visit_Call(self, node):
-
-        self.generic_visit(node) # visit before
-
-        if isinstance(node.func, Attribute) and node.func.attr == "fit":
-
-            x_args = node.args[0]
-            y_args = node.args[1]
-
-            model_name = None
-            for poss_name in self.models.keys():
-                if not self.models[poss_name]: model_name = poss_name
-            if not model_name: model_name = "placeholder"
-
-            model_info = {}
-            model_info["features"] = self.try_get_info(x_args)
-            model_info["label"] = self.try_get_info(y_args)
-
-            self.models[model_name] = model_info
   
 class DeadKernelError(RuntimeError):
     pass
