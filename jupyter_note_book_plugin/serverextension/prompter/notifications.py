@@ -432,17 +432,6 @@ class PerformanceNote(Notification):
         if not hasattr(self, "sent"):
             self.sent = 0
         return self.sent
-    def run_preprocess(self, X, y, model, prot_attr_cols):
-        """run the preprocessing reweighing correction on the model"""
-
-    def run_postprocess(self, X, y, model, prot_attr_cols):
-        """run postprocessing Eq Odds correction on the model"""
-    def make_index(self, X, y, prot_attr_cols):
-        """
-        aif360 requires that sensitive attribute be a level in the index
-        
-        this function adds them to X and y
-        """
     
     def make_response(self, env, kernel_id, cell_id):
 
@@ -526,3 +515,49 @@ class PerformanceNote(Notification):
         # TODO: this function and module we expect to change significantly
         # to use AIF 360 to recommend corrections 
         raise NotImplementedError
+
+class EqualizedOddsNote(Notification):
+    """
+    A note that takes models trained in the namespace and tries applying
+    the AIF post-processing correction to the model.
+    
+    Fomat: {"type" : "aif", "model_name" : <name of model>,
+            "acc_orig" : <original training acc>,
+            "acc_corr" : <training accuracy, when correction is applied>,
+            "eq" : <"fpr" or "fnr", the metric being equalized>,
+            "num_changed" : <number of different predictions after correction applied>,
+            "groups" : <the group the metric is equalized w.r.t.>}
+    """
+    def _get_new_models(self, cell_id, env, ns): 
+        """
+        return dictionary of model names in cell that are defined in the namespace
+        and that do not already have a note issued about them
+        """  
+
+        cell_code = self.db.get_code(env._kernel_id, cell_id)
+        if not cell_code: return {}
+
+        poss_models = env.get_models(cell_code)
+        non_dfs_ns = dill.loads(ns["namespace"])
+                
+        if cell_id in self.data:
+            cell_models = [model.get("model_name") for model in self.data.get(cell_id)]
+        else:
+            cell_models = []
+                
+    def feasible(self, cell_id, env):
+        
+        ns = self.db.recent_ns()
+
+    
+    def run_preprocess(self, X, y, model, prot_attr_cols):
+        """run the preprocessing reweighing correction on the model"""
+
+    def run_postprocess(self, X, y, model, prot_attr_cols):
+        """run postprocessing Eq Odds correction on the model"""
+    def make_index(self, X, y, prot_attr_cols):
+        """
+        aif360 requires that sensitive attribute be a level in the index
+        
+        this function adds them to X and y
+        """
