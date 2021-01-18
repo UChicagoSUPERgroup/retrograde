@@ -525,25 +525,82 @@ class EqualizedOddsNote(Notification):
             "num_changed" : <number of different predictions after correction applied>,
             "groups" : <the group the metric is equalized w.r.t.>}
     """
-    def _get_new_models(self, cell_id, env, ns): 
+    def _get_new_models(self, cell_id, env, non_dfs_ns): 
         """
         return dictionary of model names in cell that are defined in the namespace
         and that do not already have a note issued about them
         """  
         poss_models = env.get_models()
-        non_dfs_ns = dill.loads(ns["namespace"])
-                
+        models = {model_name : model_info for model_name, model_info in poss_models.items() if model_name in non_dfs_ns.keys()} 
+
         if cell_id in self.data:
             cell_models = [model.get("model_name") for model in self.data.get(cell_id)]
         else:
             cell_models = []
-        
-                
+       
+        return {model_name : model_info for model_name, model_info in models.items() if model_name not in cell_models}
+
+    def _check_call_dfs(self, dfs, non_dfs_ns, models):
+        """
+        filter models by whether we can find dataframes assassociated with model.fit call 
+        """
+        defined_models = {}
+
+        for model_name, model_info in models.keys():
+
+            features_col_names = model_info.get("x")
+            labels_col_names = model_info.get("y")
+
+            labels_df_name = model_info.get("y_df") # if None, then cannot proceed
+            features_df_name = model_info.get("x_df") # if None, then cannot proceed 
+
+            has_features = features_df_name in dfs.keys()
+            has_labels = (labels_df_name in dfs.keys()) or (labels_df_name in non_dfs_ns.keys())
+            
+            if has_features and has_labels:
+
+                feature_df = self._get_cols(dfs[features_df_name], features_col_names)
+
+                labels_obj = dfs.get(labels_df_name)
+                if not labels_obj:
+                    labels_obj = non_dfs_ns.get(labels_df_name)
+                if isinstance(labels_obj, pd.DataFrame):
+                    labels_df = self._get_cols(labels_obj, labels_col_names)
+                else:
+                    labels_df = labels_obj
+                defined_models[model_name] = {
+                    "X" : feature_df,
+                    "y" : labels_df,
+                    "model" : non_dfs_ns[model_name],
+                    "model_name" : model_name,
+                    "X_parent" : dfs[features_df_name], 
+                    "y_parent" : label_obj 
+                } 
+        return defined_models
+    def _get_cols(self, df, cols):
+        """parse columns -> get subset of df"""
+        if not cols:
+            return None
+        if all([f in df.columns for f in cols]):
+            if len(cols) == 1:
+                return df[cols[0]]
+        else:
+            return df[cols]
     def feasible(self, cell_id, env):
         
         ns = self.db.recent_ns()
+        non_dfs_ns = dill.loads(ns["namespace"])
 
-    
+        models = self._get_new_models(cell_id, env, non_dfs_ns)
+        defined_dfs = load_dfs(ns)
+        
+        defined_models = self._check_call_dfs(defined_dfs, non_dfs_ns, models)
+
+        if len(defined_models) > 0:
+            self.defined_models = defined_models
+            return True                            
+        return False
+ 
     def run_preprocess(self, X, y, model, prot_attr_cols):
         """run the preprocessing reweighing correction on the model"""
 
