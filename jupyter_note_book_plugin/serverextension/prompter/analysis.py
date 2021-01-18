@@ -349,7 +349,6 @@ class KernelException(RuntimeError):
     def __init__(self, traceback):
         RuntimeError.__init__(self, "Kernel encountered exception with traceback {0}".format(traceback))
 
-  
 class DeadKernelError(RuntimeError):
     pass
 
