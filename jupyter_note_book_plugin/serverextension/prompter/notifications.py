@@ -613,7 +613,7 @@ class EqualizedOddsNote(Notification):
         else:
             return df[cols]
 
-    def feasible(self, cell_id, env):
+    def check_feasible(self, cell_id, env):
         
         ns = self.db.recent_ns()
         non_dfs_ns = dill.loads(ns["namespace"])
@@ -622,16 +622,93 @@ class EqualizedOddsNote(Notification):
         defined_dfs = load_dfs(ns)
         
         defined_models = self._check_call_dfs(defined_dfs, non_dfs_ns, models)
-
+        for model_name in defined_models.keys():
+            match_name, match_cols, match_indexer = self.search_for_sensitive_cols(defined_dfs[model_name], model_name, defined_dfs)
+            if not match_name:
+                del defined_models[model_name]
+                continue
+            defined_models["match"] = {"cols" : match_cols, 
+                                       "indexer" : match_indexer,
+                                       "name" : match_name}
         if len(defined_models) > 0:
             self.defined_models = defined_models
             return True                            
         return False
 
+    def search_for_sensitive_cols(self, df, df_name_to_match, df_ns):
+        """
+        search through dataframes to see if there are sensitive columns that
+        can be associated with the inputs 
+        
+        returns name of matched df, possibly empty list of columns that are potentially sensitive, as well as a 
+        selector if alignment based on indices or None if alignment based on length
+        """
+        # first look in df inputs themself
+        protected_cols = check_for_protected([col for col in df.columns])
+        
+        if len(protected_cols) > 0:
+            return df_name_to_match, [df[p["original_name"]] for p in protected_cols], None
+
+
+        dfs_with_prot_attr = {}
+        for df_name, df_obj in df_ns.items():
+            protected_cols = check_for_protected([col for col in df_obj.columns])
+            if len(protected_cols) > 0:
+                dfs_with_prot_attr[df_name] = protected_cols
+
+        # then try to match based on length and column overlap
+        overlapped_cols_dfs = set()
+        matched_len_dfs = set()
+
+        for df_name in df_with_prot_attr.keys():
+            df_obj = df_ns[df_name]
+            if any([col_name in df.columns for col_name in df_obj]):
+                overlapped_cols_dfs.add(df_name)
+            if len(df_obj) == len(df):
+                matched_len_dfs.add(df_name)            
+
+        if len(overlapped_cols_dfs & matched_len_dfs) > 0:
+            # return the df cols from the df with the highest column overlap
+            overlaps = {}
+            for df_name in overlapped_df_cols_dfs & matched_len_dfs:
+                overlaps[df_name] = sum([col_name in df.columns for col_name in df_ns[df_name].columns])
+            df_name = max(overlaps.iterkeys(), key= lambda key: overlaps[key])
+            return df_name, [df_ns[df_name][p["original_name"]] for p in df_with_prot_attr[df_name]], None
+
+        # then try to match based on column overlap and index
+
+        index_overlaps = {}
+        for df_name in overlapped_cols_dfs:
+            df_index = df_ns[df_name].index
+            index_overlaps[df_name] = len(df.index.intersection(df_index))/float(len(df_index))
+        df_name = max(index_overlaps.iterkeys(), key = lambda key: index_overlaps[key])
+        if index_overlaps[df_name] > 0 and index_overlaps[df_name] < 1:
+            # intuition here is that we are testing if df is a subset of rows or columns of df_name
+            # todo: align on index
+            return df_name, [df_ns[df_name][p["original_name"]] for p in df_with_prot_attr[df_name]], self.align_index(df.index, df_ns[df_name].index)
+ 
+        # then just on length
+        if len(matched_len_dfs) > 0:
+            # at this point, no way to distinguish
+            df_name = matched_len_dfs.pop()
+            return df_name, [df_ns[df_name][p["original_name"]] for p in df_with_prot_attr[df_name]], None
+
+        # then just on index
+        for df_name in df_with_prot_attr.keys():
+
+            df_index = df_ns[df_name].index
+            index_overlaps[df_name] = len(df.index.intersection(df_index))/float(len(df_index))
+
+        df_name = max(index_overlaps.iterkeys(), key=lambda key: index_overlaps[key])
+        if index_overlaps[df_name] > 0:
+            # Todo: align on index
+            return df_name, [df_ns[df_name]][p["original_name"]] for p in df_with_prot_attr[df_name]], self.align_index(df.index, df_ns[df_name].index)
+        return None, [], None
+
     def make_response(self, env, kernel_id, cell_id):
         
-        super().make_response(env, kernel_id, cell_id):
-        
+        super().make_response(env, kernel_id, cell_id)
+             
     def update(self):
 
     def run_preprocess(self, X, y, model, prot_attr_cols):
