@@ -604,9 +604,9 @@ class EqualizedOddsNote(Notification):
         resp = {"type" : "eq_odds", "model_name" : model_name}
 
 
-        X = self.aligned_models[model_name]["X"]
+        X = self.aligned_models[model_name]["x"]
         y = self.aligned_models[model_name]["y"]
-        model = self.aligned_models[model_name]
+        model = self.aligned_models[model_name]["model"]
 
         match_cols = self.aligned_models[model_name]["match"]["cols"]
         match_indexer = self.aligned_models[model_name]["match"]["indexer"]
@@ -620,7 +620,8 @@ class EqualizedOddsNote(Notification):
             y = align_index(y, match_indexer["values"], match_indexer["loc"])
 
             match_cols = [align_index(col, match_indexer["values"], match_indexer["o_loc"]) for col in match_cols]
- 
+
+        match_cols = [bin_col(col) for col in match_cols]
         # create the properly indexed dataframes
         if isinstance(X.index, pd.MultiIndex):
             flat_index = X.index.to_flat_index()
@@ -641,6 +642,9 @@ class EqualizedOddsNote(Notification):
 
         # apply correction
         corrections = []
+
+        env._nbapp.log.debug("[EqOddsNote] Using input \n{0}".format(X.head()))
+
         for grp in col_names:
             for constraint in ["fpr", "fnr"]:
              
@@ -661,9 +665,11 @@ class EqualizedOddsNote(Notification):
 
         resp["acc_corr"] = inv["acc"]
         resp["eq"] = inv["constraint"]
-        resp["num_changed"] = inv["preds"]
+        resp["num_changed"] = int(inv["preds"])
         resp["groups"] = inv["grp"]
         resp["acc_orig"] = acc_orig
+
+        env._nbapp.log.debug("[EqOddsNote] response is {0}".format(resp))
 
         if cell_id in self.data:
             self.data[cell_id].append(resp)
@@ -823,3 +829,15 @@ def check_call_dfs(dfs, non_dfs_ns, models):
                 "y_parent" : labels_obj 
             } 
     return defined_models
+
+def bin_col(col):
+    """
+    this takes a column and bins it into two groups. Whichever has the highest
+    count, that is the 1 and the rest are 0.
+    """
+    counts = col.value_counts(sort=True)
+    max_val = counts.index.tolist()[0]
+
+    new_col = (col == max_val).astype(int)
+
+    return new_col
