@@ -665,7 +665,7 @@ class EqualizedOddsNote(Notification):
         # get acc_corr
         # select the group that negatively impacts original accuracy the least
         # we could also try selecting the change that would affect the smallest number of predictions
-         
+        env._nbapp.log.debug("[EqOddsNote] possible corrections are {0}".format(corrections)) 
         inv = max(corrections, key = lambda corr: corr["acc"])
 
         resp["acc_corr"] = inv["acc"]
