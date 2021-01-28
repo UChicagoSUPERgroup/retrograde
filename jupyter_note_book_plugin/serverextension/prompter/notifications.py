@@ -5,6 +5,7 @@ import numpy as np
 import dill
 
 from scipy.stats import zscore
+from sklearn.base import ClassifierMixin
 from aif360.sklearn.postprocessing import CalibratedEqualizedOdds, PostProcessingMeta
 
 from .storage import load_dfs
@@ -554,7 +555,11 @@ class EqualizedOddsNote(Notification):
     """
     def __init__(self, db):
         super().__init__(db)
-        self.aligned_models = {}
+        self.aligned_models = {} # candidates for using correction
+
+        # mapping of model name -> (x,y), used so that when doing update
+        # we don't need to redo the alignment testing
+        self.columns = {}
 
     def _get_new_models(self, cell_id, env, non_dfs_ns): 
         """
@@ -671,21 +676,75 @@ class EqualizedOddsNote(Notification):
 
         env._nbapp.log.debug("[EqOddsNote] response is {0}".format(resp))
 
+        if resp["model_name"] not in self.columns:
+            self.columns[resp["model_name"]] = {cell_id : (X,y)}
+        else:
+            self.columns[resp["model_name"]][cell_id] = (X, y)
+ 
         if cell_id in self.data:
             self.data[cell_id].append(resp)
         else:
             self.data[cell_id] = [resp]
     def update(self, env, kernel_id, cell_id):
-        # TODO
-        pass
-    def run_postprocess(self, X, y, model, prot_attr_cols):
-        """run postprocessing Eq Odds correction on the model"""
-    def make_index(self, X, y, prot_attr_cols):
         """
-        aif360 requires that sensitive attribute be a level in the index
+        Check if model is still defined, if not, remove note
+        If model is still defined, recalculate EqOdds correction for grp
+        """
+        ns = self.db.recent_ns()
+        non_dfs_ns = dill.loads(ns["namespace"])
         
-        this function adds them to X and y
-        """
+        def check_if_defined(resp):
+
+            if resp["model_name"] not in non_dfs_ns:
+                return False
+
+            X, y = self.columns.get(resp["model_name"]).get(cell_id)
+            model = non_dfs_ns.get(resp["model_name"])
+
+            if X is None or y is None or model is None:
+                return False
+            if not isinstance(model, ClassifierMixin):
+                return False
+            try: 
+                # there's no universal way to test whether the input and 
+                # output shapes match the trained model in sklearn, so this
+                # is easiest
+                model.score(X,y)
+            except ValueError:
+                return False
+            return True
+
+        live_resps = [resp for resp in self.data[cell_id] if check_if_defined(resp)]
+
+        for resp in live_resps:
+
+            X,y = self.columns[resp["model_name"]][cell_id]
+            model = non_dfs_ns[resp["model_name"]]
+            grp = resp["groups"]
+            constraint = resp["eq"]
+
+            acc_orig = model.score(X,y)
+            pred_orig = model.predict(X)
+ 
+            pp = CalibratedEqualizedOdds(grp, cost_constraint=constraint)
+            ceo = PostProcessingMeta(estimator=model, postprocessor=pp)
+            ceo.fit(X,y)
+            acc = ceo.score(X,y)
+            preds = ceo.predict(X)
+
+            resp["acc_corr"] = acc
+            resp["acc_orig"] = acc_orig
+            resp["num_changed"] = int(sum(pred_orig != preds))
+
+
+        # remember to clean up non-live elements of self.columns
+        live_names = [resp["model_name"] for resp in live_resps]
+        old_names = [resp["model_name"] for resp in self.data[cell_id] if resp["model_name"]  not in live_names]
+       
+        for old_name in old_names:
+            del self.columns[old_name][cell_id]
+         
+        self.data[cell_id] = live_resps
 def align_index(obj, values, locs):
     """given a list of index values or row indices, get subset of obj's rows"""
     if isinstance(obj, (pd.Series, pd.DataFrame)):
