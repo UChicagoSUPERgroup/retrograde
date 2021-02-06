@@ -114,6 +114,9 @@ export class Prompter {
     if (notice["type"] == "model_perf") {
       return this._makePerformanceMsg(notice).outerHTML;
     }
+    if (notice["type"] == "eq_odds") {
+      return this._makeEqOddsMsg(notice).outerHTML;
+    }
   }
 
   private _onInfo(info_object : any) {
@@ -327,7 +330,41 @@ export class Prompter {
 
     return body;
   }
+  private _makeEqOddsMsg(notice : any) {
+    let msg_l1 = document.createElement("p");
+    if (notice["eq"] == "fpr") {
+      msg_l1.innerHTML = "Applying a false positive rate equalization to ";
+    } else if (notice["eq"] == "fnr") {
+      msg_l1.innerHTML = "Applying a false negative rate equalization to ";
+    }
 
+    msg_l1.innerHTML += notice["model_name"]
+    msg_l1.innerHTML += " achieved a training accuracy of "+notice["acc_corr"].toString().slice(0,5);
+    msg_l1.innerHTML += " (Original: "+notice["acc_orig"].toString().slice(0,5)+")";
+
+    let msg_l2 = document.createElement("p");
+    msg_l2.innerHTML = "This correction changed "+notice["num_changed"]+" predictions"; 
+
+    let msg_l3 = document.createElement("p"); // more info about correction 
+    msg_l3.innerHTML = "This correction was a "
+    
+    let link = document.createElement("a");
+    link.href = "https://aif360.readthedocs.io/en/v0.2.3/modules/postprocessing.html";
+    link.innerText = "equalized odds post-processing ";
+    
+    msg_l3.appendChild(link);
+    
+    msg_l3.innerHTML += " correction. It used the majority group in "+notice["grp"];
+    msg_l3.innerHTML += " as those belonging to the privileged group";
+
+    var [body, area] = this._makeContainer(notice["model_name"]);
+
+    area.appendChild(msg_l1);
+    area.appendChild(msg_l2);
+    area.appendChild(msg_l3);
+
+    return body;
+  }
   private _makePerformanceMsg(notice : any) {
 
     let msg_l1 = document.createElement("p");
