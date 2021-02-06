@@ -897,6 +897,6 @@ def bin_col(col):
     counts = col.value_counts(sort=True)
     max_val = counts.index.tolist()[0]
 
-    new_col = (col == max_val).astype(int)
+    new_col = (col != max_val).astype(int)
 
     return new_col
