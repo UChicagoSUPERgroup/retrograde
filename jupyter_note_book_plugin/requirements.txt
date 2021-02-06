@@ -2,7 +2,7 @@
 
 fuzzywuzzy
 python-Levenshtein
-
+aif360
 
 #frozen requirements --- TODO Prune these 
 
