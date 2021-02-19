@@ -10,7 +10,7 @@ def is_categorical(col):
     dist = float(len(col.unique()))/len(col)
     
     # looking at COMPAS, the cutoff seems to be about 0.005
-    return dist < 0.005    
+    return dist < 0.01    
 
 def wands(df):
 
