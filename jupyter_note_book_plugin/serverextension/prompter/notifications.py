@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 import dill
 
-from scipy.stats import zscore
+from scipy.stats import zscore, f_oneway
 from sklearn.base import ClassifierMixin
 from aif360.sklearn.postprocessing import CalibratedEqualizedOdds, PostProcessingMeta
 
@@ -154,6 +154,101 @@ class ProtectedColumnNote(OnetimeNote):
             del self.data[cell_id]
             self.sent = False # unset this so it can be sent again
 
+class ProxyColumnNote(ProtectedColumnNote):
+    """
+    A notification that measures whether there exists a column that is a proxy
+    for a protected column.
+
+    Note that this requires that sensitive columns actually be present in the
+    dataframe. 
+
+    format is {"type" : "proxy", "df" : <name of df>, 
+               "sensitive_col_name" :  <name of sensitive column>,
+               "proxy_col_name" : <name of proxy column>,
+              }
+    """
+    
+    def check_feasible(self, cell_id, env):
+        if super().check_feasible(cell_id, env):
+            # check if any of the dataframes also have numeric or categorical columns
+            ns = self.db.recent_ns()
+            dfs = load_dfs(ns)
+
+            diff_cols = []
+
+            for df_name in self.df_protected_cols:
+                non_sensitive_cols = [c for c in dfs[df_name].columns if c not in self.df_protected_cols[df_name]]
+                if len(non_sensitive_cols) == 0: 
+                    diff_cols.append(df_name)
+
+            self.df_protected_cols = {df_name : cols for df_name, cols in self.df_protected_cols if df_name in diff_cols}
+            return len(self.df_protected_cols) > 0
+
+        return False
+
+    def make_response(self, env, kernel_id, cell_id):
+
+        OnetimeNote.make_response(self, env, kernel_id, cell_id)
+        
+        resp = {"type" : "proxy"}
+        
+        ns = self.db.recent_ns()
+        dfs = load_dfs(ns)
+
+        combos = {"categorical" : [], "numeric" : []}
+ 
+        for df_name, sense_cols in self.df_protected_cols.items():
+            if df_name not in dfs:
+                self._nbapp.log.debug("[ProxyNote] ProxyNote.make_response df {0} cannot be found in namespace".format(df_name))
+                continue
+
+            df = dfs[df_name]
+            avail_cols = [c for c in dfs[df_name].columns if c not in cols]
+
+            for col in avail_cols:
+                if is_categorical(df[col]):
+                    for sense_col in sense_cols:
+                        combos["categorical"].append((df_name, sense_col, col))
+                elif is_numeric_dtype(df[col]):
+                    for sense_col in sense_cols:
+                        combos["numeric"].append((df_name, sense_col, col))
+                else:
+                    self._nbapp.log.debug("[ProxyNote] ProxyNote.make_response encountered column {0} of uncertain type {1} in {2}".format(col, df[col].dtypes, df_name))
+
+        results = []
+        # for numeric, apply one way ANOVA to see if sensitive category -> difference in numeric variable
+        for num_combos in combos["numeric"]:
+            results.append({"df_name" : num_combos[0], 
+                            "sensitive_col_name" : num_combos[1],
+                            "proxy_col_name" : num_combos[2],
+                            "p" : self._apply_ANOVA(dfs[num_combos[0]], num_combos[1], num_combos[2])}) 
+        # if proxy candidate is categorical, use chi square test
+        for num_combos in combos["categorical"]:
+            results.append({"df_name" : num_combos[0], 
+                            "sensitive_col_name" : num_combos[1],
+                            "proxy_col_name" : num_combos[2],
+                            "p" : self._apply_chisq(dfs[num_combos[0]], num_combos[1], num_combos[2])})
+        results.sort(key = lambda x: x["p"]) 
+        self._nbapp.log.debug("[ProxyNote] ProxyNote.make_response, there are {0} possible combinations, min value {0}, max {1}".format(len(results), results[0], results[-1]))
+
+        resp.update(results[0])
+        self.data[cell_id] = [resp]
+          
+    def _apply_ANOVA(self, df, sense_col, num_col):
+
+        sense_col_values = df[sense_col].values.unique()
+        value_cols = [df[num_col][df[sense_col] == v] for v in sense_col_values]
+        
+        result = f_oneway(*value_cols)
+        return result[1] # this returns the p-value
+ 
+    def _apply_chisq(self, df, sense_col, cat_col):
+
+        # contingency table
+        table = df[[sense_col, cat_col]].groupby(sense_col).count()
+        result = chi2_contingency(table.to_numpy())
+
+        return result[1] # returns the p-value 
 class ZipVarianceNote(OnetimeNote):
     """
     A notification that measures the variance in race between the
@@ -690,6 +785,7 @@ class EqualizedOddsNote(Notification):
         Check if model is still defined, if not, remove note
         If model is still defined, recalculate EqOdds correction for grp
         """
+        # pylint: disable=too-many-locals
         ns = self.db.recent_ns()
         non_dfs_ns = dill.loads(ns["namespace"])
         
