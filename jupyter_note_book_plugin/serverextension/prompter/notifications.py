@@ -241,8 +241,12 @@ class ProxyColumnNote(ProtectedColumnNote):
         results.sort(key = lambda x: x["p"]) 
         env._nbapp.log.debug("[ProxyNote] ProxyNote.make_response, there are {0} possible combinations, min value {1}, max {2}".format(len(results), results[0], results[-1]))
 
-        resp.update(results[0])
-        self.data[cell_id] = [resp]
+        if results[0]["p"] > PVAL_CUTOFF:
+            env._nbapp.log.debug("[ProxyNote] ProxyNote.make_response: none of the associations are strong enough to consider as proxies")
+            self.sent = False
+        else:
+            resp.update(results[0])
+            self.data[cell_id] = [resp]
           
     def _apply_ANOVA(self, df, sense_col, num_col):
 
