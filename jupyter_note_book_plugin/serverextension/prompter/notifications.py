@@ -163,7 +163,7 @@ class ProxyColumnNote(ProtectedColumnNote):
     Note that this requires that sensitive columns actually be present in the
     dataframe. 
 
-    format is {"type" : "proxy", "df" : <name of df>, 
+    format is {"type" : "proxy", "df_name" : <name of df>, 
                "sensitive_col_name" :  <name of sensitive column>,
                "proxy_col_name" : <name of proxy column>,
               }
@@ -228,7 +228,7 @@ class ProxyColumnNote(ProtectedColumnNote):
             results.append({"df_name" : num_combos[0], 
                             "sensitive_col_name" : num_combos[1],
                             "proxy_col_name" : num_combos[2],
-                            "p" : self._apply_ANOVA(dfs[num_combos[0]], num_combos[1], num_combos[2], env)}) 
+                            "p" : self._apply_ANOVA(dfs[num_combos[0]], num_combos[1], num_combos[2])}) 
         # if proxy candidate is categorical, use chi square test
         for num_combos in combos["categorical"]:
             env._nbapp.log.debug("[ProxyNote] make_response : analyzing column {0} as categorical".format(num_combos[2]))
