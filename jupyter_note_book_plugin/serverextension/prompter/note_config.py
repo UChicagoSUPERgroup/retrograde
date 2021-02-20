@@ -1,10 +1,10 @@
-from .notifications import ProtectedColumnNote, ZipVarianceNote, OutliersNote, PerformanceNote, EqualizedOddsNote
+from .notifications import ProtectedColumnNote, ZipVarianceNote, OutliersNote, PerformanceNote, EqualizedOddsNote, ProxyColumnNote
 from .config import MODE
 
 if MODE == "EXP_CTS":
     NOTE_RULES = {
         "intro" :[],
-        "tutorial" : [ProtectedColumnNote, OutliersNote],
+        "tutorial" : [ProxyColumnNote],
         "null_clean" : [],
         "model" : [ZipVarianceNote, EqualizedOddsNote],
         "end" : []

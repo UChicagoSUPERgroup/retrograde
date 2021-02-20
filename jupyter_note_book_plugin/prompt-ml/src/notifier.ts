@@ -117,6 +117,9 @@ export class Prompter {
     if (notice["type"] == "eq_odds") {
       return this._makeEqOddsMsg(notice).outerHTML;
     }
+    if (notice["type"] == "proxy") {
+      return this._makeProxyMsg(notice).outerHTML;
+    }
   }
 
   private _onInfo(info_object : any) {
@@ -363,6 +366,14 @@ export class Prompter {
     area.appendChild(msg_l2);
     area.appendChild(msg_l3);
 
+    return body;
+  }
+  private _makeProxyMsg(notice : any) {
+    let msg_l1 = document.createElement("p");
+    msg_l1.innerHTML = "The column "+notice["proxy_col_name"]+" in dataframe "+notice["df_name"]+" may be predictive of "+notice["sensitive_col_name"];
+
+    var [body, area] = this._makeContainer();
+    area.appendChild(msg_l1);
     return body;
   }
   private _makePerformanceMsg(notice : any) {
