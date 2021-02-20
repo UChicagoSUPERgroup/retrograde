@@ -260,7 +260,7 @@ class ProxyColumnNote(ProtectedColumnNote):
     def _apply_chisq(self, df, sense_col, cat_col):
 
         # contingency table
-        table = df[[sense_col, cat_col]].groupby(sense_col).count()
+        table = pd.crosstab(df[sense_col], df[cat_col])
         result = chi2_contingency(table.to_numpy())
 
         return result[1] # returns the p-value 
