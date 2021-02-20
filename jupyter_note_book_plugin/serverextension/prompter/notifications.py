@@ -18,7 +18,8 @@ PROXY_COL_NAME = "zip"
 ZIP_1 = 60637
 ZIP_2 = 60611
 OUTLIER_COL = "principal"
- 
+PVAL_CUTOFF = 0.25 # cutoff for thinking that column is a proxy for a sensitive column
+
 class Notification:
     """Abstract base class for all notifications"""
     def __init__(self, db):
@@ -259,6 +260,46 @@ class ProxyColumnNote(ProtectedColumnNote):
         result = chi2_contingency(table.to_numpy())
 
         return result[1] # returns the p-value 
+
+    def update(self, env, kernel_id, cell_id):
+        """
+        Check if dataframe still defined, if proxy col and sensitive col
+        still in dataframe. If so, recompute, if not remove note
+        """
+        
+        ns = self.db.recent_ns()
+        dfs = load_dfs(ns)
+
+        live_resps = []
+
+        for note in self.data[cell_id]:
+
+            df_name = note["df_name"]
+            proxy_col = note["proxy_col_name"]
+            sense_col = note["sensitive_col_name"]
+
+            if df_name not in dfs:
+               continue
+            df = dfs[df_name]
+            if proxy_col not in df.columns or sense_col not in df.columns:
+                continue
+            if is_categorical(df[proxy_col]):
+                p = self._apply_chisq(df, sense_col, proxy_col)
+            elif is_numeric_dtype(df[proxy_col]):
+                p = self._apply_ANOVA(df, sense_col, proxy_col)
+            else:
+                continue
+            if p > PVAL_CUTOFF:
+                continue
+
+            new_note = note
+            new_note["p"] = p 
+            live_resps.append(new_note)
+
+        if len(live_resps) != len(self.data[cell_id]):
+            self.data[cell_id] = live_resps
+            self.sent = False
+
 class ZipVarianceNote(OnetimeNote):
     """
     A notification that measures the variance in race between the
