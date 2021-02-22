@@ -13,10 +13,6 @@ from .storage import load_dfs
 from .string_compare import check_for_protected
 from .sortilege import is_categorical
 
-RACE_COL_NAME = "race"
-PROXY_COL_NAME = "zip"
-ZIP_1 = 60637
-ZIP_2 = 60611
 OUTLIER_COL = "principal"
 PVAL_CUTOFF = 0.25 # cutoff for thinking that column is a proxy for a sensitive column
 STD_DEV_CUTOFF = 0.1 # cutoff for standard deviation change that triggers difference in OutliersNotes
@@ -306,102 +302,6 @@ class ProxyColumnNote(ProtectedColumnNote):
             self.data[cell_id] = live_resps
             self.sent = False
 
-class ZipVarianceNote(OnetimeNote):
-    """
-    A notification that measures the variance in race between the
-    zip codes 60637 and 60611
-
-    Format is {"type" : "variance", "df" : <name of df cols are in>,
-               "zip1" : 60637, "zip2" : 60611,
-               "demo" : {60637 : <pct applications by black ppl>,
-                         60611 : <pct applications by white ppl>}}
-    """
-    def check_feasible(self, cell_id, env):
-        if super().check_feasible(cell_id, env):
-            env._nbapp.log.debug("[ZipVar] checking columns")
-            race_columns = self.db.get_columns(RACE_COL_NAME)
-            zip_columns = self.db.get_columns(PROXY_COL_NAME)
-            env._nbapp.log.debug("[ZipVar] columns are {0}, {1}".format(race_columns, zip_columns))
-            if race_columns and zip_columns: 
-                return True
-            return False
-        return False
-
-    def make_response(self, env, kernel_id, cell_id):
-
-        super().make_response(env, kernel_id, cell_id)
-
-        resp = {"type" : "variance"}
-
-        race_columns = self.db.get_columns(RACE_COL_NAME)
-        zip_columns = self.db.get_columns(PROXY_COL_NAME)
-        
-        df_name = None
- 
-        for r_col in race_columns:
-            for z_col in zip_columns:
-                if r_col["name"] == z_col["name"] and r_col["version"] == z_col["version"]:
-                    df_name = r_col["name"]
-                    df_version = r_col["version"]
-        if not df_name:
-            env._nbapp.log.warning("[NOTIFICATIONS] ZipVarianceNote.make_response: cannot recover dataframe name")
-            return
-        curr_ns = self.db.recent_ns()
-        dfs = load_dfs(curr_ns)
-
-        if df_name not in dfs:
-            env._nbapp.log.warning("[NOTIFICATIONS] ZipVarianceNote.make_response: cannot recover dataframe object of name %s" % df_name)
-            return
-
-        df = dfs[df_name]
-        resp["df"] = df_name
-
-        if RACE_COL_NAME not in df.columns or PROXY_COL_NAME not in df.columns:
-            env._nbapp.log.warning("[NOTIFICATIONS] ZipVarianceNote.make_response: race or zip not in dataframe columns")
-            return
-
-        resp["zip1"] = ZIP_1
-        resp["zip2"] = ZIP_2 
-
-        resp["demo"] = self.compute_var(df, PROXY_COL_NAME, RACE_COL_NAME)
-        self.data[cell_id] = [resp]
-
-    def compute_var(self, df, proxy_col, race_col):
-
-        panel_df = pd.get_dummies(df[race_col])
-        panel_df[proxy_col] = df[proxy_col]
-        rate_df = panel_df.groupby([proxy_col]).mean()
-
-        return {ZIP_1 : int(rate_df["black"][ZIP_1]*100), ZIP_2 : int(rate_df["white"][ZIP_2]*100)}
-        
-    def update(self, env, kernel_id, cell_id):
-        """
-        check that df is still defined, still has race and zip code columns, and
-        if so, recalculate whether rates are still the same
-        """
-
-        ns = self.db.recent_ns()
-        dfs = load_dfs(ns)
-        
-        for note in self.data[cell_id]:
-
-            df = note["df"]
-
-            if df in dfs.keys() and\
-               PROXY_COL_NAME in dfs[df].columns  and\
-               RACE_COL_NAME in dfs[df].columns:
-                note["demo"] = self.compute_var(dfs[df], PROXY_COL_NAME, RACE_COL_NAME)
-                continue
-            for other_df in dfs.keys():
-                if PROXY_COL_NAME in dfs[other_df].columns and\
-                   RACE_COL_NAME in dfs[other_df].columns:
-                    note["df"] = other_df
-                    note["demo"] = self.compute_var(dfs[other_df], PROXY_COL_NAME, RACE_COL_NAME) 
-                    break
-            if df != note["df"]:
-                continue
-            del self.data[cell_id]
-            self.sent = False    
 class OutliersNote(OnetimeNote):
     """
     A note that computes whether there are outliers in a numeric column
@@ -429,7 +329,7 @@ class OutliersNote(OnetimeNote):
                 self.numeric_cols = numeric_cols
                 return True
             return False
-
+        return False
     def make_response(self, env, kernel_id, cell_id):
     
         super().make_response(env, kernel_id, cell_id)
@@ -444,7 +344,7 @@ class OutliersNote(OnetimeNote):
 
             df = dfs[num_col["df_name"]]                         
             col = num_col["col_name"]
-            value, std_dev = self.compute_outliers(df, col)
+            value, std_dev = self._compute_outliers(df, col)
             outlier_cols.append({
                 "df_name" : num_col["df_name"],
                 "col_name" : col,
@@ -458,8 +358,8 @@ class OutliersNote(OnetimeNote):
  
         self.data[cell_id] = [resp]
 
-    def compute_outliers(self, df, col_name):
-
+    def _compute_outliers(self, df, col_name):
+        # pylint: disable=no-self-use 
         col = df[col_name].dropna()  
         scores = np.absolute(zscore(col))
         index = np.argmax(scores)
@@ -484,13 +384,12 @@ class OutliersNote(OnetimeNote):
             df_name = note["df_name"]
             col_name = note["col_name"]
             std_dev = note["std_dev"]
-            value = note["value"]
  
             if df_name not in dfs.keys():
                 continue
             if col_name not in dfs[df_name].columns:
                 continue
-            new_value, new_std_dev = self.compute_outliers(dfs[df_name], col_name)
+            new_value, new_std_dev = self._compute_outliers(dfs[df_name], col_name)
             if abs(new_std_dev - std_dev)/std_dev >= STD_DEV_CUTOFF:
                 continue
             live_notes.append({
@@ -502,211 +401,6 @@ class OutliersNote(OnetimeNote):
             self.sent = False
         self.data[cell_id] = live_notes
 
-class PerformanceNote(Notification):
-    """
-    A note that computes the false positive rate and false negative rate of
-    the model on training data
-
-    Format: {"type" : "model_perf", "model_name" : <name of model>,
-             "acc" : <training accuracy>, 
-             "values" : {"pos" : <value treated as positive, as string>,
-                         "neg" : <value treated as neg, as string>},
-             "columns" : {
-                <name of column to break down on> : {
-                    <value of column> : {"fpr" : <training fpr on subset of data when column == value>,
-                                         "fnr" : <training fnr on subset of data when column == value>}}}
-    """
-    def check_feasible(self, cell_id, env):
-
-        poss_models = env.get_models()
-        ns = self.db.recent_ns()
-        dfs = load_dfs(ns)
-
-        ns = dill.loads(ns["namespace"])
-
-        models = []
-        env._nbapp.log.debug("[PERFORMANCENOTE] there are {0} possible models".format(len(poss_models)))
-
-
-        # cell_models is used to ensure that we're not generating a new note
-        # for a model that's already had a note generated for it
-
-        if cell_id in self.data: 
-            cell_models = [model.get("model_name") for model in self.data.get(cell_id)]
-        else:
-            cell_models = []
-
-        for model_name in poss_models:
-
-            if not poss_models[model_name]: 
-                env._nbapp.log.debug("[PERFORMANCENOTE] model {0} not defined".format(model_name))
-                continue
-
-            env._nbapp.log.debug("[PERFORMANCENOTE] model is: {0}".format(poss_models[model_name]))
-
-            if "x" in poss_models[model_name]:
-                features_cols = poss_models[model_name]["x"]
-            else:
-                features_cols = None
-
-            if "y" in poss_models[model_name]:
-                labels_cols = poss_models[model_name]["y"]
-            else:
-                labels_cols = None
-
-            if "y_df" in poss_models[model_name]:
-                labels_df = poss_models[model_name]["y_df"]
-            else:
-                labels_df = None
-                
-            if "x_df" in poss_models[model_name]:
-                features_df = poss_models[model_name]["x_df"]
-            else:   
-                features_df = None
-
-            has_model = model_name in ns.keys()
-            has_features = features_df in dfs.keys() # implicit expectation that arguments are dataframes
-            has_labels = (labels_df in dfs.keys()) or (labels_df in ns.keys()) 
-
-            if has_features:
-                feature_df = dfs[features_df]
-                subset_features = self.get_df(feature_df, features_cols) 
-            else:
-                feature_df = None
-            if has_labels and (labels_df in dfs.keys()):
-                label_df = dfs[labels_df]
-                subset_labels = self.get_df(label_df, labels_cols)
-            elif has_labels and isinstance(ns[labels_df], pd.Series):
-                label_df = None
-                subset_labels = ns[labels_df]
-            else:
-                label_df = None
-            # note that feasible method checks if it is feasible to generate a *new* model
-            # rather than update an old one. 
-
-            # therefore, only look to see if models defined do not already have notes
-            # associated with them
-
-            if (has_model and has_features and has_labels and (subset_features is not None) and (subset_labels is not None)):
-                if model_name not in cell_models: 
-                    models.append((model_name, ns[model_name], subset_features, subset_labels, feature_df, label_df)) 
-
-        self.models = models
-        if models: return True
-        return False 
-
-    def try_align(self, feature_df, candidate_df, col_name):
-        """
-        try and see if column of col_name in candidate_df, or feature df
-        if in feature_df return column
-        if in candidate_df return column if it is same length as feature df
-        """
-
-        if col_name in feature_df.columns: return feature_df[col_name]
-        elif candidate_df is not None and col_name in candidate_df.columns:
-            if len(candidate_df[col_name]) == len(feature_df): 
-                return candidate_df[col_name]
-            return None
-        else:
-            return None
-
-    def get_df(self, df, cols):
-        if not cols:
-            return None
-        if all([f in df.columns for f in cols]):
-            if len(cols) == 1:
-                return df[cols[0]]
-            else:
-                return df[cols]
-        return None
-         
-    def times_sent(self):
-        if not hasattr(self, "sent"):
-            self.sent = 0
-        return self.sent
-    
-    def make_response(self, env, kernel_id, cell_id):
-
-        model_name, model, features_df, labels_df, full_feature, full_label = choice(self.models) # lets mix it up a little
-
-        resp = {"type" : "model_perf"}
-        resp["model_name"] = model_name
-        
-        env._nbapp.log.debug("[PERFORMENCENOTE] Input columns {0}".format(features_df.columns))
-
-        subgroups = []
-                 
-        r_col = self.try_align(features_df, full_feature, "race")
-        if r_col is not None: subgroups.append(r_col)
-
-        s_col = self.try_align(features_df, full_feature, "sex")
-        if s_col is not None: subgroups.append(s_col)
-
-        if len(subgroups) == 0: # fall back to this option if no protected cols
-
-            env._nbapp.log.debug("[NOTIFICATIONS] PerfNote.make_response, cannot find protected columns falling back to categorical vars")
-
-            input_cols = [c for c in features_df.columns if is_categorical(features_df[c])]
-            poss_cor_cols = [c for c in full_feature.columns if c not in input_cols and is_categorical(full_feature[c])]
-
-            cor_cols = [self.try_align(features_df, full_feature, c) for c in poss_cor_cols]
-            subgroups.extend([features_df[c] for c in input_cols])
-            subgroups.extend([c for c in cor_cols if c is not None])
-
-        env._nbapp.log.debug("[NOTIFICATIONS] Perfnote.make_response analyzing columns {0}".format([subgrp.name for subgrp in subgroups]))
-
-        try:
-            preds = model.predict(features_df)
-            score = model.score(features_df, labels_df)
-
-        except ValueError:
-            env._nbapp.log.warning("[NOTIFICATIONS] PerfNote.make_response features does not match model")
-            env._nbapp.log.debug("[NOTIFICATIONS] PerfNote.make_response features {0}, model {1}".format(features_df.columns, model))
-            return
-
-        pos = model.classes_[0]
-        neg = model.classes_[1]
-
-        resp["acc"] = score
-        resp["values"] = {"pos" : str(pos), "neg" : str(neg)}
-        resp["columns"] = {}
- 
-        for col in subgroups:
-
-            col_name = col.name
-            resp["columns"][col_name] = {} 
-
-            for val in col.unique():
-
-                mask = (col == val)
-
-                fp = sum((preds[mask] == pos) & (labels_df[mask] == neg))
-                fp = fp/(sum(labels_df[mask] == neg))
-
-                fn = sum((preds[mask] == neg) & (labels_df[mask] == pos))
-                fn = fn/(sum(labels_df[mask] == pos))
-
-                resp["columns"][col_name][str(val)] = {"fpr" : fp, "fnr" : fn}
-
-        env._nbapp.log.debug("[PERFORMANCENOTE] notification is {0}".format(resp))
-
-        if cell_id in self.data:
-            self.data[cell_id].append(resp)
-        else:
-            self.data[cell_id] = [resp]  
-
-    def update(self, env, kernel_id, cell_id):
-        """
-        check if the model referenced in the current note needs to be updated
-
-        since PerformanceNote is not a OneTimeNote subclass, we don't need
-        to look for another available model here. We only need to check if the
-        model named in the note needs updating.  
-        """
-          
-        # TODO: this function and module we expect to change significantly
-        # to use AIF 360 to recommend corrections 
-        raise NotImplementedError
 
 class EqualizedOddsNote(Notification):
     """
