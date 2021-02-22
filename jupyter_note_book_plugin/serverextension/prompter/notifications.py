@@ -19,6 +19,8 @@ ZIP_1 = 60637
 ZIP_2 = 60611
 OUTLIER_COL = "principal"
 PVAL_CUTOFF = 0.25 # cutoff for thinking that column is a proxy for a sensitive column
+STD_DEV_CUTOFF = 0.1 # cutoff for standard deviation change that triggers difference in OutliersNotes
+
 
 class Notification:
     """Abstract base class for all notifications"""
@@ -402,18 +404,29 @@ class ZipVarianceNote(OnetimeNote):
             self.sent = False    
 class OutliersNote(OnetimeNote):
     """
-    A note that is computes whether there are outliers in the column
-    named principal
+    A note that computes whether there are outliers in a numeric column
+    defined in a dataframe
 
-    format is {"type" : "outliers", "col_name" : "principal",
+    format is {"type" : "outliers", "col_name" : <name of column with outliers>,
                "value" : <max outlier value>, "std_dev" : <std_dev of value>,
                "df_name" : <name of dataframe column belongs to>}
     """
+    def __init__(self, db):
+        super().__init__(db)
+        self.numeric_cols = []
+
     def check_feasible(self, cell_id, env):
         if super().check_feasible(cell_id, env):
+            ns = self.db.recent_ns()
+            dfs = load_dfs(ns)
 
-            columns = self.db.get_columns(OUTLIER_COL) 
-            if columns: 
+            numeric_cols = []
+            for df_name, df in dfs.items():
+                for col in df.columns:
+                    if not is_categorical(df[col]) and is_numeric_dtype(df[col]):
+                        numeric_cols.append({"df_name" : df_name,  "col_name" : col})
+            if len(numeric_cols) > 0: 
+                self.numeric_cols = numeric_cols
                 return True
             return False
 
@@ -421,70 +434,74 @@ class OutliersNote(OnetimeNote):
     
         super().make_response(env, kernel_id, cell_id)
 
-        resp = {"type" : "outliers"}
-        cols = self.db.get_columns(OUTLIER_COL)
-      
-        if not cols:
-            env._nbapp.log.warning("[NOTIFICATIONS] OutlierNote.make_response: cannot find column named principal") 
-            return
-
-        df_name = cols[0]["name"]
         curr_ns = self.db.recent_ns()
         dfs = load_dfs(curr_ns)
 
-        if df_name not in dfs:
-            env._nbapp.log.warning("[NOTIFICATIONS] OutlierNote.make_response cannot recover dataframe object named %s" % df_name)
-            return
+        resp = {"type" : "outliers"}
+        outlier_cols = []
+ 
+        for num_col in self.numeric_cols:
 
-        df = dfs[df_name]
+            df = dfs[num_col["df_name"]]                         
+            col = num_col["col_name"]
+            value, std_dev = self.compute_outliers(df, col)
+            outlier_cols.append({
+                "df_name" : num_col["df_name"],
+                "col_name" : col,
+                "value" : value,
+                "std_dev" : std_dev})
+        outlier_cols.sort(key = lambda x: x["std_dev"], reverse=True)
 
-        resp["col_name"] = OUTLIER_COL
-        resp["df_name"] = df_name
+        env._nbapp.log.debug("[OutlierNote] outlier columns {0}".format(outlier_cols))
 
-        resp["value"], resp["std_dev"] = self.compute_outliers(df, OUTLIER_COL)
-
+        resp.update(outlier_cols[0])
+ 
         self.data[cell_id] = [resp]
 
     def compute_outliers(self, df, col_name):
-        
-        scores = np.absolute(zscore(df[col_name]))
+
+        col = df[col_name].dropna()  
+        scores = np.absolute(zscore(col))
         index = np.argmax(scores)
 
-        return float(df[col_name].iloc[index]), float(scores[index])
+        return float(col.iloc[index]), float(scores[index])
 
     def update(self, env, kernel_id, cell_id):
         """
         Check that df is still defined, still has outlier column in it,
-        if not, try to find another df with outlier column in it
-        
-        Then recalculate the zscores 
+        and zscore is still similar
+       
+        If not, then remove and reset 
         """
 
         ns = self.db.recent_ns()
         dfs = load_dfs(ns)
-        
+       
+        live_notes = []
+ 
         for note in self.data[cell_id]:
 
             df_name = note["df_name"]
             col_name = note["col_name"]
-            
-            if df_name not in dfs.keys():
-
-                other_dfs = [df_name for df_name in dfs.keys() if col_name in dfs[df_name].columns]
-
-                if len(other_dfs) == 0:
-                    del self.data[cell_id]
-                    self.sent = False
-                    continue
-            
-                df_name = other_dfs[0]
-                df = dfs[df_name]
-                note["df_name"] = df_name
+            std_dev = note["std_dev"]
+            value = note["value"]
  
-            else:
-                df = dfs[df_name]
-            note["value"], note["std_dev"] = self.compute_outliers(df, col_name)
-           
+            if df_name not in dfs.keys():
+                continue
+            if col_name not in dfs[df_name].columns:
+                continue
+            new_value, new_std_dev = self.compute_outliers(dfs[df_name], col_name)
+            if abs(new_std_dev - std_dev)/std_dev >= STD_DEV_CUTOFF:
+                continue
+            live_notes.append({
+                "df_name" : df_name,
+                "col_name" : col_name,
+                "std_dev" : new_std_dev,
+                "value" : new_value}) 
+        if len(live_notes) == 0:
+            self.sent = False
+        self.data[cell_id] = live_notes
+
 class PerformanceNote(Notification):
     """
     A note that computes the false positive rate and false negative rate of
