@@ -4,6 +4,7 @@ RUN apt-get update
 RUN apt-get -y install curl gnupg
 RUN curl -sL https://deb.nodesource.com/setup_14.x  | bash -
 RUN apt-get -y install nodejs
+RUN apt-get update && apt-get install gcc -y
 #Install pipenv and run the build script
 ADD . /
 RUN chmod +x docker_build.sh
