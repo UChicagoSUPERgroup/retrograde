@@ -13,7 +13,6 @@ from .storage import load_dfs
 from .string_compare import check_for_protected
 from .sortilege import is_categorical
 
-OUTLIER_COL = "principal"
 PVAL_CUTOFF = 0.25 # cutoff for thinking that column is a proxy for a sensitive column
 STD_DEV_CUTOFF = 0.1 # cutoff for standard deviation change that triggers difference in OutliersNotes
 

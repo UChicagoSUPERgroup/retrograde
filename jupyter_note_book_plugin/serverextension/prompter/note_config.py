@@ -15,5 +15,5 @@ if MODE == "EXP_END":
         "tutorial" : [],
         "null_clean" : [],
         "model" : [],
-        "end" : []
+        "end" : [ProtectedColumnNote, ProxyColumnNote, OutliersNote, EqualizedOddsNote]
     }

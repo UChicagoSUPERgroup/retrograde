@@ -124,11 +124,16 @@ class AnalysisManager:
         feasible_rules = [r for r in self.notes[cell_mode] if r.feasible(cell_id, env)]
         self._nb.log.debug("[MANAGER] There are {0} feasible rules".format(len(feasible_rules)))
         
-        if feasible_rules:
-
+        if feasible_rules and MODE == "EXP_CTS":
+            
             chosen_rule = choice(feasible_rules)
             chosen_rule.make_response(self.analyses[kernel_id], kernel_id, cell_id)
             self._nb.log.debug("[MANAGER] chose rule {0}".format(chosen_rule))
+
+        elif feasible_rules and MODE == "EXP_END":
+            for rule in feasible_rules:
+                self._nb.log.debug("[MANAGER] running rule {0}".format(rule))
+                rule.make_response(self.analyses[kernel_id], kernel_id, cell_id)
 
     def new_data(self, kernel_id): 
         """ check if data in the env is new, and if so, register and send event"""
