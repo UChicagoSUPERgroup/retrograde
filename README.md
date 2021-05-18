@@ -100,6 +100,19 @@ so the output I saw was
 ```
 
 
+## Build Instruction
+
+Testing image build locally
+
+When debugging deployment issues, it is sometimes useful to run the image locally.
+The networking capabilities differ on linux and Mac, but I was able to run it by
+using
+
+```bash
+docker run --env JP_PLUGIN_USER="test_user" --env MODE="EXP_CTS" --env DOCKER_HOST_IP="127.0.0.1" --env TOKEN="test_user" --env PLUGIN_PORT=8889 -p 8889:8889 -it {IMAGE_NAME} bash ./run_image.sh 
+```
+
+You may need to select an unused port though
 # Helpful examples
 
 [Jupyter lab code formatter](https://github.com/ryantam626/jupyterlab_code_formatter)
