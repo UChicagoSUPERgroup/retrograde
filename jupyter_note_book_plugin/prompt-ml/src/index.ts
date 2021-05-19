@@ -1,11 +1,13 @@
 import {
-  JupyterFrontEnd, JupyterFrontEndPlugin,
+  JupyterFrontEnd, JupyterFrontEndPlugin, LabShell
 } from '@jupyterlab/application';
 
 import {
   INotebookTracker, NotebookPanel
 } from "@jupyterlab/notebook";
-
+import {
+  Terminal
+} from "@jupyterlab/terminal"
 import {
   Widget
 } from "@lumino/widgets"
@@ -47,7 +49,14 @@ const extension: JupyterFrontEndPlugin<void> = {
        }
        console.log(widget); 
     }
-
+    app.commands.execute("terminal:create-new").then((terminal : Terminal) => {
+      app.shell.add(terminal, "right");
+      if (app.shell instanceof LabShell) {
+        //(app.shell as LabShell).collapseLeft();
+        //(app.shell as LabShell).expandRight();
+        app.shell.activateById(terminal.id);
+      }
+    });
   })
   }
 }
