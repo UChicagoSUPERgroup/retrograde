@@ -26,5 +26,163 @@ textarea {
   flex : 9;
   flex-direction : column;
 }
+/* FIX! */
+/* override styling that is making the element's padding: 0; rules so you don't need to do this !important */
+.prompt-ml-container {
+  padding-top: 8px !important;
+}
+/* prompt stuff */
+
+/* svg */
+
+.cls-1 {
+  fill: none;
+  stroke-width: 2px;
+}
+
+.cls-1, .cls-2, .cls-3 {
+  stroke: #0e0f10;
+  stroke-linecap: round;
+}
+
+.cls-1, .cls-2 {
+  fill-rule: evenodd;
+}
+
+.cls-2, .cls-3 {
+  fill: #0e0f10;
+  stroke-width: 1px;
+}
+
+.cls-4 {
+  fill: none;
+  stroke: #0e0f10;
+  stroke-width: 15px;
+  fill-rule: evenodd;
+}
+
+/*  note styling  */
+
+.note {
+  display: grid;
+  grid-template-rows: auto auto;
+  border-radius: 35px;
+}
 
 
+.note h1 {
+  font-weight: 600;
+  font-size: 22px;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+  max-width: 100%;
+  text-align: center;
+}
+
+.note {
+  padding: 0px 10px;
+  min-width: 100px;
+  margin: 10px;
+  background-color: #F0B744;
+  overflow-x: hidden;
+}
+
+.note.condensed .essential .dropDown p {
+  transform: rotate(0deg) translate(-50%, -50%);
+}
+
+.note.expanded .essential .dropDown p {
+  transform: rotate(90deg) translate(-50%, 50%);
+}
+
+.note .essential .dropDown p {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.note .essential .dropDown {
+  min-height: 100%;
+  min-width: 100%;
+  position: relative;
+}
+
+.note .essential .text {
+  height: 100%;
+  width: 100%;
+}
+
+.note .essential > * {
+  position: relative;
+}
+
+.note .essential > .dropDown > *, .note .essential > .warning > * {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  margin: 0;
+  padding: 0;
+}
+
+.note .essential {
+  display: grid;
+  grid-template-columns: 15% 70% 15%;
+  grid-template-rows: 1fr;
+  border-radius: 35px;
+}
+
+.note .essential > * {
+  grid-row: 1 / 2;
+}
+
+.note .essential .dropDown {
+  grid-column: 1 / 2;
+}
+
+.note .essential .text {
+  grid-column: 2 / 3;
+}
+
+.note .essential .warning {
+  position: relative;
+  grid-column: 3  / 4;
+}
+
+.note .essential svg {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  max-height: 65%;
+}
+
+.note p {
+  font-size: 14px;
+  padding: 10px;
+}
+
+.note .content p {
+  margin: 0;
+  padding: 0;
+}
+
+.note .content {
+  padding: 10px;
+}
+
+.note .more {
+  width: 100%;
+}
+
+.note h2 {
+  padding: 5px;
+  margin: 10px 0 0 0;
+  /* padding: 10px 0; */
+  border-radius: 35px;
+  background-color: #F1A204;
+  border: 1px solid black;
+  text-align: center;
+  font-size: 17px;
+}
