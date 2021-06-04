@@ -158,6 +158,26 @@ textarea {
   max-height: 65%;
 }
 
+
+.prompt-ml-close-svg-path {
+  fill: none;
+  stroke: #000;
+  stroke-linecap: round;
+  stroke-width: 15px;
+  fill-rule: evenodd;
+}
+
+.close svg {
+  width: 100%;
+  min-width: 25px;
+  max-height: 60%;
+}
+
+svg.expanded, svg.condensed {
+  width: 100%;
+  min-width: 20px;
+}
+
 .note p {
   font-size: 14px;
   padding: 10px;
