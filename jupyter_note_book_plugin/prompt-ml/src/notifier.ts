@@ -3,15 +3,24 @@
     JupyterFrontEnd
   } from "@jupyterlab/application"
   
+  // import {
+  //   INotebookTracker,
+  //   Notebook,
+  //   NotebookPanel,
+  // } from "@jupyterlab/notebook";
+
   import {
     INotebookTracker,
-    Notebook,
     NotebookPanel,
   } from "@jupyterlab/notebook";
+
+  import { ServerConnection } from "@jupyterlab/services";
+
+import { CodeCellClient } from "./client"; // connect directly to the backend server
   
-  import { 
-    Cell,
-  } from "@jupyterlab/cells";
+  // import { 
+  //   Cell,
+  // } from "@jupyterlab/cells";
   
   import {
     Listener,
@@ -24,57 +33,79 @@
      * This generates prompts for notebook cells on notification of 
      * new data or a new model
      */
-    private _tracker : INotebookTracker;
+    // private _tracker : INotebookTracker;
     constructor(listener : Listener, tracker : INotebookTracker, app : JupyterFrontEnd, factory : NotebookPanel.IContentFactory) {
-      this._tracker = tracker;
+      // this._tracker = tracker;
       listener.infoSignal.connect(
           (sender : Listener, output : any) => {
             this._onInfo(output)});
     }
     
-    private appendMsg(cell : Cell, msg : string, handedPayload : any) {
+    private appendMsg(cell_id : string, kernel_id : string, msg : string, handedPayload : any) {
   
       // var outputmodel : IOutputAreaModel = (cell as CodeCell).model.outputs;
       // commented out -- 5/28 -- 5/28
       
-      console.log(msg)
-      document.getElementsByClassName("prompt-ml-container")[0].innerHTML += msg
+      var newNote = $.parseHTML(msg)
+      // remove duplicate notes; this will make it appear at the bottom of the list
+      $(".prompt-ml-container > *").each( function() {
+        if($(this)[0].isEqualNode(newNote[0])) $(this).remove()
+      })
+
+      // TO DO: change msg from a string to an actual html element, that way you don't need to do weird stuff w the css selectors
+      $(".prompt-ml-container").prepend(newNote) // prepend vs append. prepend makes notes appear at the top, append at the bottom. to discuss during meeting
 
       // add animations
-      $(".prompt-ml-container .note:last-of-type").find(".content").toggle()
-      $(".prompt-ml-container .note:last-of-type").click( function() {
+      $(newNote).find(".content").toggle()
+      $(newNote).addClass("condensed").removeClass("expanded")
+      $(newNote).click( function() {
         if( $(this).hasClass("condensed")) {
             $(this).removeClass("condensed")
             $(this).addClass("expanded")
-            $(this).find("svg.expanded").toggle()
-            $(this).find("svg.condensed").toggle()
+            $(this).find("svg.expanded").toggle(true)
+            $(this).find("svg.condensed").toggle(false)
             $(this).find(".content").toggle(true)
         } else {
             $(this).removeClass("expanded")
             $(this).addClass("condensed")
-            $(this).find("svg.condensed").toggle()
-            $(this).find("svg.expanded").toggle()
+            $(this).find("svg.condensed").toggle(true)
+            $(this).find("svg.expanded").toggle(false)
             $(this).find(".content").toggle(false)
         }
     })
 
-    // add "more" button
-    $(".prompt-ml-container > div:last-of-type .content").append($.parseHTML("<div class=\"more\"><h2>MORE INFO</h2></div>"))
-    $(".prompt-ml-container > div:last-of-type .more").click( () => {
-      console.log("-- Needs to show more info")
-      // Payload must contain the structure of the popup to render
-      if(handedPayload == {}) {
-        var payload : object =  {
-          "title": "Default Page",
-          "htmlContent": $.parseHTML("<p>Testing...</p>"),
+      // add "more" button
+      $(newNote).find(".content").append($.parseHTML("<div class=\"more\"><h2>MORE INFO</h2></div>"))
+      $(newNote).find(".more").click( () => {
+        // Payload must contain the structure of the popup to render
+        if(handedPayload == {}) {
+          var payload : object =  {
+            "title": "Default Page",
+            "htmlContent": $.parseHTML("<p>Testing...</p>"),
+          }
+        } else {
+          payload = handedPayload
         }
-      } else {
-        payload = handedPayload
-      }
 
-      $(".prompt-ml-container").trigger("prompt-ml:note-added", { "payload": payload })
+        $(".prompt-ml-container").trigger("prompt-ml:note-added", { "payload": payload })
     })
   
+    // add close button
+      $(newNote).find(".close").click( function() {
+        $(this).parent().parent().remove()
+        var client = new CodeCellClient()
+        client.request(
+          "exec", "POST", 
+          JSON.stringify({
+              "type" : "update",
+              "updateType" : "unsend", 
+              "cell_id" : cell_id,
+              "kernel_id" : kernel_id}),
+              ServerConnection.makeSettings()).
+        then(value => { 
+                  console.log("Deleted with response:", value);
+        })
+      })
     }
 
     private _routeNotice(notice : any) {
@@ -114,31 +145,49 @@
         var object : object = message[1];
         return [stringHTML, object];
       } else {
-        console.log("NONE")
-        return ["<div></div>", {}];
+        console.log("No notes generated", notice["type"], notice)
       }
     }
   
     private _onInfo(info_object : any) {
   
-      var cell : Cell = this._getCell(info_object["cell"], this._tracker);
+      // var cell : Cell = this._getCell(info_object["cell"], this._tracker);
+      console.log(info_object)
   
+      // if (info_object["type"] == "multiple") {
+      //   for (let key of Object.keys(info_object["info"])) {
+      //     // cell = this._getCell(key, this._tracker);
+      //     for (let notice of info_object["info"][key]) {
+      //       console.log(notice)
+      //       var noticeResponse = this._routeNotice(notice);
+      //       if(noticeResponse == undefined) return
+      //       let msg : string = noticeResponse[0] as string
+      //       let popupContent : object = noticeResponse[1] as object
+      //       if (msg) { this.appendMsg(msg, popupContent); }
+      //     } 
+      //   }   
+      // }
+
       if (info_object["type"] == "multiple") {
-        for (let key of Object.keys(info_object["info"])) {
-          cell = this._getCell(key, this._tracker);
-          for (let notice of info_object["info"][key]) {
+        var cell_id = info_object["info"]["cell"]
+        var kernel_id = info_object["kernel_id"]
+        var notices = info_object["info"][cell_id]
+        for (var x = 0; x < notices.length; x++) {
+            var notice = notices[x]
             var noticeResponse = this._routeNotice(notice);
+            if(noticeResponse == undefined) return
             let msg : string = noticeResponse[0] as string
             let popupContent : object = noticeResponse[1] as object
-            if (msg) { this.appendMsg(cell, msg, popupContent); }
-          } 
+            if (msg) { this.appendMsg(cell_id, kernel_id, msg, popupContent); }
         }   
       }
     
       if (info_object["type"] == "resemble") {
         let msg : string = "<div>Column <b>"+info_object["column"]+"</b> resembles "+info_object["category"] +"</div>";
         let payload = {}
-        this.appendMsg(cell, msg, payload);
+        var cell_id = info_object["info"]["cell"]
+        var kernel_id = info_object["kernel_id"]
+        this.appendMsg(cell_id, kernel_id, msg, payload);
       }
       if (info_object["type"] == "wands") { // categorical variance
         let responseMessage = this._makeWandsMsg(info_object["op"], 
@@ -149,14 +198,17 @@
                                               info_object["total"]);
         let msg : string = (responseMessage[0] as HTMLDivElement).outerHTML;
         let payload = responseMessage[1]
-        this.appendMsg(cell, msg, payload);
+        var cell_id = info_object["info"]["cell"]
+        this.appendMsg(cell_id, kernel_id, msg, payload);
       }
       if (info_object["type"] == "cups") {// correlation
         let responseMessage = this._makeCupsMsg(info_object["col_a"], info_object["col_b"],
                                              info_object["strength"], info_object["rank"]);
         let msg : string = (responseMessage[0] as HTMLDivElement).outerHTML;
         let payload = responseMessage[1]
-        this.appendMsg(cell, msg, payload);
+        var cell_id = info_object["info"]["cell"]
+        var kernel_id = info_object["kernel_id"]
+        this.appendMsg(cell_id, kernel_id, msg, payload);
       }
       if (info_object["type"] == "pentacles") { // extreme values
         let responseMessage = this._makePentaclesMsg(info_object["col"],
@@ -165,7 +217,9 @@
                                                   info_object["rank"]);
         let msg : string = (responseMessage[0] as HTMLDivElement).outerHTML;
         let payload = responseMessage[1]
-        this.appendMsg(cell, msg, payload);
+        var cell_id = info_object["info"]["cell"]
+        var kernel_id = info_object["kernel_id"]
+        this.appendMsg(cell_id, kernel_id, msg, payload);
       }
       if (info_object["type"] == "swords") { // undefined
         // let msg : string = this._makeSwordsMsg(info_object["col"], info_object["strength"],
@@ -173,7 +227,9 @@
         let responseMessage = this._makeSwordsMsg(info_object["col"], info_object["strength"], info_object["rank"]);
         let msg : string = (responseMessage[0] as HTMLDivElement).outerHTML;
         let payload = responseMessage[1]
-        this.appendMsg(cell, msg, payload);
+        var cell_id = info_object["info"]["cell"]
+        var kernel_id = info_object["kernel_id"]
+        this.appendMsg(cell_id, kernel_id, msg, payload);
       }
     } 
 
@@ -184,7 +240,7 @@
       the notification should be put into
       */
       let note : HTMLDivElement = document.createElement("div")
-      note.append($.parseHTML('<div class="note condensed"><!-- gap --><div class="essential"> <!-- gap --><div class="dropDown"> <!-- gap --><svg class="condensed" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 250 250"> <!-- gap --><path class="cls-4" d="M58.6,226.057L184.69,129,58.6,31.943"/> <!-- gap --></svg> <!-- gap --><svg class="expanded" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 250 250" style="display: none;"> <!-- gap --><path class="cls-4" d="M28.443,62L125.5,187.782,222.557,62"/> <!-- gap --></svg> <!-- gap --></div> <!-- gap --><div class="text"> <!-- gap --><h1>Note Name</h1> <!-- gap --></div> <!-- gap --><div class="warning"> <!-- gap --><svg xmlns="http://www.w3.org/2000/svg" width="100%" viewBox="0 0 50 50"> <!-- gap --><path class="cls-1" d="M19.451,4.72a6.044,6.044,0,0,1,11.161,0L48.451,37.691A6.736,6.736,0,0,1,48,43.859,6.388,6.388,0,0,1,43.369,47L6.446,46.944a5.983,5.983,0,0,1-4.534-2.978,6.818,6.818,0,0,1-.3-6.169Z"/> <!-- gap --><path class="cls-2" d="M21.019,18.517a3.487,3.487,0,0,1,3.416-3.861,3.483,3.483,0,0,1,3.248,3.861L26,32.675a1.686,1.686,0,0,1-3.248,0Z"/> <!-- gap --><circle class="cls-3" cx="24.359" cy="38.797" r="2.047"/> <!-- gap --></svg> <!-- gap --></div> <!-- gap --></div> <!-- gap --> <!-- gap --></div> <!-- gap -->')[0])
+      note.append($.parseHTML('<div class="note condensed"><!-- gap --><div class="essential"> <!-- gap --><div class="dropDown"> <!-- gap --><svg class="condensed" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 250 250"> <!-- gap --><path class="cls-4" d="M58.6,226.057L184.69,129,58.6,31.943"/> <!-- gap --></svg> <!-- gap --><svg class="expanded" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 250 250" style="display: none;"> <!-- gap --><path class="cls-4" d="M28.443,62L125.5,187.782,222.557,62"/> <!-- gap --></svg> <!-- gap --></div> <!-- gap --><div class="text"> <!-- gap --><h1>Note Name</h1> <!-- gap --></div> <!-- gap --><div class="close"> <!-- gap --><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500"><path class="prompt-ml-close-svg-path" d="M91.5,93.358L409.461,406.6"/><path class="prompt-ml-close-svg-path" d="M91.5,406.6L409.461,93.358"/></svg></div> <!-- gap --></div> <!-- gap --> <!-- gap --></div> <!-- gap -->')[0])
 
       let content : HTMLDivElement = document.createElement("div")
       content.classList.add("content")
@@ -418,7 +474,7 @@
       area.appendChild(msg_l2);
       area.appendChild(msg_l3);
 
-      var title = "Equalied Odds";
+      var title = "Equalized Odds";
       $(body).find(".essential h1").text(title);
   
       var payload : object =  {
@@ -518,17 +574,17 @@
       return new Array(body, payload) 
     }
   
-    private _getCell(id : string, tracker : INotebookTracker) : Cell {
+    // private _getCell(id : string, tracker : INotebookTracker) : Cell {
   
-      var nb : Notebook = tracker.currentWidget.content;
+    //   var nb : Notebook = tracker.currentWidget.content;
   
-      for (let i = 0; i < nb.widgets.length; i++) {
-        if (nb.widgets[i].model.id == id) {
-          return nb.widgets[i];
-        }
-      }
+    //   for (let i = 0; i < nb.widgets.length; i++) {
+    //     if (nb.widgets[i].model.id == id) {
+    //       return nb.widgets[i];
+    //     }
+    //   }
   
-      return null;
-    }
+    //   return null;
+    // }
   }
   
