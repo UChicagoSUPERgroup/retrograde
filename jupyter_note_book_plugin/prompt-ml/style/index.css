@@ -30,6 +30,7 @@ textarea {
 /* override styling that is making the element's padding: 0; rules so you don't need to do this !important */
 .prompt-ml-container {
   padding-top: 8px !important;
+  overflow-y: scroll;
 }
 /* prompt stuff */
 
@@ -168,7 +169,7 @@ textarea {
 }
 
 .close svg {
-  width: 100%;
+  width: 80%;
   min-width: 25px;
   max-height: 60%;
 }
