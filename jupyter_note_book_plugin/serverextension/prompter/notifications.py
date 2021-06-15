@@ -54,26 +54,8 @@ class Notification:
     def check_feasible(self, cell_id, env):
         """check feasibility of implementing class"""
         raise NotImplementedError("check_feasible must be overridden") 
-class OnetimeNote(Notification):
-    """
-    Abstract base class for notification that is sent exactly once
-    """
 
-    def __init__(self, db):
-        super().__init__(db)
-        self.sent = False
-
-    def check_feasible(self, cell_id, env):
-        return (not self.sent)
-    
-    def times_sent(self):
-        return int(self.sent)
-
-    def make_response(self, env, kernel_id, cell_id):
-        super().make_response(env, kernel_id, cell_id)
-        self.sent = True
-
-class ProtectedColumnNote(OnetimeNote):
+class ProtectedColumnNote(Notification):
 
     """
     a class that indicates whether a protected column is present in
@@ -89,24 +71,22 @@ class ProtectedColumnNote(OnetimeNote):
         self.df_protected_cols = {}
 
     def check_feasible(self, cell_id, env):
-        if super().check_feasible(cell_id, env):
 
-            ns = self.db.recent_ns()
-            dfs = load_dfs(ns)
-       
-            df_cols = {}
+        ns = self.db.recent_ns()
+        dfs = load_dfs(ns)
+   
+        df_cols = {}
 
-            for df_name, df in dfs.items():
-                 df_cols[df_name] = [col for col in df.columns] 
+        for df_name, df in dfs.items():
+             df_cols[df_name] = [col for col in df.columns] 
 
-            for df_name, cols in dfs.items():
+        for df_name, cols in dfs.items():
 
-                protected_columns = check_for_protected(cols)
-                self.df_protected_cols[df_name] = protected_columns
+            protected_columns = check_for_protected(cols)
+            self.df_protected_cols[df_name] = protected_columns
 
-            if self.df_protected_cols:
-                return True
-            return False
+        if self.df_protected_cols:
+            return True
         return False
 
     def make_response(self, env, kernel_id, cell_id):
@@ -153,7 +133,7 @@ class ProtectedColumnNote(OnetimeNote):
             del self.data[cell_id]
             self.sent = False # unset this so it can be sent again
 
-class ProxyColumnNote(ProtectedColumnNote):
+class ProxyColumnNote(Notification):
     """
     A notification that measures whether there exists a column that is a proxy
     for a protected column.
@@ -168,28 +148,25 @@ class ProxyColumnNote(ProtectedColumnNote):
     """
     
     def check_feasible(self, cell_id, env):
-        if super().check_feasible(cell_id, env):
-            # check if any of the dataframes also have numeric or categorical columns
-            ns = self.db.recent_ns()
-            dfs = load_dfs(ns)
+        # check if any of the dataframes also have numeric or categorical columns
+        ns = self.db.recent_ns()
+        dfs = load_dfs(ns)
 
-            diff_cols = []
-            
-            for df_name in self.df_protected_cols:
+        diff_cols = []
+        
+        for df_name in self.df_protected_cols:
 
-                sense_col_names = [c["original_name"] for c in self.df_protected_cols[df_name]]
-                non_sensitive_cols = [c for c in dfs[df_name].columns if c not in sense_col_names]
-                if len(non_sensitive_cols) != 0: 
-                    diff_cols.append(df_name)
+            sense_col_names = [c["original_name"] for c in self.df_protected_cols[df_name]]
+            non_sensitive_cols = [c for c in dfs[df_name].columns if c not in sense_col_names]
+            if len(non_sensitive_cols) != 0: 
+                diff_cols.append(df_name)
 
-            self.df_protected_cols = {df_name : cols for df_name, cols in self.df_protected_cols.items() if df_name in diff_cols}
-            return len(self.df_protected_cols) > 0
-
-        return False
+        self.df_protected_cols = {df_name : cols for df_name, cols in self.df_protected_cols.items() if df_name in diff_cols}
+        return len(self.df_protected_cols) > 0
 
     def make_response(self, env, kernel_id, cell_id):
 
-        OnetimeNote.make_response(self, env, kernel_id, cell_id)
+        Notification.make_response(self, env, kernel_id, cell_id)
         
         resp = {"type" : "proxy"}
         
@@ -301,7 +278,7 @@ class ProxyColumnNote(ProtectedColumnNote):
             self.data[cell_id] = live_resps
             self.sent = False
 
-class OutliersNote(OnetimeNote):
+class OutliersNote(Notification):
     """
     A note that computes whether there are outliers in a numeric column
     defined in a dataframe
@@ -315,20 +292,19 @@ class OutliersNote(OnetimeNote):
         self.numeric_cols = []
 
     def check_feasible(self, cell_id, env):
-        if super().check_feasible(cell_id, env):
-            ns = self.db.recent_ns()
-            dfs = load_dfs(ns)
+        ns = self.db.recent_ns()
+        dfs = load_dfs(ns)
 
-            numeric_cols = []
-            for df_name, df in dfs.items():
-                for col in df.columns:
-                    if not is_categorical(df[col]) and is_numeric_dtype(df[col]):
-                        numeric_cols.append({"df_name" : df_name,  "col_name" : col})
-            if len(numeric_cols) > 0: 
-                self.numeric_cols = numeric_cols
-                return True
-            return False
+        numeric_cols = []
+        for df_name, df in dfs.items():
+            for col in df.columns:
+                if not is_categorical(df[col]) and is_numeric_dtype(df[col]):
+                    numeric_cols.append({"df_name" : df_name,  "col_name" : col})
+        if len(numeric_cols) > 0: 
+            self.numeric_cols = numeric_cols
+            return True
         return False
+
     def make_response(self, env, kernel_id, cell_id):
     
         super().make_response(env, kernel_id, cell_id)
