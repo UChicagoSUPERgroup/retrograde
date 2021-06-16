@@ -70,44 +70,6 @@
         }
     })
 
-    // $(newNote).addClass("promptMlParentContainer")
-    //   $(newNote).find(".content").toggle()
-    //   $(newNote).addClass("condensed").removeClass("expanded")
-    //   $(newNote).on("click", "div.promptMlParentContainer, :not(.close)", function() {
-    //     $(this).find("svg.expanded").removeClass("expanded").addClass("condensedTemp")
-    //     $(this).find("svg.condensed").removeClass("condensed").addClass("expanded")
-    //     $(this).find("svg.condensedTemp").removeClass("condensedTemp").addClass("condensed")
-    //     if( $(this).hasClass("condensed")) {
-    //         $(this).find("svg.expanded").toggle(true)
-    //         $(this).find("svg.condensed").toggle(false)
-    //         $(this).find(".content").toggle(true)
-    //     } else {
-    //         $(this).find("svg.condensed").toggle(true)
-    //         $(this).find("svg.expanded").toggle(false)
-    //         $(this).find(".content").toggle(false)
-    //     }
-    // })
-
-    // $(newNote).addClass("promptMlNodeParent")
-    //   $(newNote).find(".content").toggle()
-    //   $(newNote).addClass("condensed").removeClass("expanded")
-    //   $(newNote).find(".dropDown, .text, .content").click( function() {
-    //     var currentNote = $(this).parent(".promptMlNodeParent")
-    //     if( $(currentNote).hasClass("condensed")) {
-    //         $(currentNote).removeClass("condensed")
-    //         $(currentNote).addClass("expanded")
-    //         $(currentNote).find("svg.expanded").toggle(true)
-    //         $(currentNote).find("svg.condensed").toggle(false)
-    //         $(currentNote).find(".content").toggle(true)
-    //     } else {
-    //         $(currentNote).removeClass("expanded")
-    //         $(currentNote).addClass("condensed")
-    //         $(currentNote).find("svg.condensed").toggle(true)
-    //         $(currentNote).find("svg.expanded").toggle(false)
-    //         $(currentNote).find(".content").toggle(false)
-    //     }
-    // })
-
       // add "more" button
       $(newNote).find(".content").append($.parseHTML("<div class=\"more\"><h2>MORE INFO</h2></div>"))
       $(newNote).find(".more").click( () => {
