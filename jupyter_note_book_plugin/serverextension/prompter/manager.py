@@ -39,30 +39,12 @@ class AnalysisManager:
 
         # mapping of notebook section -> notes to look for
         self.notes = {s : [note_type(self.db) for note_type in allowed_notes] for s, allowed_notes in NOTE_RULES.items()}
-    
-    def handle_note_update(self, request):
-        print("Handling update...")
-        if request["updateType"] == "unsend":
-            cell_id = request["cell_id"]
-            print("Unsending...")
-            for notes in self.notes.values():
-                for note in notes:
-                    if note.on_cell(cell_id):
-                        note.sent = False 
 
     def handle_request(self, request):
         """
         handle a request (json object with "content", "id", and "kernel" fields)
         """
         self._nb.log.debug("[MANAGER] received {0}".format(request))
-
-        # Include custom requests below
-
-        if request["type"] == "update":
-            self.handle_note_update(request)
-            return
-
-        # Include custom requests above
 
         if request["type"] != "execute":
             self._nb.log.info("[MANAGER] received non-execution request {0}".format(request))
