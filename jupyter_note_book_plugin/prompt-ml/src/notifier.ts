@@ -89,8 +89,18 @@
     // add close button
       $(newNote).find(".close").click( function(e) {
         e.stopPropagation()
+        var parentNote = $(this).parent().parent().parent()
         $(this).parent().parent().css("background-color", "#A3A3A3").find(".more h2").css("background-color", "#939393")
-        $(".prompt-ml-container").append($(this).parent().parent().parent())
+        $(".prompt-ml-container").append($(parentNote))
+        
+        if( $(parentNote).hasClass("expanded")) {
+          // var expanded = $(parentNote).find("div.expanded")
+          $(parentNote).removeClass("expanded")
+          $(parentNote).addClass("condensed")
+          $(parentNote).find("svg.condensed").toggle(true)
+          $(parentNote).find("svg.expanded").toggle(false)
+          $(parentNote).find(".content").toggle(false)
+      }
       })
     }
 
