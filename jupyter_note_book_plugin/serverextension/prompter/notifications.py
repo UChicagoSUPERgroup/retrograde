@@ -26,9 +26,9 @@ class Notification:
 
         # data format is cell id -> {note info}
 
-    def feasible(self, cell_id, env):
+    def feasible(self, cell_id, env, dfs, ns):
         """is it feasible to send this notification?"""
-        ret_value = self.check_feasible(cell_id, env)
+        ret_value = self.check_feasible(cell_id, env, dfs, ns)
         self._feasible = ret_value 
         return ret_value
    
@@ -48,10 +48,10 @@ class Notification:
     def get_response(self, cell_id): 
         """what response was associated with this cell, return None if no response"""
         return self.data.get(cell_id)
-    def update(self, env, kernel_id, cell_id):
+    def update(self, env, kernel_id, cell_id, dfs, ns):
         """check whether the note on this cell needs to be updated"""
         raise NotImplementedError
-    def check_feasible(self, cell_id, env):
+    def check_feasible(self, cell_id, env, dfs, ns):
         """check feasibility of implementing class"""
         raise NotImplementedError("check_feasible must be overridden") 
 
@@ -62,7 +62,9 @@ class ProtectedColumnNote(Notification):
     an active dataframe.
 
     data format is {"type" : "resemble", 
-                    "col" : "race", "category" : "race"
+                    "col" : <comma-delimited string with suspect columns>,
+                    "category" : <comma-delimited string with categories columns may fall into>,
+                    "col_names" : [list of column names]
                     "df" : <df name or "unnamed">}
     """
     def __init__(self, db):
@@ -70,70 +72,79 @@ class ProtectedColumnNote(Notification):
         super().__init__(db)
         self.df_protected_cols = {}
 
-    def check_feasible(self, cell_id, env):
+    def check_feasible(self, cell_id, env, dfs, ns):
 
-        ns = self.db.recent_ns()
-        dfs = load_dfs(ns)
-   
+        # are there any dataframes that we haven't examined?
         df_cols = {}
-
+        
         for df_name, df in dfs.items():
-             df_cols[df_name] = [col for col in df.columns] 
+            if df_name not in self.df_protected_cols:
+                df_cols[df_name] = [col for col in df.columns] 
 
-        for df_name, cols in dfs.items():
+        for df_name, cols in df_cols.items():
 
             protected_columns = check_for_protected(cols)
             self.df_protected_cols[df_name] = protected_columns
 
-        if self.df_protected_cols:
+        if df_cols:
             return True
         return False
 
     def make_response(self, env, kernel_id, cell_id):
 
         super().make_response(env, kernel_id, cell_id)
-        resp = {"type" : "resemble"}
+
         #using protected columns found in csv build string to display in notification
-        df_name = choice(list(self.df_protected_cols.keys()))
+        # find if there are dfs without notes generated on them
+        notes = [note for note_set in self.data.values() for note in note_set]
+        note_subset = [note for note in notes if note["type"] == "resemble"]
+        noted_dfs = [note["df"] for note in note_subset]
+
+        for df_name in self.df_protected_cols.keys():
+            if df_name not in noted_dfs:
+
+                resp = self._make_resp_entry(df_name)
+                if cell_id not in self.data:
+                    self.data[cell_id] = []
+                self.data[cell_id].append(resp)
+
+    def _make_resp_entry(self, df_name):
 
         protected_columns_string = ', '.join([p["original_name"] for p in self.df_protected_cols[df_name]])
         protected_values_string = ', '.join([p["protected_value"] for p in self.df_protected_cols[df_name]]) 
 
+        resp = {"type" : "resemble"}
         resp["df"] = df_name
         resp["col"] = protected_columns_string
         resp["category"] = protected_values_string
+        resp["col_names"] = [p["original_name"] for p in self.df_protected_cols[df_name]]
 
-        self.data[cell_id] = [resp]
+        return resp
 
-    def update(self, env, kernel_id, cell_id):
-        """
-        check if column with RACE_COL_NAME is still in df.columns
-        if so, nothing happens, if RACE_COL_NAME still defined, but no longer
-        in df of df_name, update df name
-        if no longer in namespace, remove note altogether
-        """
+    def update(self, env, kernel_id, cell_id, dfs, ns):
+        new_data = {}
+        for cell_id, note_list in self.data.items():
+            new_notes = []
+            for note in note_list:
+                if note["type"] == "resemble":
 
-        ns = self.db.recent_ns()
-        dfs = load_dfs(ns)
+                    df_name = note["df"]
+                    cols = note["col_names"]
+                    
+                    if df_name in dfs:
 
-        for note in self.data[cell_id]:
+                        protected_cols = check_for_protected(dfs[df_name].columns)
+                        self.df_protected_cols[df_name] = protected_cols
+                        new_notes.append(self._make_resp_entry(df_name))
+                else:
+                    new_notes.append(note)
+            new_data[cell_id] = new_notes
 
-            col_name = note["col"]
-            df_name = note["df"]
+        env.log.debug("[ProtectedColumnNote] updated responses")
 
-            if df_name in dfs.keys():
-                if col_name in dfs[df_name].columns:
-                    continue
-            for other_df in dfs.keys():
-                if col_name in dfs[other_df].columns:
-                    note["df"] = other_df
-                    break
-            if note["df"] != df_name:
-                continue
-            del self.data[cell_id]
-            self.sent = False # unset this so it can be sent again
+        self.data = new_data
 
-class ProxyColumnNote(Notification):
+class ProxyColumnNote(ProtectedColumnNote):
     """
     A notification that measures whether there exists a column that is a proxy
     for a protected column.
@@ -147,10 +158,8 @@ class ProxyColumnNote(Notification):
               }
     """
     
-    def check_feasible(self, cell_id, env):
+    def check_feasible(self, cell_id, env, dfs, ns):
         # check if any of the dataframes also have numeric or categorical columns
-        ns = self.db.recent_ns()
-        dfs = load_dfs(ns)
 
         diff_cols = []
         
@@ -180,7 +189,7 @@ class ProxyColumnNote(Notification):
             sense_col_names = [c["original_name"] for c in sense_cols]
 
             if df_name not in dfs:
-                env._nbapp.log.debug("[ProxyNote] ProxyNote.make_response df {0} cannot be found in namespace".format(df_name))
+                env.log.debug("[ProxyNote] ProxyNote.make_response df {0} cannot be found in namespace".format(df_name))
                 continue
 
             df = dfs[df_name]
@@ -194,29 +203,30 @@ class ProxyColumnNote(Notification):
                     for sense_col in sense_cols:
                         combos["numeric"].append((df_name, sense_col["original_name"], col))
                 else:
-                    env._nbapp.log.debug("[ProxyNote] ProxyNote.make_response encountered column {0} of uncertain type {1} in {2}".format(col, df[col].dtypes, df_name))
+                    env.log.debug("[ProxyNote] ProxyNote.make_response encountered column {0} of uncertain type {1} in {2}".format(col, df[col].dtypes, df_name))
 
         results = []
         # for numeric, apply one way ANOVA to see if sensitive category -> difference in numeric variable
         for num_combos in combos["numeric"]:
-            env._nbapp.log.debug("[ProxyNote] make_response : analyzing column {0} as numeric".format(num_combos[2]))
+            env.log.debug("[ProxyNote] make_response : analyzing column {0} as numeric".format(num_combos[2]))
             results.append({"df_name" : num_combos[0], 
                             "sensitive_col_name" : num_combos[1],
                             "proxy_col_name" : num_combos[2],
                             "p" : self._apply_ANOVA(dfs[num_combos[0]], num_combos[1], num_combos[2])}) 
         # if proxy candidate is categorical, use chi square test
         for num_combos in combos["categorical"]:
-            env._nbapp.log.debug("[ProxyNote] make_response : analyzing column {0} as categorical".format(num_combos[2]))
+            env.log.debug("[ProxyNote] make_response : analyzing column {0} as categorical".format(num_combos[2]))
             results.append({"df_name" : num_combos[0], 
                             "sensitive_col_name" : num_combos[1],
                             "proxy_col_name" : num_combos[2],
                             "p" : self._apply_chisq(dfs[num_combos[0]], num_combos[1], num_combos[2])})
 
         results.sort(key = lambda x: x["p"]) 
-        env._nbapp.log.debug("[ProxyNote] ProxyNote.make_response, there are {0} possible combinations, min value {1}, max {2}".format(len(results), results[0], results[-1]))
+        env.log.debug("[ProxyNote] ProxyNote.make_response, there are {0} possible combinations, min value {1}, max {2}".format(len(results), results[0], results[-1]))
 
         if results[0]["p"] > PVAL_CUTOFF:
-            env._nbapp.log.debug("[ProxyNote] ProxyNote.make_response: none of the associations are strong enough to consider as proxies")
+            env.log.debug("[ProxyNote] ProxyNote.make_response: none of the associations are strong enough to consider as proxies")
+            # pylint: disable=attribute-defined-outside-init 
             self.sent = False
         else:
             resp.update(results[0])
@@ -239,7 +249,7 @@ class ProxyColumnNote(Notification):
 
         return result[1] # returns the p-value 
 
-    def update(self, env, kernel_id, cell_id):
+    def update(self, env, kernel_id, cell_id, dfs, ns):
         """
         Check if dataframe still defined, if proxy col and sensitive col
         still in dataframe. If so, recompute, if not remove note
@@ -276,6 +286,7 @@ class ProxyColumnNote(Notification):
 
         if len(live_resps) != len(self.data[cell_id]):
             self.data[cell_id] = live_resps
+            # pylint: disable=attribute-defined-outside-init
             self.sent = False
 
 class OutliersNote(Notification):
@@ -291,9 +302,7 @@ class OutliersNote(Notification):
         super().__init__(db)
         self.numeric_cols = []
 
-    def check_feasible(self, cell_id, env):
-        ns = self.db.recent_ns()
-        dfs = load_dfs(ns)
+    def check_feasible(self, cell_id, env, dfs, ns):
 
         numeric_cols = []
         for df_name, df in dfs.items():
@@ -327,7 +336,7 @@ class OutliersNote(Notification):
                 "std_dev" : std_dev})
         outlier_cols.sort(key = lambda x: x["std_dev"], reverse=True)
 
-        env._nbapp.log.debug("[OutlierNote] outlier columns {0}".format(outlier_cols))
+        env.log.debug("[OutlierNote] outlier columns {0}".format(outlier_cols))
 
         resp.update(outlier_cols[0])
  
@@ -341,17 +350,14 @@ class OutliersNote(Notification):
 
         return float(col.iloc[index]), float(scores[index])
 
-    def update(self, env, kernel_id, cell_id):
+    def update(self, env, kernel_id, cell_id, dfs, ns):
         """
         Check that df is still defined, still has outlier column in it,
         and zscore is still similar
        
         If not, then remove and reset 
         """
-
-        ns = self.db.recent_ns()
-        dfs = load_dfs(ns)
-       
+        # pylint: disable=too-many-arguments
         live_notes = []
  
         for note in self.data[cell_id]:
@@ -373,6 +379,7 @@ class OutliersNote(Notification):
                 "std_dev" : new_std_dev,
                 "value" : new_value}) 
         if len(live_notes) == 0:
+            # pylint: disable=attribute-defined-outside-init
             self.sent = False
         self.data[cell_id] = live_notes
 
@@ -413,13 +420,12 @@ class EqualizedOddsNote(Notification):
         return {model_name : model_info for model_name, model_info in models.items() if model_name not in cell_models}
 
 
-    def check_feasible(self, cell_id, env):
+    def check_feasible(self, cell_id, env, dfs, ns):
         
-        ns = self.db.recent_ns()
         non_dfs_ns = dill.loads(ns["namespace"])
 
         models = self._get_new_models(cell_id, env, non_dfs_ns)
-        defined_dfs = load_dfs(ns)
+        defined_dfs = dfs
         
         models_with_dfs = check_call_dfs(defined_dfs, non_dfs_ns, models)
         aligned_models = {}
@@ -484,7 +490,7 @@ class EqualizedOddsNote(Notification):
         # apply correction
         corrections = []
 
-        env._nbapp.log.debug("[EqOddsNote] Using input \n{0}".format(X.head()))
+        env.log.debug("[EqOddsNote] Using input \n{0}".format(X.head()))
 
         for grp in col_names:
             for constraint in ["fpr", "fnr"]:
@@ -501,7 +507,7 @@ class EqualizedOddsNote(Notification):
         # get acc_corr
         # select the group that negatively impacts original accuracy the least
         # we could also try selecting the change that would affect the smallest number of predictions
-        env._nbapp.log.debug("[EqOddsNote] possible corrections are {0}".format(corrections)) 
+        env.log.debug("[EqOddsNote] possible corrections are {0}".format(corrections)) 
         inv = max(corrections, key = lambda corr: corr["acc"])
 
         resp["acc_corr"] = inv["acc"]
@@ -510,7 +516,7 @@ class EqualizedOddsNote(Notification):
         resp["groups"] = inv["grp"]
         resp["acc_orig"] = acc_orig
 
-        env._nbapp.log.debug("[EqOddsNote] response is {0}".format(resp))
+        env.log.debug("[EqOddsNote] response is {0}".format(resp))
 
         if resp["model_name"] not in self.columns:
             self.columns[resp["model_name"]] = {cell_id : (X,y)}
@@ -521,12 +527,13 @@ class EqualizedOddsNote(Notification):
             self.data[cell_id].append(resp)
         else:
             self.data[cell_id] = [resp]
-    def update(self, env, kernel_id, cell_id):
+
+    def update(self, env, kernel_id, cell_id, dfs, ns):
         """
         Check if model is still defined, if not, remove note
         If model is still defined, recalculate EqOdds correction for grp
         """
-        # pylint: disable=too-many-locals
+        # pylint: disable=too-many-locals,too-many-arguments
         ns = self.db.recent_ns()
         non_dfs_ns = dill.loads(ns["namespace"])
         
@@ -582,6 +589,7 @@ class EqualizedOddsNote(Notification):
             del self.columns[old_name][cell_id]
          
         self.data[cell_id] = live_resps
+
 def align_index(obj, values, locs):
     """given a list of index values or row indices, get subset of obj's rows"""
     if isinstance(obj, (pd.Series, pd.DataFrame)):
