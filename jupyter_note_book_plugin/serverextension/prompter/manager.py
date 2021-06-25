@@ -39,7 +39,7 @@ class AnalysisManager:
 
         # mapping of notebook section -> notes to look for
         self.notes = {s : [note_type(self.db) for note_type in allowed_notes] for s, allowed_notes in NOTE_RULES.items()}
-    
+
     def handle_request(self, request):
         """
         handle a request (json object with "content", "id", and "kernel" fields)
@@ -87,14 +87,16 @@ class AnalysisManager:
         resp["info"] = {}
         resp["info"]["cell"] = cell_id
         resp["info"][cell_id] = []
+        resp["kernel_id"] = kernel_id
 
         for notes in self.notes.values():
             for note in notes:
                 if note.on_cell(cell_id):
-                    resp["info"][cell_id].extend(note.get_response(cell_id))
-
+                    resp["info"][cell_id].extend(note.get_response(cell_id)) # checks for notes associated with this cell and appends
+        self._nb.log.info("[MANAGER] Response generation: ") # remove after debug
+        self._nb.log.info( note.get_response(cell_id)) # remove after debug
         for response in resp["info"][cell_id]:
-            self.db.store_response(kernel_id, cell_id, exec_ct, response)  
+            self.db.store_response(kernel_id, cell_id, exec_ct, response)   # stores this info?
          
         resp["type"] = "multiple"
 
