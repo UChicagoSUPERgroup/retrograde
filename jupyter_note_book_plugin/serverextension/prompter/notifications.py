@@ -270,8 +270,10 @@ class ProxyColumnNote(ProtectedColumnNote):
         still in dataframe. If so, recompute, if not remove note
         """
         
-        live_resps = []
+        live_resps = {}
+
         for cell in self.data:
+            live_resps[cell] = []
             for note in self.data[cell]:
 
                 df_name = note["df"]
@@ -294,9 +296,9 @@ class ProxyColumnNote(ProtectedColumnNote):
 
                 new_note = note
                 new_note["p"] = p 
-                live_resps.append(new_note)
+                live_resps[cell].append(new_note)
 
-            self.data[cell_id] = live_resps
+        self.data = live_resps
 
 class OutliersNote(Notification):
     """
