@@ -26,12 +26,19 @@ textarea {
   flex : 9;
   flex-direction : column;
 }
-/* FIX! */
-/* override styling that is making the element's padding: 0; rules so you don't need to do this !important */
+
 .prompt-ml-container {
-  padding-top: 8px !important;
   overflow-y: scroll;
 }
+
+.prompt-ml-container > * {
+  padding-top: 8px;
+}
+
+#jp-right-stack > .lm-Widget, .prompt-ml-container {
+  min-width: 250px !important;
+}
+
 /* prompt stuff */
 
 /* svg */

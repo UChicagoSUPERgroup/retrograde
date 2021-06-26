@@ -13,10 +13,6 @@
     INotebookTracker,
     NotebookPanel,
   } from "@jupyterlab/notebook";
-
-  import { ServerConnection } from "@jupyterlab/services";
-
-import { CodeCellClient } from "./client"; // connect directly to the backend server
   
   // import { 
   //   Cell,
@@ -91,20 +87,20 @@ import { CodeCellClient } from "./client"; // connect directly to the backend se
     })
   
     // add close button
-      $(newNote).find(".close").click( function() {
-        $(this).parent().parent().remove()
-        var client = new CodeCellClient()
-        client.request(
-          "exec", "POST", 
-          JSON.stringify({
-              "type" : "update",
-              "updateType" : "unsend", 
-              "cell_id" : cell_id,
-              "kernel_id" : kernel_id}),
-              ServerConnection.makeSettings()).
-        then(value => { 
-                  console.log("Deleted with response:", value);
-        })
+      $(newNote).find(".close").click( function(e) {
+        e.stopPropagation()
+        var parentNote = $(this).parent().parent().parent()
+        $(this).parent().parent().css("background-color", "#A3A3A3").find(".more h2").css("background-color", "#939393")
+        $(".prompt-ml-container").append($(parentNote))
+        
+        if( $(parentNote).hasClass("expanded")) {
+          // var expanded = $(parentNote).find("div.expanded")
+          $(parentNote).removeClass("expanded")
+          $(parentNote).addClass("condensed")
+          $(parentNote).find("svg.condensed").toggle(true)
+          $(parentNote).find("svg.expanded").toggle(false)
+          $(parentNote).find(".content").toggle(false)
+      }
       })
     }
 
