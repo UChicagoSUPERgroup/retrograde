@@ -46,6 +46,7 @@ class AnalysisEnvironment:
         self.models = {}
 
         self.ptr_set = {}
+        self.log = self._nbapp.log
 
     def cell_exec(self, code, notebook, cell_id, exec_ct):
         """

@@ -9,7 +9,7 @@ import mysql.connector
 
 from random import choice
 
-from .storage import DbHandler, RemoteDbHandler
+from .storage import DbHandler, RemoteDbHandler, load_dfs
 from .analysis import AnalysisEnvironment
 from .config import MODE, remote_config
 from .note_config import NOTE_RULES
@@ -73,8 +73,15 @@ class AnalysisManager:
 
         self.new_data(kernel_id) # add columns and data to db
 
-        self.update_notifications(kernel_id, cell_id)
-        self.new_notifications(kernel_id, cell_id, cell_mode)
+    #    self.update_notifications(kernel_id, cell_id)
+    #    self.new_notifications(kernel_id, cell_id, cell_mode)
+        ns = self.db.recent_ns()
+        dfs = load_dfs(ns)
+
+        for r in self.notes[cell_mode]:
+            if r.feasible(cell_id, env, dfs, ns):
+                r.make_response(env, kernel_id, cell_id) 
+            r.update(env, kernel_id, cell_id, dfs, ns)
         response = self.send_notifications(kernel_id, cell_id, request["exec_ct"])
  
         self._nb.log.info("[MANAGER] sending response {0}".format(response))
@@ -91,13 +98,12 @@ class AnalysisManager:
 
         for notes in self.notes.values():
             for note in notes:
-                if note.on_cell(cell_id):
-                    resp["info"][cell_id].extend(note.get_response(cell_id)) # checks for notes associated with this cell and appends
-        self._nb.log.info("[MANAGER] Response generation: ") # remove after debug
-        self._nb.log.info( note.get_response(cell_id)) # remove after debug
-        for response in resp["info"][cell_id]:
-            self.db.store_response(kernel_id, cell_id, exec_ct, response)   # stores this info?
-         
+                for cell in note.data:
+                    if cell not in resp["info"]:
+                        resp["info"][cell] = []
+                    resp["info"][cell].extend(note.data[cell])
+                    for response in note.data[cell]:
+                        self.db.store_response(kernel_id, cell_id, exec_ct, response)
         resp["type"] = "multiple"
 
         return resp 
