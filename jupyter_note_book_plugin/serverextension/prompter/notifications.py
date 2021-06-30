@@ -756,3 +756,49 @@ def bin_col(col):
     new_col = (col != max_val).astype(int)
 
     return new_col
+
+class NewNote(Notification):
+    """
+    A note that computes whether there are outliers in a numeric column
+    defined in a dataframe
+
+    format is {"type" : "outliers", "col_name" : <name of column with outliers>,
+               "value" : <max outlier value>, "std_dev" : <std_dev of value>,
+               "df_name" : <name of dataframe column belongs to>}
+    """
+    def __init__(self, db):
+        super().__init__(db)
+
+    def check_feasible(self, cell_id, env, dfs, ns):
+        env.log.debug("[NewNote] Debug 1")
+        return True
+
+    def make_response(self, env, kernel_id, cell_id):
+        env.log.debug("[NewNote] Debug 2")    
+        super().make_response(env, kernel_id, cell_id)
+        self.sent = True
+        resp = {"type" : "TESTING",
+                "to do": "something1"}
+        if cell_id in self.data:
+            self.data[cell_id].append(resp)
+        else:
+            self.data[cell_id] = [resp]
+
+
+    def update(self, env, kernel_id, cell_id, dfs, ns):
+        """
+        Check that df is still defined, still has outlier column in it,
+        and zscore is still similar
+       
+        If not, then remove and reset 
+        """
+        resp = {"type" : "TESTING",
+            "to do": "something2"}
+
+        # if False:
+        #     # pylint: disable=attribute-defined-outside-init
+        #     self.sent = False
+        if cell_id in self.data:
+            self.data[cell_id].append(resp)
+        else:
+            self.data[cell_id] = [resp]
