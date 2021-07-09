@@ -58,14 +58,6 @@ const extension: JupyterFrontEndPlugin<void> = {
       }
       console.log(widget); 
     }
-    // app.commands.execute("terminal:create-new").then((terminal : Terminal) => {
-    //   app.shell.add(terminal, "right");
-    //   if (app.shell instanceof LabShell) {
-    //     //(app.shell as LabShell).collapseLeft();
-    //     //(app.shell as LabShell).expandRight();
-    //     app.shell.activateById(terminal.id);
-    //   }
-    // });
 
     /////////////////////////////////////////////////
     /////////////////////////////////////////////////
@@ -92,18 +84,15 @@ const extension: JupyterFrontEndPlugin<void> = {
     // Manage creation of a new panel
     $(".prompt-ml-container").on("prompt-ml:note-added", function(e, passed_args) {
       var payload = passed_args["payload"]
-      console.log("-- More information triggered --")
-      console.log(payload)
-      const popupContent = new Widget();
-      const popupWidget = new MainAreaWidget({ "content": popupContent });
+      var popupContent = new Widget();
+      var popupWidget = new MainAreaWidget({ "content": popupContent });
+      popupWidget.id = "prompt-ml-popup" + (Math.round(Math.random() * 1000));
       var popupContainer = document.createElement("div");
       popupContainer.classList.add("prompt-ml-popup")
       popupContent.node.appendChild(popupContainer);
-      popupWidget.id = "prompt-ml-popup";
       popupWidget.title.label = payload["title"];
       popupWidget.title.closable = true;
       app.shell.add(popupWidget, "main");
-      console.log(payload["htmlContent"])
       $(".prompt-ml-popup").append(payload["htmlContent"]);
     })
     /////////////////////////////////////////////////
