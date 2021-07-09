@@ -90,17 +90,24 @@
       $(newNote).find(".close").click( function(e) {
         e.stopPropagation()
         var parentNote = $(this).parent().parent().parent()
-        $(this).parent().parent().css("background-color", "#A3A3A3").find(".more h2").css("background-color", "#939393")
-        $(".prompt-ml-container").append($(parentNote))
-        
-        if( $(parentNote).hasClass("expanded")) {
-          // var expanded = $(parentNote).find("div.expanded")
-          $(parentNote).removeClass("expanded")
-          $(parentNote).addClass("condensed")
-          $(parentNote).find("svg.condensed").toggle(true)
-          $(parentNote).find("svg.expanded").toggle(false)
-          $(parentNote).find(".content").toggle(false)
-      }
+        if(!($(parentNote).hasClass("wasClosed"))) {
+          $(this).parent().parent().css("background-color", "#A3A3A3").find(".more h2").css("background-color", "#939393")
+          $(".prompt-ml-container").append($(parentNote))
+          
+          if( $(parentNote).hasClass("expanded")) {
+            // var expanded = $(parentNote).find("div.expanded")
+            $(parentNote).removeClass("expanded")
+            $(parentNote).addClass("condensed")
+            $(parentNote).find("svg.condensed").toggle(true)
+            $(parentNote).find("svg.expanded").toggle(false)
+            $(parentNote).find(".content").toggle(false)
+          }
+          $(parentNote).addClass("wasClosed")
+        } else {
+          $(this).parent().parent().css("background-color", "#F0B744").find(".more h2").css("background-color", "#F1A204")
+            $(".prompt-ml-container").prepend($(parentNote))
+            $(parentNote).removeClass("wasClosed")
+        }
       })
     }
 
@@ -143,39 +150,34 @@
       } else {
         console.log("No notes generated", notice["type"], notice)
       }
+      if (notice["type"] == "TESTING") {
+        var message = this._makeTestingMsg(notice);
+        var stringHTML : string = (message[0] as HTMLDivElement).outerHTML;
+        var object : object = message[1]
+        return [stringHTML, object]
+      }
     }
   
     private _onInfo(info_object : any) {
-  
-      // var cell : Cell = this._getCell(info_object["cell"], this._tracker);
-      console.log(info_object)
-  
-      // if (info_object["type"] == "multiple") {
-      //   for (let key of Object.keys(info_object["info"])) {
-      //     // cell = this._getCell(key, this._tracker);
-      //     for (let notice of info_object["info"][key]) {
-      //       console.log(notice)
-      //       var noticeResponse = this._routeNotice(notice);
-      //       if(noticeResponse == undefined) return
-      //       let msg : string = noticeResponse[0] as string
-      //       let popupContent : object = noticeResponse[1] as object
-      //       if (msg) { this.appendMsg(msg, popupContent); }
-      //     } 
-      //   }   
-      // }
 
       if (info_object["type"] == "multiple") {
         var cell_id = info_object["info"]["cell"]
         var kernel_id = info_object["kernel_id"]
         var notices = info_object["info"][cell_id]
+        var proxies = []
         for (var x = 0; x < notices.length; x++) {
+            if (notices[x]["type"] == "proxy") {
+              proxies.push(notices[x]);
+              continue;
+            }
             var notice = notices[x]
             var noticeResponse = this._routeNotice(notice);
             if(noticeResponse == undefined) return
             let msg : string = noticeResponse[0] as string
             let popupContent : object = noticeResponse[1] as object
             if (msg) { this.appendMsg(cell_id, kernel_id, msg, popupContent); }
-        }   
+        }
+        this._handleProxies(proxies)
       }
     
       if (info_object["type"] == "resemble") {
@@ -218,8 +220,6 @@
         this.appendMsg(cell_id, kernel_id, msg, payload);
       }
       if (info_object["type"] == "swords") { // undefined
-        // let msg : string = this._makeSwordsMsg(info_object["col"], info_object["strength"],
-        //                                        info_object["rank"]).outerHTML;
         let responseMessage = this._makeSwordsMsg(info_object["col"], info_object["strength"], info_object["rank"]);
         let msg : string = (responseMessage[0] as HTMLDivElement).outerHTML;
         let payload = responseMessage[1]
@@ -228,6 +228,27 @@
         this.appendMsg(cell_id, kernel_id, msg, payload);
       }
     } 
+
+    private _handleProxies(proxies : { [ key: string ] : any }[]) {
+      console.log(proxies);
+      var d : { [key : string ] : {[key: string] : string[]} } = {};
+      for(var x = 0; x < proxies.length; x++) {
+        var p : any = proxies[x];
+        if(!(p["df"] in d)) d[p["df"]] = {"proxy_col_name": [], "sensitive_col_name": [], "p_vals": []};
+        d[p["df"]]["proxy_col_name"].push(p["proxy_col_name"]);
+        d[p["df"]]["sensitive_col_name"].push(p["sensitive_col_name"]);
+        d[p["df"]]["p_vals"].push(p["p"]);
+      }
+      console.log("analyzed:", d);
+      var message = this._makeProxyMsg(d);
+      var stringHTML : string = (message[0] as HTMLDivElement).outerHTML;
+      var object : object = message[1];
+      var noticeResponse = [stringHTML, object];
+      if(noticeResponse == undefined) return
+      let msg : string = noticeResponse[0] as string
+      let popupContent : object = noticeResponse[1] as object
+      if (msg) { this.appendMsg(proxies[0]["cell_id"], proxies[0]["kernel_id"], msg, popupContent); }
+    }
 
   
     private _makeContainer(df_name? : string)  : [HTMLDivElement, HTMLDivElement] {
@@ -480,22 +501,65 @@
 
       return new Array(body, payload) 
     }
-    private _makeProxyMsg(notice : any) {
-      let msg_l1 = document.createElement("p");
-      msg_l1.innerHTML = "The column "+notice["proxy_col_name"]+" in dataframe "+notice["df_name"]+" may be predictive of "+notice["sensitive_col_name"];
+    private _makeProxyMsg(d : any) {
+      var ul_container = document.createElement("div")
+      for (let df_name in d) {
+        var label = document.createElement("h3")
+        label.innerHTML = `Within ${df_name}`
+        ul_container.appendChild(label)
+        var df  = d[df_name];
+        let ul = document.createElement("ul");
+        for(var x = 0; x < df["proxy_col_name"].length; x++) {
+          var li = document.createElement("li");
+          li.innerHTML = `Column ${df["proxy_col_name"][x]} may be predictive of ${df["sensitive_col_name"][x]}`
+          ul.appendChild(li);
+         };
+         ul_container.appendChild(ul)
+      }
   
       var [body, area] = this._makeContainer();
-      area.appendChild(msg_l1);
+      area.appendChild(ul_container);
 
+      // Expanded view content
+      
+      var container = $.parseHTML("<div class=\"promptMl proxyColumn\" style=\"padding: 15px; overflow: scroll;\"><h1>Proxy Columns</h1><ul></ul></div>")
+      $(container).find("ul").append($.parseHTML(`
+      <li>Certain variables in this notebook may encode or have strong correlations with sensitive variables. In some cases, the use of these correlated variables may produce outcomes that are biased. This bias may be undesirable, unethical and in some cases illegal. <a style=\"color: blue; text-decoration; underline\" target=\"_blank\" href=\"PLACEHOLDER\">(Read More)</a></li>
+      `))
+      $(container).find("ul").append($.parseHTML(`
+      <li>This plugin has detected the presence of certain columns in this notebook that may be correlated with sensitive variables. In some instances, this correlation was detected by computing the correlation between the sensitive column and the candidate proxy column. 
+        <ul>
+          <li>A column may also be correlated with a sensitive variable that is not contained in the data. This plugin also notes when a column may encode data that is known to correlate with a sensitive variable that is not present in the dataset. </li>
+        </ul>
+      </li>
+      `))
+      $(container).find("ul").append($.parseHTML(`
+      <li>The correlations found or suggested here may or may not be meaningful. There also may be situation-specific correlations that are not detected by this plugin. </li>
+      `))
+      for (let df_name in d) {
+        var label = document.createElement("h3")
+        label.innerHTML = `Within ${df_name}`
+        $(container).append(label)
+        var df  = d[df_name];
+        let ul = document.createElement("ul");
+        for(var x = 0; x < df["proxy_col_name"].length; x++) {
+          var li = document.createElement("li");
+          li.innerHTML = `Column ${df["proxy_col_name"][x]} ${(df["p_vals"][x] < 0.001) ? "is strongly correlated with" : "may be predictive of"} ${df["sensitive_col_name"][x]} with a p_val of ${Math.floor(df["p_vals"][x] * 1000) / 1000}` // Rounds to the third decimal place
+          ul.appendChild(li);
+         };
+         $(container).append(ul)
+      }
+      // Make payload
       var title = "Proxy Column";
       $(body).find(".essential h1").text(title);
       var payload : object =  {
         "title": "Proxy Message",
-        "htmlContent": $.parseHTML("<p>Testing...</p>"),
+        "htmlContent": container,
       }
 
       return new Array(body, payload) 
     }
+
     private _makePerformanceMsg(notice : any) {
   
       let msg_l1 = document.createElement("p");
@@ -565,6 +629,23 @@
       var payload : object =  {
         "title": "Performance Message",
         "htmlContent": $.parseHTML("<p>Testing...</p>"),
+      }
+
+      return new Array(body, payload) 
+    }
+
+    private _makeTestingMsg(notice : any) {
+      let msg_l1 = document.createElement("p");
+      msg_l1.innerHTML = "Yea this won't have data for a little while...";
+  
+      var [body, area] = this._makeContainer();
+      area.appendChild(msg_l1);
+
+      var title = "Testing Note";
+      $(body).find(".essential h1").text(title);
+      var payload : object =  {
+        "title": "Testing Note",
+        "htmlContent": $.parseHTML("<p>Testing; this element is to ensure that there isn't a fallback \"p\" element that's being duplicated across multiple elements</p>"),
       }
 
       return new Array(body, payload) 
