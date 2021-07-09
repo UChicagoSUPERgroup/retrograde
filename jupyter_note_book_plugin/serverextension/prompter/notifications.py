@@ -792,13 +792,10 @@ class NewNote(Notification):
        
         If not, then remove and reset 
         """
-        resp = {"type" : "TESTING",
-            "to do": "something2"}
-
-        # if False:
-        #     # pylint: disable=attribute-defined-outside-init
-        #     self.sent = False
-        if cell_id in self.data:
-            self.data[cell_id].append(resp)
-        else:
-            self.data[cell_id] = [resp]
+        # Commented out until update logic is worked out
+        # resp = {"type" : "TESTING",
+        #     "to do": "something2"}
+        # if cell_id in self.data:
+        #     self.data[cell_id].append(resp)
+        # else:
+        #     self.data[cell_id] = [resp]
