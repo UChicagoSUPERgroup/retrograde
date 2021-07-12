@@ -117,44 +117,38 @@
         var stringHTML : string = (message[0] as HTMLDivElement).outerHTML;
         var object : object = message[1];
         return [stringHTML, object];
-      }
-      if (notice["type"] == "variance") {
+      } else if (notice["type"] == "variance") {
         var message = this._makeVarMsg(notice["zip1"], notice["zip2"], notice["demo"]);
         var stringHTML : string = (message[0] as HTMLDivElement).outerHTML;
         var object : object = message[1];
         return [stringHTML, object];
-      }
-      if (notice["type"] == "outliers") {
+      } else if (notice["type"] == "outliers") {
         var message = this._makeOutliersMsg(notice["col_name"], notice["value"], notice["std_dev"], notice["df_name"]);
         var stringHTML : string = (message[0] as HTMLDivElement).outerHTML;
         var object : object = message[1];
         return [stringHTML, object];
-      }
-      if (notice["type"] == "model_perf") {
+      } else if (notice["type"] == "model_perf") {
         var message = this._makePerformanceMsg(notice);
         var stringHTML : string = (message[0] as HTMLDivElement).outerHTML;
         var object : object = message[1];
         return [stringHTML, object];
-      }
-      if (notice["type"] == "eq_odds") {
+      } else if (notice["type"] == "eq_odds") {
         var message = this._makeEqOddsMsg(notice);
         var stringHTML : string = (message[0] as HTMLDivElement).outerHTML;
         var object : object = message[1];
         return [stringHTML, object];
-      }
-      if (notice["type"] == "proxy") {
+      } else if (notice["type"] == "proxy") {
         var message = this._makeProxyMsg(notice);
         var stringHTML : string = (message[0] as HTMLDivElement).outerHTML;
         var object : object = message[1];
         return [stringHTML, object];
-      } else {
-        console.log("No notes generated", notice["type"], notice)
-      }
-      if (notice["type"] == "TESTING") {
-        var message = this._makeTestingMsg(notice);
+      } else if (notice["type"] == "missing") {
+        var message = this._makeMissingMsg(notice);
         var stringHTML : string = (message[0] as HTMLDivElement).outerHTML;
         var object : object = message[1]
         return [stringHTML, object]
+      } else {
+        console.log("No notes generated", notice["type"], notice)
       }
     }
   
@@ -538,13 +532,13 @@
       `))
       for (let df_name in d) {
         var label = document.createElement("h3")
-        label.innerHTML = `Within ${df_name}`
+        label.innerHTML = `Within <strong>${df_name}</strong>`
         $(container).append(label)
         var df  = d[df_name];
         let ul = document.createElement("ul");
         for(var x = 0; x < df["proxy_col_name"].length; x++) {
           var li = document.createElement("li");
-          li.innerHTML = `Column ${df["proxy_col_name"][x]} ${(df["p_vals"][x] < 0.001) ? "is strongly correlated with" : "may be predictive of"} ${df["sensitive_col_name"][x]} with a p_val of ${Math.floor(df["p_vals"][x] * 1000) / 1000}` // Rounds to the third decimal place
+          li.innerHTML = `Column <strong>${df["proxy_col_name"][x]}</strong> ${(df["p_vals"][x] < 0.001) ? "is strongly correlated with" : "may be predictive of"} <strong>${df["sensitive_col_name"][x]}</strong>.` // Rounds to the third decimal place
           ul.appendChild(li);
          };
          $(container).append(ul)
@@ -634,18 +628,60 @@
       return new Array(body, payload) 
     }
 
-    private _makeTestingMsg(notice : any) {
-      let msg_l1 = document.createElement("p");
-      msg_l1.innerHTML = "Yea this won't have data for a little while...";
+    private _makeMissingMsg(notice : { [key : string] : { [ key : string ] : any } } ) {
+      let msg_l1 = document.createElement("div");
+      // msg_l1.innerHTML = "Received: " + JSON.stringify(notice["dfs"]);
+      for(var df_name in notice["dfs"]) {
+        msg_l1.appendChild($.parseHTML(`<h3>Within ${df_name}</h3>`)[0])
+        var df = notice["dfs"][df_name]
+        var ul = document.createElement("ul")
+        msg_l1.appendChild(ul)
+        var cols : { [ key: string ] : number} = df["columns"]
+        for(const col_name in cols) {
+          var col = cols[col_name]
+          if(col == 0) continue
+          ul.appendChild($.parseHTML(`<li>Column <strong>${col_name}</strong> is missing <strong>${col}</strong> entries</li>`)[0])
+        }
+      }
   
       var [body, area] = this._makeContainer();
       area.appendChild(msg_l1);
 
-      var title = "Testing Note";
+      // Expanded view content
+       var moreInfoContent = $.parseHTML("<div class=\"promptMl missing\" style=\"padding: 15px; overflow: scroll;\"><h1>Missing Data</h1><ul></ul></div>")
+      $(moreInfoContent).find("ul").append($.parseHTML(`
+        <ul>
+          <li>There are a number of reasons why data may be missing. In some instances, 
+          it may be due to biased collection practices. It may also be missing due to random 
+          error <a href=\"placeholder\"(Read More)</a></li>
+          <li>This plugin cannot detect whether the missing data are missing at random or whether 
+          they are missing due to observed or unobserved variables.</li>
+        </ul>
+      `)[0]) // making the static content
+
+      for(var df_name in notice["dfs"]) {
+        var df = notice["dfs"][df_name]
+        var possible_ul = document.createElement("ul")
+        for(const col_name in df["columns"]) {
+          var col = cols[col_name]
+          if(col == 0) continue
+          possible_ul.appendChild($.parseHTML(`<li>Column <strong>${col_name}</strong> is missing <strong>${col}</strong> entries</li>`)[0])
+        }
+        if($(possible_ul).find("li").length == 0) {
+          $(moreInfoContent).append($.parseHTML(`<h3>The data frame ${df_name} is not missing any data`)[0])
+        } else {
+          $(moreInfoContent).append($.parseHTML(`<h3>The data frame ${df_name} is missing data in ${($(possible_ul).find("li").length > 1) ? "several columns" : "one column"}</h3>`)[0])
+          $(moreInfoContent).append(possible_ul)
+        }
+      } 
+      
+      // Payload
+
+      var title = "Missing Data Note";
       $(body).find(".essential h1").text(title);
       var payload : object =  {
-        "title": "Testing Note",
-        "htmlContent": $.parseHTML("<p>Testing; this element is to ensure that there isn't a fallback \"p\" element that's being duplicated across multiple elements</p>"),
+        "title": title,
+        "htmlContent": moreInfoContent,
       }
 
       return new Array(body, payload) 
