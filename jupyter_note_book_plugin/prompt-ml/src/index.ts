@@ -89,6 +89,7 @@ const extension: JupyterFrontEndPlugin<void> = {
       popupWidget.id = "prompt-ml-popup" + (Math.round(Math.random() * 1000));
       var popupContainer = document.createElement("div");
       popupContainer.classList.add("prompt-ml-popup")
+      $(popupContainer.parentElement).css("overflow", "scroll")
       popupContent.node.appendChild(popupContainer);
       popupWidget.title.label = payload["title"];
       popupWidget.title.closable = true;

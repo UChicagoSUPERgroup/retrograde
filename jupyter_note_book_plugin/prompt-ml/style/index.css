@@ -214,3 +214,7 @@ svg.expanded, svg.condensed {
   text-align: center;
   font-size: 17px;
 }
+
+.prompt-ml-popup strong {
+  font-weight: 600;
+}
