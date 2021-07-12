@@ -13,6 +13,8 @@ from .storage import load_dfs
 from .string_compare import check_for_protected
 from .sortilege import is_categorical
 
+import json # REMOVE BEFORE PUSHING
+
 PVAL_CUTOFF = 0.25 # cutoff for thinking that column is a proxy for a sensitive column
 STD_DEV_CUTOFF = 0.1 # cutoff for standard deviation change that triggers difference in OutliersNotes
 
@@ -770,15 +772,71 @@ class NewNote(Notification):
         super().__init__(db)
 
     def check_feasible(self, cell_id, env, dfs, ns):
-        env.log.debug("[NewNote] Debug 1")
-        return True
+        # are there any dataframes that we haven't examined?
+        df_cols = {}
+        
+        for df_name, df in dfs.items():
+            if df.isnull().values.any(): return True
+
+        return False
 
     def make_response(self, env, kernel_id, cell_id):
         env.log.debug("[NewNote] Debug 2")    
+        curr_ns = self.db.recent_ns()
+        dfs = load_dfs(curr_ns)
         super().make_response(env, kernel_id, cell_id)
         self.sent = True
-        resp = {"type" : "TESTING",
-                "to do": "something1"}
+        resp = {
+            "type" : "missing",
+            "dfs": {}
+        }
+        # Collecting data
+
+        df_cols = {}
+
+        # Format
+        # {
+        #     "df_name": "loans",
+        #     "length-of-df": 2000
+        #     "columns": {
+        #         "income": 67,
+        #         "gender": 32,
+        #     }
+        # }
+
+        dfs_callable = {}
+        
+        for df_name, df in dfs.items():
+            dfs_callable[df_name] =  df
+            df_cols[df_name] = [col for col in df.columns]
+            resp["dfs"][df_name] = {
+                "df_name": df_name,
+                "columns": {}
+            }
+
+        # env.log.debug("[NewNote] ", json.dumps(resp))  
+        # 
+        for df_name, cols in df_cols.items():
+            for col_name in cols:
+                env.log.debug(dfs_callable[df_name].head())
+                env.log.debug("[NewNote] " + df_name) 
+                df_col = dfs_callable[df_name][col_name]
+                amount_null = df_col.isnull().sum()
+                # resp["dfs"][df_name]["columns"][col_name] = amount_null.astype(np.int32)
+                resp["dfs"][df_name]["columns"][col_name] = int(amount_null)
+
+        # for df_name, cols in df_cols.items():
+        #     for col in cols:
+        #         column_df = df.loc(col)
+        #         env.log.debug("[NewNote] ", col)   
+        #         amount_null = column_df.isnull().sum()
+        #         env.log.debug("[NewNote] ", column_df)   
+        #         resp["dfs"][df_name]["columns"][col][amount_null]
+
+
+
+        # End collecting data
+
         if cell_id in self.data:
             self.data[cell_id].append(resp)
         else:
