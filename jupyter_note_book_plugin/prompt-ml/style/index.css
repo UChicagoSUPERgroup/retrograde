@@ -215,6 +215,13 @@ svg.expanded, svg.condensed {
   font-size: 17px;
 }
 
+/* Revert <strong> elements back to normal settings within prompt-ml containers */
+/* Jupyterlab by default reverts this value back to normal weight, so this ensures that it is actually bold */
+
+.prompt-ml-container strong {
+  font-weight: 600;
+}
+
 .prompt-ml-popup strong {
   font-weight: 600;
 }
