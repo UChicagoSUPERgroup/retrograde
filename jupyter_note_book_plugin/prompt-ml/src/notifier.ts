@@ -635,12 +635,14 @@
         msg_l1.appendChild($.parseHTML(`<h3>Within ${df_name}</h3>`)[0])
         var df = notice["dfs"][df_name]
         var ul = document.createElement("ul")
+        var total_length = df["total_length"]
         msg_l1.appendChild(ul)
-        var cols : { [ key: string ] : number} = df["columns"]
+        var cols : { [ key: string ] : { [key: string] : any}} = df["columns"]
         for(const col_name in cols) {
           var col = cols[col_name]
-          if(col == 0) continue
-          ul.appendChild($.parseHTML(`<li>Column <strong>${col_name}</strong> is missing <strong>${col}</strong> entries</li>`)[0])
+          var col_count = col.count
+          if(col_count == 0) continue
+          ul.appendChild($.parseHTML(`<li>Column <strong>${col_name}</strong> is missing <strong>${col_count}</strong>/<strong>${total_length}</strong> entries</li>`)[0])
         }
       }
   
@@ -662,10 +664,27 @@
       for(var df_name in notice["dfs"]) {
         var df = notice["dfs"][df_name]
         var possible_ul = document.createElement("ul")
+        var total_length = df["total_length"]
         for(const col_name in df["columns"]) {
           var col = cols[col_name]
-          if(col == 0) continue
-          possible_ul.appendChild($.parseHTML(`<li>Column <strong>${col_name}</strong> is missing <strong>${col}</strong> entries</li>`)[0])
+          var col_count = col.count
+          if(col_count == 0) continue
+          possible_ul.appendChild($.parseHTML(`<li>Column <strong>${col_name}</strong> is missing <strong>${col_count}</strong>/<strong>${total_length}</strong> entries</li>`)[0])
+          var mode = col["mode"]
+          // Sort by third key: https://stackoverflow.com/questions/16096872/how-to-sort-2-dimensional-array-by-column-value
+          mode = mode.sort((a : [string, number][][], b : [string, number][][]) => {
+              if (a[2] === b[2]) {
+                  return 0;
+              }
+              else {
+                  return (a[2] > b[2]) ? -1 : 1;
+              }
+          })
+          if(mode.length == 0) {
+            possible_ul.appendChild($.parseHTML("<li><ul><li>There were no clear correlations for this column</li>/ul</li>")[0])
+          } else {
+            possible_ul.appendChild($.parseHTML(`<ul><li>This occurs most frequently (${mode[0][2]}/${mode[0][3]}) when ${mode[0][0]} is ${mode[0][1]}</li></ul>`)[0])
+          }
         }
         if($(possible_ul).find("li").length == 0) {
           $(moreInfoContent).append($.parseHTML(`<h3>The data frame ${df_name} is not missing any data`)[0])
