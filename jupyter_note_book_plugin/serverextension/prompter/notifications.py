@@ -790,20 +790,21 @@ class NewNote(Notification):
             "type" : "missing",
             "dfs": {}
         }
-        # Collecting data
-
-        df_cols = {}
 
         # Format
         # {
         #     "df_name": "loans",
         #     "length-of-df": 2000
         #     "columns": {
-        #         "income": 67,
-        #         "gender": 32,
+        #         "income": {
+        #           "count": <int of how many times a null value exists>,
+        #           "mode": [
+        #               [<column name>, <column mode>, <times the mode exists within the shortened df>, <length of the shortened df>]
+        #           ]}
         #     }
         # }
-
+        # Collecting data
+        df_cols = {} 
         dfs_callable = {}
         
         for df_name, df in dfs.items():
@@ -811,31 +812,38 @@ class NewNote(Notification):
             df_cols[df_name] = [col for col in df.columns]
             resp["dfs"][df_name] = {
                 "df_name": df_name,
-                "columns": {}
+                "columns": {},
+                "total_length": len(dfs_callable[df_name])
             }
 
-        # env.log.debug("[NewNote] ", json.dumps(resp))  
-        # 
         for df_name, cols in df_cols.items():
             for col_name in cols:
-                env.log.debug(dfs_callable[df_name].head())
-                env.log.debug("[NewNote] " + df_name) 
-                df_col = dfs_callable[df_name][col_name]
+                # Get the actual dataframe w/ the columns & count # of rows null
+                df = dfs_callable[df_name]
+                df_col = df[col_name]
                 amount_null = df_col.isnull().sum()
-                # resp["dfs"][df_name]["columns"][col_name] = amount_null.astype(np.int32)
-                resp["dfs"][df_name]["columns"][col_name] = int(amount_null)
-
-        # for df_name, cols in df_cols.items():
-        #     for col in cols:
-        #         column_df = df.loc(col)
-        #         env.log.debug("[NewNote] ", col)   
-        #         amount_null = column_df.isnull().sum()
-        #         env.log.debug("[NewNote] ", column_df)   
-        #         resp["dfs"][df_name]["columns"][col][amount_null]
-
-
-
-        # End collecting data
+                if amount_null == 0: continue
+                # Get the entire dataframe where this specific column is null
+                df_col_with_column_null = df[df[col_name].isnull()][df.columns].astype(str)
+                # Iterate over each column and find it's mode
+                null_column_correlation = []
+                for column in df_col_with_column_null:
+                    if column == col_name: continue
+                    mode_raw = df_col_with_column_null[column].mode(dropna=False)
+                    if len(mode_raw) >= 1:
+                        mode = mode_raw[0]
+                    else:
+                        mode = np.nan
+                    if mode == np.nan or mode == "nan" or pd.isna(mode): 
+                        specific_col = df_col_with_column_null[column]
+                        mode_count = specific_col.isnull().sum()
+                        mode = "NaN"
+                    else: mode_count = df_col_with_column_null[column].value_counts(dropna=False)[mode]
+                    null_column_correlation.append([column, mode, int(mode_count), len(df_col_with_column_null)])
+                resp["dfs"][df_name]["columns"][col_name] = {
+                    "count": int(amount_null),
+                    "mode": null_column_correlation
+                }
 
         if cell_id in self.data:
             self.data[cell_id].append(resp)
