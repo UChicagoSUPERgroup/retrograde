@@ -2,7 +2,9 @@ from random import choice
 
 import pandas as pd
 import numpy as np
+import operator
 import dill
+import math
 
 from scipy.stats import zscore, f_oneway, chi2_contingency
 from sklearn.base import ClassifierMixin
@@ -299,6 +301,101 @@ class ProxyColumnNote(ProtectedColumnNote):
                 live_resps[cell].append(new_note)
 
         self.data = live_resps
+
+# TODO: inheret from ProxyColumnNote, and check both protected and proxy columns
+class MissingDataNote(ProtectedColumnNote):
+    """
+    A notification that measures whether there exists a column that is a proxy
+    for a protected column.
+
+    Note that this requires that sensitive columns actually be present in the
+    dataframe. 
+
+    format is {tbd}
+    """
+
+    def __init__(self, db):
+        super().__init__(db)
+        self.missing_col_lists = {}
+
+    # basically, if it was feasible to send a protected note and we have
+    # missing data, we should be good to send a missing data note if
+    # either condition is not met, don't bother
+    def check_feasible(self, cell_id, env, dfs, ns):
+        """check feasibility of sending a missing data note"""
+        if not super().check_feasible(cell_id, env, dfs, ns):
+            return False
+        else:
+            for df_name, df in dfs.items():
+                ret = False
+                if df.isnull().values.any():
+                    ret = True
+                    # store a pointer to the dataframe, as well as the columns with missing data
+                    self.missing_col_lists[df_name] = (df, df.columns[df.isna().any()].tolist())
+            return ret
+         
+   
+    # some sort of internal variable
+    def times_sent(self):
+        """the number of times this notification has been sent"""
+        return 0 
+
+    # self.df_protected_cols should already be populated from a previous
+    # check_feasible call (?)
+    # a dictionary with 
+    def make_response(self, env, kernel_id, cell_id):
+        """form and store the response to send to the frontend"""
+        super().make_response(env, kernel_id, cell_id)
+        # df_reports: df_name -> all sensitive columns for df_name -> largest_frequency, val_largest_frequency, val_total_missing 
+        #     for all sensitive columns
+        df_reports = {}
+
+        # loop through all dataframes with protected data
+        for df_name in self.df_protected_cols.keys():
+            if df_name in self.missing_col_lists.keys():
+                this_df_ptr = self.missing_col_lists[df_name][0]
+                these_missing_cols = self.missing_col_lists[df_name][1]
+                these_sensitive_cols = self.df_protected_cols[df_name]
+                df_reports[df_name] = {}
+                # for every sensitive column
+                for sensitive in these_sensitive_cols:
+                    df_reports[df_name][sensitive]
+                    # for every column with missing data
+                    for missing_col in these_missing_cols:
+                        sensitive_frequency = {}
+                        for i in range(len(this_df_ptr[missing_col])):
+                            if math.isnan(this_df_ptr[missing_col][i]):
+                                if this_df_ptr[sensitive] in sensitive_frequency:
+                                    sensitive_frequency[this_df_ptr[sensitive][i]] += 1
+                                else:
+                                    sensitive_frequency[this_df_ptr[sensitive][i]]  = 1
+                        # add the info for this sensitive column and this dataframe
+                        df_reports[df_name][sensitive]['largest_frequency'] = max(sensitive_frequency.items(), key=operator.itemgetter(1))[0]
+                        df_reports[df_name][sensitive]['val_largest_frequency'] = sensitive_frequency[df_reports[df_name]['largest_frequency']]
+                        df_reports[df_name][sensitive]['val_total_missing'] = this_df_ptr[missing_col].isna().sum()
+
+        #does this response go to a cell?
+        if cell_id not in self.data:
+            self.data[cell_id] = []
+        self.data[cell_id].append(str(df_reports))
+        # seems unnecessary...
+        # return df_reports
+
+    # TODO
+    def on_cell(self, cell_id):
+        """has this note been associated with the cell with this id?"""
+        return cell_id in self.data
+
+    # TODO
+    def get_response(self, cell_id): 
+        """what response was associated with this cell, return None if no response"""
+        return self.data.get(cell_id)
+
+    # TODO
+    def update(self, env, kernel_id, cell_id, dfs, ns):
+        """check whether the note on this cell needs to be updated"""
+        raise NotImplementedError
+
 
 class OutliersNote(Notification):
     """
