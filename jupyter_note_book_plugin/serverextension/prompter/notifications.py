@@ -338,6 +338,7 @@ class MissingDataNote(ProtectedColumnNote):
     def __init__(self, db):
         super().__init__(db)
         self.missing_col_lists = {}
+        self.missing_sent = 0
 
     # basically, if it was feasible to send a protected note and we have
     # missing data, we should be good to send a missing data note if
@@ -359,7 +360,7 @@ class MissingDataNote(ProtectedColumnNote):
     # some sort of internal variable
     def times_sent(self):
         """the number of times this notification has been sent"""
-        return 0
+        return self.missing_sent
 
     # the main missing data check loop that takes in an arbitrary list of
     # dataframe names to check
@@ -419,6 +420,9 @@ class MissingDataNote(ProtectedColumnNote):
             self.data[cell_id] = []
         self.data[cell_id].append(json.dumps(df_report, indent=4))
 
+        # counter
+        self.missing_sent += 1
+
 
     # loop through all the missing data notes
     def update(self, env, kernel_id, cell_id, dfs, ns):
@@ -434,6 +438,9 @@ class MissingDataNote(ProtectedColumnNote):
                     updated_report = self._formulate_df_report(df_update_list)
                     # append this note to new_notes
                     new_notes.append(json.dumps(updated_report, indent=4))
+
+                    # counter
+                    self.missing_sent += 1
                 else:
                     # the note stays the same
                     new_notes.append(note)
