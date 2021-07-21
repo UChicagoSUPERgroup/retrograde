@@ -158,20 +158,21 @@
         var cell_id = info_object["info"]["cell"]
         var kernel_id = info_object["kernel_id"]
         var notices = info_object["info"][cell_id]
-        var proxies = []
-        for (var x = 0; x < notices.length; x++) {
-            if (notices[x]["type"] == "proxy") {
-              proxies.push(notices[x]);
-              continue;
+        for(const key in notices) {
+          var list_of_notes = notices[key]
+          if(key == "proxy") {
+            this._handleProxies(list_of_notes)
+          } else {
+            for(var x = 0; x < list_of_notes.length; x++) {
+              var notice = list_of_notes[x]
+              var noticeResponse = this._routeNotice(notice);
+              if(noticeResponse == undefined) return
+              let msg : string = noticeResponse[0] as string
+              let popupContent : object = noticeResponse[1] as object
+              if (msg) { this.appendMsg(cell_id, kernel_id, msg, popupContent); }
             }
-            var notice = notices[x]
-            var noticeResponse = this._routeNotice(notice);
-            if(noticeResponse == undefined) return
-            let msg : string = noticeResponse[0] as string
-            let popupContent : object = noticeResponse[1] as object
-            if (msg) { this.appendMsg(cell_id, kernel_id, msg, popupContent); }
+          }
         }
-        this._handleProxies(proxies)
       }
     
       if (info_object["type"] == "resemble") {
@@ -288,6 +289,7 @@
       var payload : object = {
         "title": "Wands Message",
         "htmlContent": $.parseHTML("<p>Testing...</p>"),
+        "typeOfNote": "wands"
       }
 
       return new Array(body, payload);     
@@ -320,6 +322,7 @@
       var payload : object =  {
         "title": "Cups Message",
         "htmlContent": $.parseHTML("<p>Testing...</p>"),
+        "typeOfNote": "cups"
       }
 
       return new Array(body, payload)    
@@ -353,6 +356,7 @@
       var payload : object =  {
         "title": "Pentacles Message",
         "htmlContent": $.parseHTML("<p>Testing...</p>"),
+        "typeOfNote": "pentacles"
       }
 
       return new Array(body, payload)  
@@ -380,6 +384,7 @@
       var payload : object =  {
         "title": "Swords Message",
         "htmlContent": $.parseHTML("<p>Testing...</p>"),
+        "typeOfNote": "swords"
       }
 
       return new Array(body, payload) 
@@ -403,6 +408,7 @@
       var payload : object =  {
         "title": "Resemble Message",
         "htmlContent": $.parseHTML("<p>Testing...</p>"),
+        "typeOfNote": "resemble"
       }
 
       return new Array(body, payload)    
@@ -426,6 +432,7 @@
       var payload : object =  {
         "title": "Var Message",
         "htmlContent": $.parseHTML("<p>Testing...</p>"),
+        "typeOfNote": "var"
       }
 
       return new Array(body, payload) 
@@ -448,6 +455,7 @@
       var payload : object =  {
         "title": "Wands Message",
         "htmlContent": $.parseHTML("<p>Testing...</p>"),
+        "typeOfNote": "outliers"
       }
 
       return new Array(body, payload) 
@@ -491,6 +499,7 @@
       var payload : object =  {
         "title": "Equalized Odds Message",
         "htmlContent": $.parseHTML("<p>Testing...</p>"),
+        "typeOfNote": "equalized"
       }
 
       return new Array(body, payload) 
@@ -549,6 +558,7 @@
       var payload : object =  {
         "title": "Proxy Message",
         "htmlContent": container,
+        "typeOfNote": "proxy"
       }
 
       return new Array(body, payload) 
@@ -623,6 +633,7 @@
       var payload : object =  {
         "title": "Performance Message",
         "htmlContent": $.parseHTML("<p>Testing...</p>"),
+        "typeOfNote": "performance"
       }
 
       return new Array(body, payload) 
@@ -701,6 +712,7 @@
       var payload : object =  {
         "title": title,
         "htmlContent": moreInfoContent,
+        "typeOfNote": "missing"
       }
 
       return new Array(body, payload) 
