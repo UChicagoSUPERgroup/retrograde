@@ -363,11 +363,11 @@ class MissingDataNote(ProtectedColumnNote):
 
     # the main missing data check loop that takes in an arbitrary list of
     # dataframe names to check
-    def _formulate_df_reports(self, df_list):
-        df_reports = {}
+    def _formulate_df_report(self, df_list):
+        df_report = {}
 
-        df_reports['type'] = 'missing'
-        df_reports['dfs'] = {}
+        df_report['type'] = 'missing'
+        df_report['dfs'] = {}
 
         # loop through all dataframes with protected data
         for df_name in df_list:
@@ -379,12 +379,12 @@ class MissingDataNote(ProtectedColumnNote):
                 these_sensitive_cols = self.df_protected_cols[df_name]
 
                 # initialize this dataframe entry in the dfs dictionary
-                df_reports['dfs'][df_name] = {}
-                df_reports['dfs'][df_name]['missing_columns'] = these_missing_cols.copy()
+                df_report['dfs'][df_name] = {}
+                df_report['dfs'][df_name]['missing_columns'] = these_missing_cols.copy()
 
                 # initialize every missing column dictionary
                 for missing_col in these_missing_cols:
-                    df_reports['dfs'][df_name][missing_col] = {}
+                    df_report['dfs'][df_name][missing_col] = {}
 
                 # for every sensitive column
                 for sensitive in these_sensitive_cols:
@@ -402,9 +402,9 @@ class MissingDataNote(ProtectedColumnNote):
                         # largest percent
                         lp  = math.floor(100.0 * (sensitive_frequency[lmv] / this_df_ptr[missing_col].isna().sum()))
 
-                        df_reports['dfs'][df_name][missing_col][sensitive]['largest_missing_value'] = lmv
-                        df_reports['dfs'][df_name][missing_col][sensitive]['largest_percent']       = lp
-            return df_reports
+                        df_report['dfs'][df_name][missing_col][sensitive]['largest_missing_value'] = lmv
+                        df_report['dfs'][df_name][missing_col][sensitive]['largest_percent']       = lp
+            return df_report
 
     # self.df_protected_cols should already be populated from a previous
     # check_feasible call (?)
@@ -412,12 +412,12 @@ class MissingDataNote(ProtectedColumnNote):
         """form and store the response to send to the frontend"""
         super().make_response(env, kernel_id, cell_id)
 
-        df_reports = self._formulate_df_reports(self.df_protected_cols.keys())
+        df_report = self._formulate_df_report(self.df_protected_cols.keys())
 
         # export the result to a cell as a json string
         if cell_id not in self.data:
             self.data[cell_id] = []
-        self.data[cell_id].append(json.dumps(df_reports, indent=4))
+        self.data[cell_id].append(json.dumps(df_report, indent=4))
 
 
     # loop through all the missing data notes
@@ -430,8 +430,8 @@ class MissingDataNote(ProtectedColumnNote):
                 if note["type"] == "missing":
                     # grab the dfs that are in the missing note and are flagged to up updated
                     df_update_list = [df_name for df_name in note['dfs'].keys() if df_name in dfs]
-                    # generate a missing autopsy report based on those dfs only
-                    updated_report = self._formulate_df_reports(df_update_list)
+                    # generate an updated autopsy report based on those dfs only
+                    updated_report = self._formulate_df_report(df_update_list)
                     # append this note to new_notes
                     new_notes.append(json.dumps(updated_report, indent=4))
                 else:
