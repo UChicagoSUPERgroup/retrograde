@@ -1,3 +1,4 @@
+import json
 from random import choice
 
 import pandas as pd
@@ -305,13 +306,33 @@ class ProxyColumnNote(ProtectedColumnNote):
 # TODO: inheret from ProxyColumnNote, and check both protected and proxy columns
 class MissingDataNote(ProtectedColumnNote):
     """
-    A notification that measures whether there exists a column that is a proxy
-    for a protected column.
+    A notification that measures whether there exists columns with missing data.
 
-    Note that this requires that sensitive columns actually be present in the
+    Note that this requires that sensitive/protected columns actually be present in the
     dataframe. 
 
-    format is {tbd}
+    data format is - 
+    {
+        "type" : "missing",
+        "dfs" : {
+            "<df_name1>" : {
+                "missing_columns" : <list of all columns with missing data>,
+                "<missing_col1>" : {
+                    "<sensitive_col1>" : {
+                        "largest_missing_value" : <the value of the sensitive column most likely to be 
+                                                    missing when the missing column has missing data>,
+                        "largest_percent"       : <floor(100 * (largest_missing_value / total missing data))>
+                    }
+                    "<sensitive_col2>" : {...}
+                    "<sensitive_col3>" : {...}
+                    ...
+                }
+            }
+            "<df_name2>" : {...}
+            "<df_name3>" : {...}
+            ...
+        }
+    }
     """
 
     def __init__(self, db):
@@ -338,28 +359,35 @@ class MissingDataNote(ProtectedColumnNote):
     # some sort of internal variable
     def times_sent(self):
         """the number of times this notification has been sent"""
-        return 0 
+        return 0
 
-    # self.df_protected_cols should already be populated from a previous
-    # check_feasible call (?)
-    # a dictionary with 
-    def make_response(self, env, kernel_id, cell_id):
-        """form and store the response to send to the frontend"""
-        super().make_response(env, kernel_id, cell_id)
-        # df_reports: df_name -> all sensitive columns for df_name -> largest_frequency, val_largest_frequency, val_total_missing 
-        #     for all sensitive columns
+    # the main missing data check loop that takes in an arbitrary list of
+    # dataframe names to check
+    def _formulate_df_reports(self, df_list):
         df_reports = {}
 
+        df_reports['type'] = 'missing'
+        df_reports['dfs'] = {}
+
         # loop through all dataframes with protected data
-        for df_name in self.df_protected_cols.keys():
+        for df_name in df_list:
+            # if this dataframe also has missing data
             if df_name in self.missing_col_lists.keys():
+                # get some pointers to useful stuff for code readability
                 this_df_ptr = self.missing_col_lists[df_name][0]
                 these_missing_cols = self.missing_col_lists[df_name][1]
                 these_sensitive_cols = self.df_protected_cols[df_name]
-                df_reports[df_name] = {}
+
+                # initialize this dataframe entry in the dfs dictionary
+                df_reports['dfs'][df_name] = {}
+                df_reports['dfs'][df_name]['missing_columns'] = these_missing_cols.copy()
+
+                # initialize every missing column dictionary
+                for missing_col in these_missing_cols:
+                    df_reports['dfs'][df_name][missing_col] = {}
+
                 # for every sensitive column
                 for sensitive in these_sensitive_cols:
-                    df_reports[df_name][sensitive]
                     # for every column with missing data
                     for missing_col in these_missing_cols:
                         sensitive_frequency = {}
@@ -369,32 +397,49 @@ class MissingDataNote(ProtectedColumnNote):
                                     sensitive_frequency[this_df_ptr[sensitive][i]] += 1
                                 else:
                                     sensitive_frequency[this_df_ptr[sensitive][i]]  = 1
-                        # add the info for this sensitive column and this dataframe
-                        df_reports[df_name][sensitive]['largest_frequency'] = max(sensitive_frequency.items(), key=operator.itemgetter(1))[0]
-                        df_reports[df_name][sensitive]['val_largest_frequency'] = sensitive_frequency[df_reports[df_name]['largest_frequency']]
-                        df_reports[df_name][sensitive]['val_total_missing'] = this_df_ptr[missing_col].isna().sum()
+                        # largest missing value
+                        lmv = max(sensitive_frequency.items(), key=operator.itemgetter(1))[0]
+                        # largest percent
+                        lp  = math.floor(100.0 * (sensitive_frequency[lmv] / this_df_ptr[missing_col].isna().sum()))
 
-        #does this response go to a cell?
+                        df_reports['dfs'][df_name][missing_col][sensitive]['largest_missing_value'] = lmv
+                        df_reports['dfs'][df_name][missing_col][sensitive]['largest_percent']       = lp
+            return df_reports
+
+    # self.df_protected_cols should already be populated from a previous
+    # check_feasible call (?)
+    def make_response(self, env, kernel_id, cell_id):
+        """form and store the response to send to the frontend"""
+        super().make_response(env, kernel_id, cell_id)
+
+        df_reports = self._formulate_df_reports(self.df_protected_cols.keys())
+
+        # export the result to a cell as a json string
         if cell_id not in self.data:
             self.data[cell_id] = []
-        self.data[cell_id].append(str(df_reports))
-        # seems unnecessary...
-        # return df_reports
+        self.data[cell_id].append(json.dumps(df_reports, indent=4))
 
-    # TODO
-    def on_cell(self, cell_id):
-        """has this note been associated with the cell with this id?"""
-        return cell_id in self.data
 
-    # TODO
-    def get_response(self, cell_id): 
-        """what response was associated with this cell, return None if no response"""
-        return self.data.get(cell_id)
-
-    # TODO
+    # loop through all the missing data notes
     def update(self, env, kernel_id, cell_id, dfs, ns):
         """check whether the note on this cell needs to be updated"""
-        raise NotImplementedError
+        new_data = {}
+        for cell, note_list in self.data.items():
+            new_notes = []
+            for note in note_list:
+                if note["type"] == "missing":
+                    # grab the dfs that are in the missing note and are flagged to up updated
+                    df_update_list = [df_name for df_name in note['dfs'].keys() if df_name in dfs]
+                    # generate a missing autopsy report based on those dfs only
+                    updated_report = self._formulate_df_reports(df_update_list)
+                    # append this note to new_notes
+                    new_notes.append(json.dumps(updated_report, indent=4))
+                else:
+                    # the note stays the same
+                    new_notes.append(note)
+            new_data[cell] = new_notes
+        env.log.debug("[MissingDataNote] updated responses")
+        self.data = new_data
 
 
 class OutliersNote(Notification):
