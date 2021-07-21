@@ -364,7 +364,7 @@ class MissingDataNote(ProtectedColumnNote):
 
     # the main missing data check loop that takes in an arbitrary list of
     # dataframe names to check
-    def _formulate_df_report(self, df_list):
+    def _formulate_df_report_missing(self, df_list):
         df_report = {}
 
         df_report['type'] = 'missing'
@@ -405,7 +405,7 @@ class MissingDataNote(ProtectedColumnNote):
 
                         df_report['dfs'][df_name][missing_col][sensitive]['largest_missing_value'] = lmv
                         df_report['dfs'][df_name][missing_col][sensitive]['largest_percent']       = lp
-            return df_report
+        return df_report
 
     # self.df_protected_cols should already be populated from a previous
     # check_feasible call (?)
@@ -413,7 +413,7 @@ class MissingDataNote(ProtectedColumnNote):
         """form and store the response to send to the frontend"""
         super().make_response(env, kernel_id, cell_id)
 
-        df_report = self._formulate_df_report(self.df_protected_cols.keys())
+        df_report = self._formulate_df_report_missing(self.df_protected_cols.keys())
 
         # export the result to a cell as a json string
         if cell_id not in self.data:
@@ -435,7 +435,7 @@ class MissingDataNote(ProtectedColumnNote):
                     # grab the dfs that are in the missing note and are flagged to up updated
                     df_update_list = [df_name for df_name in note['dfs'].keys() if df_name in dfs]
                     # generate an updated autopsy report based on those dfs only
-                    updated_report = self._formulate_df_report(df_update_list)
+                    updated_report = self._formulate_df_report_missing(df_update_list)
                     # append this note to new_notes
                     new_notes.append(json.dumps(updated_report, indent=4))
 
