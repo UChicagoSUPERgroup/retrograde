@@ -415,10 +415,10 @@ class MissingDataNote(ProtectedColumnNote):
 
         df_report = self._formulate_df_report_missing(self.df_protected_cols.keys())
 
-        # export the result to a cell as a json string
+        # export the result to a cell
         if cell_id not in self.data:
             self.data[cell_id] = []
-        self.data[cell_id].append(json.dumps(df_report, indent=4))
+        self.data[cell_id].append(df_report)
 
         # counter
         self.missing_sent += 1
@@ -437,7 +437,7 @@ class MissingDataNote(ProtectedColumnNote):
                     # generate an updated autopsy report based on those dfs only
                     updated_report = self._formulate_df_report_missing(df_update_list)
                     # append this note to new_notes
-                    new_notes.append(json.dumps(updated_report, indent=4))
+                    new_notes.append(updated_report)
 
                     # counter
                     self.missing_sent += 1
