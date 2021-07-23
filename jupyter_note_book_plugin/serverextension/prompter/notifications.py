@@ -182,7 +182,7 @@ class ProxyColumnNote(ProtectedColumnNote):
             if df_name not in noted_dfs:
                 sense_col_names = [c["original_name"] for c in self.df_protected_cols[df_name]]
                 non_sensitive_cols = [c for c in dfs[df_name].columns if c not in sense_col_names]
-                if len(non_sensitive_cols) != 0: 
+                if len(non_sensitive_cols) != 0 and len(sense_col_names) != 0: 
                     self.avail_dfs[df_name] = {
                         "df" : dfs[df_name],    
                         "sens_cols" : sense_col_names,
