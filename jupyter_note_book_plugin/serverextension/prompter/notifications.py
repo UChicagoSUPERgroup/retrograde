@@ -16,6 +16,8 @@ from .storage import load_dfs
 from .string_compare import check_for_protected
 from .sortilege import is_categorical
 
+import json # REMOVE BEFORE PUSHING
+
 PVAL_CUTOFF = 0.25 # cutoff for thinking that column is a proxy for a sensitive column
 STD_DEV_CUTOFF = 0.1 # cutoff for standard deviation change that triggers difference in OutliersNotes
 
@@ -183,7 +185,7 @@ class ProxyColumnNote(ProtectedColumnNote):
             if df_name not in noted_dfs:
                 sense_col_names = [c["original_name"] for c in self.df_protected_cols[df_name]]
                 non_sensitive_cols = [c for c in dfs[df_name].columns if c not in sense_col_names]
-                if len(non_sensitive_cols) != 0: 
+                if len(non_sensitive_cols) != 0 and len(sense_col_names) != 0: 
                     self.avail_dfs[df_name] = {
                         "df" : dfs[df_name],    
                         "sens_cols" : sense_col_names,
@@ -919,15 +921,79 @@ class NewNote(Notification):
         super().__init__(db)
 
     def check_feasible(self, cell_id, env, dfs, ns):
-        env.log.debug("[NewNote] Debug 1")
-        return True
+        # are there any dataframes that we haven't examined?
+        df_cols = {}
+        
+        for df_name, df in dfs.items():
+            if df.isnull().values.any(): return True
+
+        return False
 
     def make_response(self, env, kernel_id, cell_id):
         env.log.debug("[NewNote] Debug 2")    
+        curr_ns = self.db.recent_ns()
+        dfs = load_dfs(curr_ns)
         super().make_response(env, kernel_id, cell_id)
         self.sent = True
-        resp = {"type" : "TESTING",
-                "to do": "something1"}
+        resp = {
+            "type" : "missing",
+            "dfs": {}
+        }
+
+        # Format
+        # {
+        #     "df_name": "loans",
+        #     "length-of-df": 2000
+        #     "columns": {
+        #         "income": {
+        #           "count": <int of how many times a null value exists>,
+        #           "mode": [
+        #               [<column name>, <column mode>, <times the mode exists within the shortened df>, <length of the shortened df>]
+        #           ]}
+        #     }
+        # }
+        # Collecting data
+        df_cols = {} 
+        dfs_callable = {}
+        
+        for df_name, df in dfs.items():
+            dfs_callable[df_name] =  df
+            df_cols[df_name] = [col for col in df.columns]
+            resp["dfs"][df_name] = {
+                "df_name": df_name,
+                "columns": {},
+                "total_length": len(dfs_callable[df_name])
+            }
+
+        for df_name, cols in df_cols.items():
+            for col_name in cols:
+                # Get the actual dataframe w/ the columns & count # of rows null
+                df = dfs_callable[df_name]
+                df_col = df[col_name]
+                amount_null = df_col.isnull().sum()
+                if amount_null == 0: continue
+                # Get the entire dataframe where this specific column is null
+                df_col_with_column_null = df[df[col_name].isnull()][df.columns].astype(str)
+                # Iterate over each column and find it's mode
+                null_column_correlation = []
+                for column in df_col_with_column_null:
+                    if column == col_name: continue
+                    mode_raw = df_col_with_column_null[column].mode(dropna=False)
+                    if len(mode_raw) >= 1:
+                        mode = mode_raw[0]
+                    else:
+                        mode = np.nan
+                    if mode == np.nan or mode == "nan" or pd.isna(mode): 
+                        specific_col = df_col_with_column_null[column]
+                        mode_count = specific_col.isnull().sum()
+                        mode = "NaN"
+                    else: mode_count = df_col_with_column_null[column].value_counts(dropna=False)[mode]
+                    null_column_correlation.append([column, mode, int(mode_count), len(df_col_with_column_null)])
+                resp["dfs"][df_name]["columns"][col_name] = {
+                    "count": int(amount_null),
+                    "mode": null_column_correlation
+                }
+
         if cell_id in self.data:
             self.data[cell_id].append(resp)
         else:
@@ -941,13 +1007,10 @@ class NewNote(Notification):
        
         If not, then remove and reset 
         """
-        resp = {"type" : "TESTING",
-            "to do": "something2"}
-
-        # if False:
-        #     # pylint: disable=attribute-defined-outside-init
-        #     self.sent = False
-        if cell_id in self.data:
-            self.data[cell_id].append(resp)
-        else:
-            self.data[cell_id] = [resp]
+        # Commented out until update logic is worked out
+        # resp = {"type" : "TESTING",
+        #     "to do": "something2"}
+        # if cell_id in self.data:
+        #     self.data[cell_id].append(resp)
+        # else:
+        #     self.data[cell_id] = [resp]

@@ -39,9 +39,9 @@ textarea {
   min-width: 250px !important;
 }
 
-/* prompt stuff */
+/* Notifier area content */
 
-/* svg */
+/* Svg styling (paths, etc.) */
 
 .cls-1 {
   fill: none;
@@ -69,7 +69,7 @@ textarea {
   fill-rule: evenodd;
 }
 
-/*  note styling  */
+/*  Side-column note styling  */
 
 .note {
   display: grid;
@@ -166,6 +166,7 @@ textarea {
   max-height: 65%;
 }
 
+/* Svg to handle note closing */
 
 .prompt-ml-close-svg-path {
   fill: none;
@@ -207,10 +208,20 @@ svg.expanded, svg.condensed {
 .note h2 {
   padding: 5px;
   margin: 10px 0 0 0;
-  /* padding: 10px 0; */
   border-radius: 35px;
   background-color: #F1A204;
   border: 1px solid black;
   text-align: center;
   font-size: 17px;
+}
+
+/* Revert <strong> elements back to normal settings within prompt-ml containers */
+/* Jupyterlab by default reverts this value back to normal weight, so this ensures that it is actually bold */
+
+.prompt-ml-container strong {
+  font-weight: 600;
+}
+
+.prompt-ml-popup strong {
+  font-weight: 600;
 }
