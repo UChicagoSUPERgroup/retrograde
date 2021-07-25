@@ -2,27 +2,22 @@
   import {
     JupyterFrontEnd
   } from "@jupyterlab/application"
-  
-  // import {
-  //   INotebookTracker,
-  //   Notebook,
-  //   NotebookPanel,
-  // } from "@jupyterlab/notebook";
 
   import {
     INotebookTracker,
     NotebookPanel,
   } from "@jupyterlab/notebook";
   
-  // import { 
-  //   Cell,
-  // } from "@jupyterlab/cells";
-  
   import {
     Listener,
   } from "./cell-listener";
 
   import $ = require('jquery');
+
+  // Global used to construct unique ID's 
+  // This is increased by 1 everytime that a group of notifications
+  // Allows us to have a unique ID for every notification so that repeat notes will open the same widget
+  var global_notification_count : number = 0 
 
   export class Prompter {
     /*
@@ -111,39 +106,39 @@
       })
     }
 
-    private _routeNotice(notice : any) {
+    private _routeNotice(notice : any, note_count : number) {
       if (notice["type"] == "resemble") {
-        var message = this._makeResembleMsg(notice["df"], notice["col"]);
+        var message = this._makeResembleMsg(notice["df"], notice["col"], note_count);
         var stringHTML : string = (message[0] as HTMLDivElement).outerHTML;
         var object : object = message[1];
         return [stringHTML, object];
       } else if (notice["type"] == "variance") {
-        var message = this._makeVarMsg(notice["zip1"], notice["zip2"], notice["demo"]);
+        var message = this._makeVarMsg(notice["zip1"], notice["zip2"], notice["demo"], note_count);
         var stringHTML : string = (message[0] as HTMLDivElement).outerHTML;
         var object : object = message[1];
         return [stringHTML, object];
       } else if (notice["type"] == "outliers") {
-        var message = this._makeOutliersMsg(notice["col_name"], notice["value"], notice["std_dev"], notice["df_name"]);
+        var message = this._makeOutliersMsg(notice["col_name"], notice["value"], notice["std_dev"], notice["df_name"], note_count);
         var stringHTML : string = (message[0] as HTMLDivElement).outerHTML;
         var object : object = message[1];
         return [stringHTML, object];
       } else if (notice["type"] == "model_perf") {
-        var message = this._makePerformanceMsg(notice);
+        var message = this._makePerformanceMsg(notice, note_count);
         var stringHTML : string = (message[0] as HTMLDivElement).outerHTML;
         var object : object = message[1];
         return [stringHTML, object];
       } else if (notice["type"] == "eq_odds") {
-        var message = this._makeEqOddsMsg(notice);
+        var message = this._makeEqOddsMsg(notice, note_count);
         var stringHTML : string = (message[0] as HTMLDivElement).outerHTML;
         var object : object = message[1];
         return [stringHTML, object];
       } else if (notice["type"] == "proxy") {
-        var message = this._makeProxyMsg(notice);
+        var message = this._makeProxyMsg(notice, note_count);
         var stringHTML : string = (message[0] as HTMLDivElement).outerHTML;
         var object : object = message[1];
         return [stringHTML, object];
       } else if (notice["type"] == "missing") {
-        var message = this._makeMissingMsg(notice);
+        var message = this._makeMissingMsg(notice, note_count);
         var stringHTML : string = (message[0] as HTMLDivElement).outerHTML;
         var object : object = message[1]
         return [stringHTML, object]
@@ -158,20 +153,26 @@
         var cell_id = info_object["info"]["cell"]
         var kernel_id = info_object["kernel_id"]
         var notices = info_object["info"][cell_id]
+        var note_count : number = 0
         for(const key in notices) {
           var list_of_notes = notices[key]
           if(key == "proxy") {
-            this._handleProxies(list_of_notes)
+            this._handleProxies(list_of_notes, note_count)
+            note_count += 1
           } else {
             for(var x = 0; x < list_of_notes.length; x++) {
               var notice = list_of_notes[x]
-              var noticeResponse = this._routeNotice(notice);
+              var noticeResponse = this._routeNotice(notice, note_count);
               if(noticeResponse == undefined) return
               let msg : string = noticeResponse[0] as string
               let popupContent : object = noticeResponse[1] as object
-              if (msg) { this.appendMsg(cell_id, kernel_id, msg, popupContent); }
+              if (msg) { 
+                this.appendMsg(cell_id, kernel_id, msg, popupContent);
+                note_count += 1
+              }
             }
           }
+
         }
       }
     
@@ -181,6 +182,7 @@
         var cell_id = info_object["info"]["cell"]
         var kernel_id = info_object["kernel_id"]
         this.appendMsg(cell_id, kernel_id, msg, payload);
+        note_count += 1
       }
       if (info_object["type"] == "wands") { // categorical variance
         let responseMessage = this._makeWandsMsg(info_object["op"], 
@@ -188,43 +190,48 @@
                                               info_object["var"], 
                                               info_object["cat_col"],
                                               info_object["rank"],
-                                              info_object["total"]);
+                                              info_object["total"], note_count);
         let msg : string = (responseMessage[0] as HTMLDivElement).outerHTML;
         let payload = responseMessage[1]
         var cell_id = info_object["info"]["cell"]
         this.appendMsg(cell_id, kernel_id, msg, payload);
+        note_count += 1
       }
       if (info_object["type"] == "cups") {// correlation
         let responseMessage = this._makeCupsMsg(info_object["col_a"], info_object["col_b"],
-                                             info_object["strength"], info_object["rank"]);
+                                             info_object["strength"], info_object["rank"], note_count);
         let msg : string = (responseMessage[0] as HTMLDivElement).outerHTML;
         let payload = responseMessage[1]
         var cell_id = info_object["info"]["cell"]
         var kernel_id = info_object["kernel_id"]
         this.appendMsg(cell_id, kernel_id, msg, payload);
+        note_count += 1
       }
       if (info_object["type"] == "pentacles") { // extreme values
         let responseMessage = this._makePentaclesMsg(info_object["col"],
                                                   info_object["strength"],
                                                   info_object["element"],
-                                                  info_object["rank"]);
+                                                  info_object["rank"], note_count);
         let msg : string = (responseMessage[0] as HTMLDivElement).outerHTML;
         let payload = responseMessage[1]
         var cell_id = info_object["info"]["cell"]
         var kernel_id = info_object["kernel_id"]
         this.appendMsg(cell_id, kernel_id, msg, payload);
+        note_count += 1
       }
       if (info_object["type"] == "swords") { // undefined
-        let responseMessage = this._makeSwordsMsg(info_object["col"], info_object["strength"], info_object["rank"]);
+        let responseMessage = this._makeSwordsMsg(info_object["col"], info_object["strength"], info_object["rank"], note_count);
         let msg : string = (responseMessage[0] as HTMLDivElement).outerHTML;
         let payload = responseMessage[1]
         var cell_id = info_object["info"]["cell"]
         var kernel_id = info_object["kernel_id"]
         this.appendMsg(cell_id, kernel_id, msg, payload);
+        note_count += 1
       }
+      global_notification_count += 1
     } 
 
-    private _handleProxies(proxies : { [ key: string ] : any }[]) {
+    private _handleProxies(proxies : { [ key: string ] : any }[], note_count : number) {
       console.log(proxies);
       var d : { [key : string ] : {[key: string] : string[]} } = {};
       for(var x = 0; x < proxies.length; x++) {
@@ -235,7 +242,7 @@
         d[p["df"]]["p_vals"].push(p["p"]);
       }
       console.log("analyzed:", d);
-      var message = this._makeProxyMsg(d);
+      var message = this._makeProxyMsg(d, note_count);
       var stringHTML : string = (message[0] as HTMLDivElement).outerHTML;
       var object : object = message[1];
       var noticeResponse = [stringHTML, object];
@@ -262,7 +269,7 @@
     }
    
     private _makeWandsMsg(op : string, num_col : string, variance : string, 
-                          cat_col : string, rank : number, total : number) {
+                          cat_col : string, rank : number, total : number, note_count : number) {
       let var_line_1 = document.createElement("p");
       let var_line_2 = document.createElement("p");
       let var_line_3 = document.createElement("p");
@@ -289,13 +296,13 @@
       var payload : object = {
         "title": "Wands Message",
         "htmlContent": $.parseHTML("<p>Testing...</p>"),
-        "typeOfNote": "wands"
+        "typeOfNote": `wands-${global_notification_count}-${note_count}`
       }
 
       return new Array(body, payload);     
     }
   
-    private _makeCupsMsg(col_a : string, col_b : string, strength : string, rank : number) {
+    private _makeCupsMsg(col_a : string, col_b : string, strength : string, rank : number, note_count : number) {
   
       let var_line_1 = document.createElement("p");
       let var_line_2 = document.createElement("p");
@@ -322,14 +329,14 @@
       var payload : object =  {
         "title": "Cups Message",
         "htmlContent": $.parseHTML("<p>Testing...</p>"),
-        "typeOfNote": "cups"
+        "typeOfNote": `cups-${global_notification_count}-${note_count}`
       }
 
       return new Array(body, payload)    
     }
   
     private _makePentaclesMsg(col : string, strength : string, 
-                              element : string, rank : number) {
+                              element : string, rank : number, note_count : number) {
   
       let var_line_1 = document.createElement("p");
       let var_line_2 = document.createElement("p");
@@ -356,13 +363,13 @@
       var payload : object =  {
         "title": "Pentacles Message",
         "htmlContent": $.parseHTML("<p>Testing...</p>"),
-        "typeOfNote": "pentacles"
+        "typeOfNote": `pentacles-${global_notification_count}-${note_count}`
       }
 
       return new Array(body, payload)  
     }
   
-    private _makeSwordsMsg(col : string, strength : string, rank : number) {
+    private _makeSwordsMsg(col : string, strength : string, rank : number, note_count : number) {
   
       let var_line_1 = document.createElement("p");
       let var_line_2 = document.createElement("p");
@@ -384,12 +391,12 @@
       var payload : object =  {
         "title": "Swords Message",
         "htmlContent": $.parseHTML("<p>Testing...</p>"),
-        "typeOfNote": "swords"
+        "typeOfNote": `swords-${global_notification_count}-${note_count}`
       }
 
       return new Array(body, payload) 
     }
-    private _makeResembleMsg(df_name : string, col_name : string) {
+    private _makeResembleMsg(df_name : string, col_name : string, note_count : number) {
   
       let var_line_1 = document.createElement("p");
       let var_line_2 = document.createElement("p");
@@ -408,13 +415,13 @@
       var payload : object =  {
         "title": "Resemble Message",
         "htmlContent": $.parseHTML("<p>Testing...</p>"),
-        "typeOfNote": "resemble"
+        "typeOfNote": `resemble-${global_notification_count}-${note_count}`
       }
 
       return new Array(body, payload)    
     }   
   
-    private _makeVarMsg(zip1 : string, zip2 : string, demo : any) {
+    private _makeVarMsg(zip1 : string, zip2 : string, demo : any, note_count : number) {
   
       let var_line_1 = document.createElement("p");
       let var_line_2 = document.createElement("p");
@@ -432,12 +439,12 @@
       var payload : object =  {
         "title": "Var Message",
         "htmlContent": $.parseHTML("<p>Testing...</p>"),
-        "typeOfNote": "var"
+        "typeOfNote": `var-${global_notification_count}-${note_count}`
       }
 
       return new Array(body, payload) 
     }
-    private _makeOutliersMsg(col_name : string, value : number, std_dev : number, df_name :string) {
+    private _makeOutliersMsg(col_name : string, value : number, std_dev : number, df_name : string, note_count : number) {
   
       let var_line_1 = document.createElement("p");
       let var_line_2 = document.createElement("p");
@@ -455,12 +462,12 @@
       var payload : object =  {
         "title": "Wands Message",
         "htmlContent": $.parseHTML("<p>Testing...</p>"),
-        "typeOfNote": "outliers"
+        "typeOfNote": `outliers-${global_notification_count}-${note_count}`
       }
 
       return new Array(body, payload) 
     }
-    private _makeEqOddsMsg(notice : any) {
+    private _makeEqOddsMsg(notice : any, note_count : number) {
       let msg_l1 = document.createElement("p");
       if (notice["eq"] == "fpr") {
         msg_l1.innerHTML = "Applying a false positive rate equalization to ";
@@ -499,12 +506,12 @@
       var payload : object =  {
         "title": "Equalized Odds Message",
         "htmlContent": $.parseHTML("<p>Testing...</p>"),
-        "typeOfNote": "equalized"
+        "typeOfNote": `equalized-${global_notification_count}-${note_count}`
       }
 
       return new Array(body, payload) 
     }
-    private _makeProxyMsg(d : any) {
+    private _makeProxyMsg(d : any, note_count : number) {
       var ul_container = document.createElement("div")
       for (let df_name in d) {
         var label = document.createElement("h3")
@@ -558,13 +565,13 @@
       var payload : object =  {
         "title": "Proxy Message",
         "htmlContent": container,
-        "typeOfNote": "proxy"
+        "typeOfNote": `proxy-${global_notification_count}-${note_count}`
       }
 
       return new Array(body, payload) 
     }
 
-    private _makePerformanceMsg(notice : any) {
+    private _makePerformanceMsg(notice : any, note_count : number) {
   
       let msg_l1 = document.createElement("p");
       msg_l1.innerHTML = "The model "+notice["model_name"]+" has a training accuracy of "+notice["acc"];
@@ -633,13 +640,13 @@
       var payload : object =  {
         "title": "Performance Message",
         "htmlContent": $.parseHTML("<p>Testing...</p>"),
-        "typeOfNote": "performance"
+        "typeOfNote": `performance-${global_notification_count}-${note_count}`
       }
 
       return new Array(body, payload) 
     }
 
-    private _makeMissingMsg(notice : { [key : string] : { [ key : string ] : any } } ) {
+    private _makeMissingMsg(notice : { [key : string] : { [ key : string ] : any } }, note_count : number ) {
       let msg_l1 = document.createElement("div");
       // msg_l1.innerHTML = "Received: " + JSON.stringify(notice["dfs"]);
       for(var df_name in notice["dfs"]) {
@@ -712,7 +719,7 @@
       var payload : object =  {
         "title": title,
         "htmlContent": moreInfoContent,
-        "typeOfNote": "missing"
+        "typeOfNote": `missing-${global_notification_count}-${note_count}`
       }
 
       return new Array(body, payload) 
