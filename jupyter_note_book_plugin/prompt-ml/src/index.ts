@@ -3,7 +3,7 @@
 // } from '@jupyterlab/application';
 
 import {
-  JupyterFrontEnd, JupyterFrontEndPlugin,
+  JupyterFrontEnd, JupyterFrontEndPlugin
 } from '@jupyterlab/application';
 
 import {
@@ -91,22 +91,18 @@ const extension: JupyterFrontEndPlugin<void> = {
       }
       // Find out if we already have had a note of this type displayed
       if(typeOfNote in openNotes) {
-        // This note has already been opened and is still open --  expand the widget
-        for(var note in openNotes) {
-          if(note == typeOfNote) openNotes[note]["widget"].show()
-          else openNotes[note]["widget"].hide()
+        // Find the index of the tab we've current selected
+        var currentIndex = $("#jp-main-dock-panel .lm-TabBar-content.p-TabBar-content").children().index($("#jp-main-dock-panel .lm-TabBar-content.p-TabBar-content .jp-mod-current")[0])
+        // Find the index of the tab we want to open 
+        var targetIndex = $("#jp-main-dock-panel .lm-TabBar-content.p-TabBar-content").children().index($(`#jp-main-dock-panel .lm-TabBar-content.p-TabBar-content #${openNotes[typeOfNote]["id"]}`)[0])
+        // Find the difference and execute next / previous tab that many times
+        if(currentIndex > targetIndex) {
+          for(var x = 0; x < currentIndex - targetIndex; x++)
+            app.commands.execute("application:activate-previous-tab")
+        } else {
+          for(var x = 0; x < targetIndex - currentIndex; x++)
+            app.commands.execute("application:activate-next-tab")
         }
-        // Removes the classes that make the bar appear active
-        $(".lm-TabBar-content.p-TabBar-content > li.lm-TabBar-tab").each( function() {
-          $(this).removeClass("jp-mod-current").removeClass("lm-mod-current").removeClass("p-mod-current")
-        })
-        // Add the classes that makes it appear active to the specific id 
-        $(`#jp-main-dock-panel #${openNotes[typeOfNote]["id"]}`)
-        .addClass("jp-mod-current")
-        .addClass("lm-mod-current")
-        .addClass("p-mod-current")
-        // To do: switch the order and ensure that the CSS selector for removal ends up applying itself to 
-        // all except the ID -- there's a rare instance in which addition selector applies to two elements
       } else {
         // Hasn't yet been opened or has since closed; creating the widget
         var popupContent = new Widget();
@@ -132,7 +128,7 @@ const extension: JupyterFrontEndPlugin<void> = {
           var postAdditionChildren : any[] = []
           // Fix needed -- app.shell.add is async. Therefore, this fires (w/o delay) before the child
           // elements have been updated -- therefore, it can't find the correct id.
-          // Current solution is to wait 150ms, but that's an arbitrary number and should be changed
+          // Current solution is to wait 150ms, but that's an arbitrary number and the implementation should be changed
           $("#jp-main-dock-panel .lm-TabBar-content.p-TabBar-content > li.lm-TabBar-tab").each(function() {
             postAdditionChildren.push($(this).attr("id"))
           }) 
