@@ -647,71 +647,65 @@
     }
 
     private _makeMissingMsg(notice : { [key : string] : { [ key : string ] : any } }, note_count : number ) {
+      // Create container for the small-view content
       let msg_l1 = document.createElement("div");
-      // msg_l1.innerHTML = "Received: " + JSON.stringify(notice["dfs"]);
+      // Create the container for the expanded-view content
+      var moreInfoContent = $.parseHTML("<div class=\"promptMl missing\" style=\"padding: 15px; overflow: scroll;\"><h1>Missing Data</h1><ul></ul></div>")
+      $(moreInfoContent).find("ul").append($.parseHTML(`
+        <li>There are a number of reasons why data may be missing. In some instances, 
+        it may be due to biased collection practices. It may also be missing due to random 
+        error <a href=\"placeholder\"(Read More)</a></li>
+        <li>This plugin cannot detect whether the missing data are missing at random or whether 
+        they are missing due to observed or unobserved variables.</li>
+      `)) // Static content only for now
+      // Iterating over every dataframe
       for(var df_name in notice["dfs"]) {
+        // Small-view df container
         msg_l1.appendChild($.parseHTML(`<h3>Within ${df_name}</h3>`)[0])
         var df = notice["dfs"][df_name]
         var ul = document.createElement("ul")
-        var total_length = df["total_length"]
         msg_l1.appendChild(ul)
-        var cols : { [ key: string ] : { [key: string] : any}} = df["columns"]
-        for(const col_name in cols) {
-          var col = cols[col_name]
-          var col_count = col.count
-          if(col_count == 0) continue
+        // Expanded-view df container
+        var possible_ul = document.createElement("ul")
+        moreInfoContent[0].appendChild($.parseHTML(`<h3>Within ${df_name}</h3>`)[0])
+        moreInfoContent[0].appendChild(possible_ul)
+        // Iterating over every column
+        for(const col_name_index in df["missing_columns"]) {
+          // Extract information for the small-view content
+          var col_name = df["missing_columns"][col_name_index]
+          console.log(col_name, col_name_index, df["missing_columns"], df)
+          var col_count = df[col_name]["number_missing"]
+          var total_length = df[col_name]["total_length"]
+          // Extract the mode (for expanded view)
+          var modes = []
+          for(const key in df[col_name]) {
+            if(key == "total_length" || key == "number_missing") continue
+            else modes.push([key, df[col_name][key]["largest_percent"]])
+          }
+          modes = modes.sort((a : [string, number][][], b : [string, number][][]) => {
+              if (a[1] === b[1]) {
+                  return 0;
+              }
+              else {
+                  return (a[1] > b[1]) ? -1 : 1;
+              }
+          })
+          console.log(modes)
+          // Append the small-view information
           ul.appendChild($.parseHTML(`<li>Column <strong>${col_name}</strong> is missing <strong>${col_count}</strong>/<strong>${total_length}</strong> entries</li>`)[0])
+          // Append the expanded-view information
+          var cor_col = modes[0][0]
+          console.log(cor_col)
+          var percent = df[col_name][cor_col]["largest_percent"]
+          var cor_mode = df[col_name][cor_col]["largest_missing_value"]
+          possible_ul.appendChild($.parseHTML(`<li>Column <strong>${col_name}</strong> is missing <strong>${col_count}</strong>/<strong>${total_length}</strong> entries</li>`)[0])
+          possible_ul.appendChild($.parseHTML(`<ul><li>This occurs most frequently (${percent}%) when ${cor_col} is ${cor_mode}</li></ul>`)[0])
         }
       }
   
       var [body, area] = this._makeContainer();
       area.appendChild(msg_l1);
 
-      // Expanded view content
-       var moreInfoContent = $.parseHTML("<div class=\"promptMl missing\" style=\"padding: 15px; overflow: scroll;\"><h1>Missing Data</h1><ul></ul></div>")
-      $(moreInfoContent).find("ul").append($.parseHTML(`
-        <ul>
-          <li>There are a number of reasons why data may be missing. In some instances, 
-          it may be due to biased collection practices. It may also be missing due to random 
-          error <a href=\"placeholder\"(Read More)</a></li>
-          <li>This plugin cannot detect whether the missing data are missing at random or whether 
-          they are missing due to observed or unobserved variables.</li>
-        </ul>
-      `)[0]) // making the static content
-
-      for(var df_name in notice["dfs"]) {
-        var df = notice["dfs"][df_name]
-        var possible_ul = document.createElement("ul")
-        var total_length = df["total_length"]
-        for(const col_name in df["columns"]) {
-          var col = cols[col_name]
-          var col_count = col.count
-          if(col_count == 0) continue
-          possible_ul.appendChild($.parseHTML(`<li>Column <strong>${col_name}</strong> is missing <strong>${col_count}</strong>/<strong>${total_length}</strong> entries</li>`)[0])
-          var mode = col["mode"]
-          // Sort by third key: https://stackoverflow.com/questions/16096872/how-to-sort-2-dimensional-array-by-column-value
-          mode = mode.sort((a : [string, number][][], b : [string, number][][]) => {
-              if (a[2] === b[2]) {
-                  return 0;
-              }
-              else {
-                  return (a[2] > b[2]) ? -1 : 1;
-              }
-          })
-          if(mode.length == 0) {
-            possible_ul.appendChild($.parseHTML("<li><ul><li>There were no clear correlations for this column</li>/ul</li>")[0])
-          } else {
-            possible_ul.appendChild($.parseHTML(`<ul><li>This occurs most frequently (${mode[0][2]}/${mode[0][3]}) when ${mode[0][0]} is ${mode[0][1]}</li></ul>`)[0])
-          }
-        }
-        if($(possible_ul).find("li").length == 0) {
-          $(moreInfoContent).append($.parseHTML(`<h3>The data frame ${df_name} is not missing any data`)[0])
-        } else {
-          $(moreInfoContent).append($.parseHTML(`<h3>The data frame ${df_name} is missing data in ${($(possible_ul).find("li").length > 1) ? "several columns" : "one column"}</h3>`)[0])
-          $(moreInfoContent).append(possible_ul)
-        }
-      } 
-      
       // Payload
 
       var title = "Missing Data Note";
