@@ -391,22 +391,39 @@ class MissingDataNote(ProtectedColumnNote):
 
                 # for every sensitive column
                 for sensitive in these_sensitive_cols:
+                    sensitive = sensitive["protected_value"]
                     # for every column with missing data
                     for missing_col in these_missing_cols:
                         sensitive_frequency = {}
+                        if(missing_col == sensitive): continue # prevents the same column from being compared
                         for i in range(len(this_df_ptr[missing_col])):
-                            if math.isnan(this_df_ptr[missing_col][i]):
-                                if this_df_ptr[sensitive] in sensitive_frequency:
-                                    sensitive_frequency[this_df_ptr[sensitive][i]] += 1
-                                else:
-                                    sensitive_frequency[this_df_ptr[sensitive][i]]  = 1
+                            try:
+                                numeric_number = float(this_df_ptr[missing_col][i])
+                                if math.isnan(numeric_number):
+                                    if this_df_ptr[sensitive][i] in sensitive_frequency:
+                                        sensitive_frequency[this_df_ptr[sensitive][i]] += 1
+                                    else:
+                                        sensitive_frequency[this_df_ptr[sensitive][i]] = 1
+                            except ValueError:
+                                pass
                         # largest missing value
                         lmv = max(sensitive_frequency.items(), key=operator.itemgetter(1))[0]
                         # largest percent
                         lp  = math.floor(100.0 * (sensitive_frequency[lmv] / this_df_ptr[missing_col].isna().sum()))
-
+                        try:
+                            if(math.isnan(float(lmv))): lmv = "NaN"
+                        except ValueError:
+                            lmv = lmv
+                        try:
+                            if(math.isnan(float(lp))): lp = "NaN"
+                        except ValueError:
+                            lp = lp
+                        df_report['dfs'][df_name][missing_col][sensitive] = {}
                         df_report['dfs'][df_name][missing_col][sensitive]['largest_missing_value'] = lmv
                         df_report['dfs'][df_name][missing_col][sensitive]['largest_percent']       = lp
+                        df_report['dfs'][df_name][missing_col]['number_missing']                   = int(this_df_ptr[missing_col].isna().sum())
+                        df_report['dfs'][df_name][missing_col]['total_length']                     = len(this_df_ptr[missing_col])
+                        
         return df_report
 
     # self.df_protected_cols should already be populated from a previous
