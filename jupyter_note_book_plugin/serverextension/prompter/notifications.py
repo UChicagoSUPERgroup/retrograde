@@ -400,6 +400,7 @@ class MissingDataNote(ProtectedColumnNote):
                             try:
                                 numeric_number = float(this_df_ptr[missing_col][i])
                                 if math.isnan(numeric_number):
+                                    key = str(this_df_ptr[sensitive][i])
                                     if this_df_ptr[sensitive][i] in sensitive_frequency:
                                         sensitive_frequency[this_df_ptr[sensitive][i]] += 1
                                     else:
@@ -408,21 +409,19 @@ class MissingDataNote(ProtectedColumnNote):
                                 pass
                         # largest missing value
                         lmv = max(sensitive_frequency.items(), key=operator.itemgetter(1))[0]
+                        lmv = str(lmv) # security cast
                         # largest percent
                         lp  = math.floor(100.0 * (sensitive_frequency[lmv] / this_df_ptr[missing_col].isna().sum()))
-                        try:
-                            if(math.isnan(float(lmv))): lmv = "NaN"
-                        except ValueError:
-                            lmv = lmv
-                        try:
-                            if(math.isnan(float(lp))): lp = "NaN"
-                        except ValueError:
-                            lp = lp
+                        
+                        if not str(lp).isnumeric():
+                            lp = 'NaN'
+
                         df_report['dfs'][df_name][missing_col][sensitive] = {}
                         df_report['dfs'][df_name][missing_col][sensitive]['largest_missing_value'] = lmv
                         df_report['dfs'][df_name][missing_col][sensitive]['largest_percent']       = lp
-                        df_report['dfs'][df_name][missing_col]['number_missing']                   = int(this_df_ptr[missing_col].isna().sum())
-                        df_report['dfs'][df_name][missing_col]['total_length']                     = len(this_df_ptr[missing_col])
+                for missing_col in these_missing_cols:
+                    df_report['dfs'][df_name][missing_col]['number_missing'] = int(this_df_ptr[missing_col].isna().sum())
+                    df_report['dfs'][df_name][missing_col]['total_length'] = len(this_df_ptr[missing_col])
                         
         return df_report
 
