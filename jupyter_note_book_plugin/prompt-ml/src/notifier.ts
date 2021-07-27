@@ -232,7 +232,6 @@
     } 
 
     private _handleProxies(proxies : { [ key: string ] : any }[], note_count : number) {
-      console.log(proxies);
       var d : { [key : string ] : {[key: string] : string[]} } = {};
       for(var x = 0; x < proxies.length; x++) {
         var p : any = proxies[x];
@@ -241,7 +240,6 @@
         d[p["df"]]["sensitive_col_name"].push(p["sensitive_col_name"]);
         d[p["df"]]["p_vals"].push(p["p"]);
       }
-      console.log("analyzed:", d);
       var message = this._makeProxyMsg(d, note_count);
       var stringHTML : string = (message[0] as HTMLDivElement).outerHTML;
       var object : object = message[1];
@@ -673,7 +671,6 @@
         for(const col_name_index in df["missing_columns"]) {
           // Extract information for the small-view content
           var col_name = df["missing_columns"][col_name_index]
-          console.log(col_name, col_name_index, df["missing_columns"], df)
           var col_count = df[col_name]["number_missing"]
           var total_length = df[col_name]["total_length"]
           // Extract the mode (for expanded view)
@@ -690,12 +687,10 @@
                   return (a[1] > b[1]) ? -1 : 1;
               }
           })
-          console.log(modes)
           // Append the small-view information
           ul.appendChild($.parseHTML(`<li>Column <strong>${col_name}</strong> is missing <strong>${col_count}</strong>/<strong>${total_length}</strong> entries</li>`)[0])
           // Append the expanded-view information
           var cor_col = modes[0][0]
-          console.log(cor_col)
           var percent = df[col_name][cor_col]["largest_percent"]
           var cor_mode = df[col_name][cor_col]["largest_missing_value"]
           possible_ul.appendChild($.parseHTML(`<li>Column <strong>${col_name}</strong> is missing <strong>${col_count}</strong>/<strong>${total_length}</strong> entries</li>`)[0])
