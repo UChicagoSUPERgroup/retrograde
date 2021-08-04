@@ -3,7 +3,7 @@
 // } from '@jupyterlab/application';
 
 import {
-  JupyterFrontEnd, JupyterFrontEndPlugin,
+  JupyterFrontEnd, JupyterFrontEndPlugin
 } from '@jupyterlab/application';
 
 import {
@@ -46,7 +46,6 @@ const extension: JupyterFrontEndPlugin<void> = {
     const prompter = new Prompter(listener, tracker, app, factory);
     console.log("init prompter", prompter);
     console.log("factory", factory);
-  //    let item : Widget | undefined;
     let widgets = app.shell.widgets("main");
     let widget : Widget | undefined
     console.log("Widgets: ");
@@ -58,14 +57,6 @@ const extension: JupyterFrontEndPlugin<void> = {
       }
       console.log(widget); 
     }
-    // app.commands.execute("terminal:create-new").then((terminal : Terminal) => {
-    //   app.shell.add(terminal, "right");
-    //   if (app.shell instanceof LabShell) {
-    //     //(app.shell as LabShell).collapseLeft();
-    //     //(app.shell as LabShell).expandRight();
-    //     app.shell.activateById(terminal.id);
-    //   }
-    // });
 
     /////////////////////////////////////////////////
     /////////////////////////////////////////////////
@@ -86,29 +77,82 @@ const extension: JupyterFrontEndPlugin<void> = {
     }
     // Activate the widget
     app.shell.activateById(promptWidget.id);
-    /////////////////////////////////////////////////
-    /////////////////////////////////////////////////
-    /////////////////////////////////////////////////
-    // Manage creation of a new panel
-    $(".prompt-ml-container").on("prompt-ml:note-added", function(e, passed_args) {
+    // Manage opening the expanded view of a widget
+    var openNotes : { [key : string] : any } = []
+    $(".prompt-ml-container").on("prompt-ml:note-added", function(e, passed_args) { 
+      // This event is fired (originates from notifier.ts) when "expand" is clicked
+      // Extract information from the event
       var payload = passed_args["payload"]
-      console.log("-- More information triggered --")
-      console.log(payload)
-      const popupContent = new Widget();
-      const popupWidget = new MainAreaWidget({ "content": popupContent });
-      var popupContainer = document.createElement("div");
-      popupContainer.classList.add("prompt-ml-popup")
-      popupContent.node.appendChild(popupContainer);
-      popupWidget.id = "prompt-ml-popup";
-      popupWidget.title.label = payload["title"];
-      popupWidget.title.closable = true;
-      app.shell.add(popupWidget, "main");
-      console.log(payload["htmlContent"])
-      $(".prompt-ml-popup").append(payload["htmlContent"]);
+      var typeOfNote = payload["typeOfNote"]
+      console.log(openNotes)
+      // Refresh openNotes by seeing if an element with that ID exists
+      for(var note in openNotes) {
+        if(!($(`#jp-main-dock-panel #${openNotes[note]["id"]}`).length > 0)) delete openNotes[note]
+      }
+      // Find out if we already have had a note of this type displayed
+      if(typeOfNote in openNotes) {
+        // Find the index of the tab we've current selected
+        var currentIndex = $("#jp-main-dock-panel .lm-TabBar-content.p-TabBar-content").children().index($("#jp-main-dock-panel .lm-TabBar-content.p-TabBar-content .jp-mod-current")[0])
+        // Find the index of the tab we want to open 
+        var targetIndex = $("#jp-main-dock-panel .lm-TabBar-content.p-TabBar-content").children().index($(`#jp-main-dock-panel .lm-TabBar-content.p-TabBar-content #${openNotes[typeOfNote]["id"]}`)[0])
+        // Find the difference and execute next / previous tab that many times
+        if(currentIndex > targetIndex) {
+          for(var x = 0; x < currentIndex - targetIndex; x++)
+            app.commands.execute("application:activate-previous-tab")
+        } else {
+          for(var x = 0; x < targetIndex - currentIndex; x++)
+            app.commands.execute("application:activate-next-tab")
+        }
+      } else {
+        // Hasn't yet been opened or has since closed; creating the widget
+        var popupContent = new Widget();
+        var popupWidget = new MainAreaWidget({ "content": popupContent });
+        var id = "prompt-ml-popup" + (Math.round(Math.random() * 1000))
+        popupWidget.id = id;
+        var popupContainer = document.createElement("div");
+        popupContainer.classList.add("prompt-ml-popup")
+        popupContainer.classList.add(id)
+        $(popupContainer.parentElement).css("overflow", "scroll")
+        popupContent.node.appendChild(popupContainer);
+        popupWidget.title.label = payload["title"];
+        popupWidget.title.closable = true;
+        // Get a list of all the ids before the addition
+        var preAdditionChildren : string[] = []
+        $("#jp-main-dock-panel .lm-TabBar-content.p-TabBar-content > li.lm-TabBar-tab").each(function() {
+          preAdditionChildren.push($(this).attr("id"))
+        })
+        app.shell.add(popupWidget, "main");
+        $(`.${id}`).append(payload["htmlContent"]);
+        // Find the id that the tab was given -- see needed fix below
+        setTimeout( () => {
+          var postAdditionChildren : any[] = []
+          // Fix needed -- app.shell.add is async. Therefore, this fires (w/o delay) before the child
+          // elements have been updated -- therefore, it can't find the correct id.
+          // Current solution is to wait 150ms, but that's an arbitrary number and the implementation should be changed
+          $("#jp-main-dock-panel .lm-TabBar-content.p-TabBar-content > li.lm-TabBar-tab").each(function() {
+            postAdditionChildren.push($(this).attr("id"))
+          }) 
+          postAdditionChildren = postAdditionChildren.filter(e => !preAdditionChildren.includes(e))
+          console.log("After filter:", postAdditionChildren)
+          if(postAdditionChildren.length == 0) {
+            console.log("No id found")
+            console.log(postAdditionChildren)
+            // To do: Add error handling
+          } else if(postAdditionChildren.length > 1) {
+            console.log("Multiple id's found")
+            console.log(postAdditionChildren)
+            // To do: Add error handling
+          } else {
+            console.log(postAdditionChildren[0], " found as the id")
+            // Saving this information for later reference
+            openNotes[typeOfNote] = {
+              "id": postAdditionChildren[0],
+              "widget": popupWidget
+            }
+          }
+        }, 150)
+      }
     })
-    /////////////////////////////////////////////////
-    /////////////////////////////////////////////////
-    /////////////////////////////////////////////////
     })
   }
 }

@@ -1,8 +1,11 @@
+import json
 from random import choice
 
 import pandas as pd
 import numpy as np
+import operator
 import dill
+import math
 
 from scipy.stats import zscore, f_oneway, chi2_contingency
 from sklearn.base import ClassifierMixin
@@ -12,6 +15,8 @@ from pandas.api.types import is_numeric_dtype
 from .storage import load_dfs
 from .string_compare import check_for_protected
 from .sortilege import is_categorical
+
+import json # REMOVE BEFORE PUSHING
 
 PVAL_CUTOFF = 0.25 # cutoff for thinking that column is a proxy for a sensitive column
 STD_DEV_CUTOFF = 0.1 # cutoff for standard deviation change that triggers difference in OutliersNotes
@@ -180,7 +185,7 @@ class ProxyColumnNote(ProtectedColumnNote):
             if df_name not in noted_dfs:
                 sense_col_names = [c["original_name"] for c in self.df_protected_cols[df_name]]
                 non_sensitive_cols = [c for c in dfs[df_name].columns if c not in sense_col_names]
-                if len(non_sensitive_cols) != 0: 
+                if len(non_sensitive_cols) != 0 and len(sense_col_names) != 0: 
                     self.avail_dfs[df_name] = {
                         "df" : dfs[df_name],    
                         "sens_cols" : sense_col_names,
@@ -299,6 +304,168 @@ class ProxyColumnNote(ProtectedColumnNote):
                 live_resps[cell].append(new_note)
 
         self.data = live_resps
+
+# TODO: inheret from ProxyColumnNote, and check both protected and proxy columns
+class MissingDataNote(ProtectedColumnNote):
+    """
+    A notification that measures whether there exists columns with missing data.
+
+    Note that this requires that sensitive/protected columns actually be present in the
+    dataframe. 
+
+    data format is - 
+    {
+        "type" : "missing",
+        "dfs" : {
+            "<df_name1>" : {
+                "missing_columns" : <list of all columns with missing data>,
+                "<missing_col1>" : {
+                    "<sensitive_col1>" : {
+                        "largest_missing_value" : <the value of the sensitive column most likely to be 
+                                                    missing when the missing column has missing data>,
+                        "largest_percent"       : <floor(100 * (largest_missing_value / total missing data))>
+                    }
+                    "<sensitive_col2>" : {...}
+                    "<sensitive_col3>" : {...}
+                    ...
+                }
+            }
+            "<df_name2>" : {...}
+            "<df_name3>" : {...}
+            ...
+        }
+    }
+    """
+
+    def __init__(self, db):
+        super().__init__(db)
+        self.missing_col_lists = {}
+        self.missing_sent = 0
+
+    # basically, if it was feasible to send a protected note and we have
+    # missing data, we should be good to send a missing data note if
+    # either condition is not met, don't bother
+    def check_feasible(self, cell_id, env, dfs, ns):
+        """check feasibility of sending a missing data note"""
+        if not super().check_feasible(cell_id, env, dfs, ns):
+            return False
+        else:
+            for df_name, df in dfs.items():
+                ret = False
+                if df.isnull().values.any():
+                    ret = True
+                    # store a pointer to the dataframe, as well as the columns with missing data
+                    self.missing_col_lists[df_name] = (df, df.columns[df.isna().any()].tolist())
+            return ret
+         
+   
+    # some sort of internal variable
+    def times_sent(self):
+        """the number of times this notification has been sent"""
+        return self.missing_sent
+
+    # the main missing data check loop that takes in an arbitrary list of
+    # dataframe names to check
+    def _formulate_df_report_missing(self, df_list):
+        df_report = {}
+
+        df_report['type'] = 'missing'
+        df_report['dfs'] = {}
+
+        # loop through all dataframes with protected data
+        for df_name in df_list:
+            # if this dataframe also has missing data
+            if df_name in self.missing_col_lists.keys():
+                # get some pointers to useful stuff for code readability
+                this_df_ptr = self.missing_col_lists[df_name][0]
+                these_missing_cols = self.missing_col_lists[df_name][1]
+                these_sensitive_cols = self.df_protected_cols[df_name]
+
+                # initialize this dataframe entry in the dfs dictionary
+                df_report['dfs'][df_name] = {}
+                df_report['dfs'][df_name]['missing_columns'] = these_missing_cols.copy()
+
+                # initialize every missing column dictionary
+                for missing_col in these_missing_cols:
+                    df_report['dfs'][df_name][missing_col] = {}
+
+                # for every sensitive column
+                for sensitive in these_sensitive_cols:
+                    sensitive = sensitive["protected_value"]
+                    # for every column with missing data
+                    for missing_col in these_missing_cols:
+                        sensitive_frequency = {}
+                        if(missing_col == sensitive): continue # prevents the same column from being compared
+                        for i in range(len(this_df_ptr[missing_col])):
+                            try:
+                                numeric_number = float(this_df_ptr[missing_col][i])
+                                if math.isnan(numeric_number):
+                                    key = str(this_df_ptr[sensitive][i])
+                                    if this_df_ptr[sensitive][i] in sensitive_frequency:
+                                        sensitive_frequency[this_df_ptr[sensitive][i]] += 1
+                                    else:
+                                        sensitive_frequency[this_df_ptr[sensitive][i]] = 1
+                            except ValueError:
+                                pass
+                        # largest missing value
+                        lmv = max(sensitive_frequency.items(), key=operator.itemgetter(1))[0]
+                        lmv = str(lmv) # security cast
+                        # largest percent
+                        lp  = math.floor(100.0 * (sensitive_frequency[lmv] / this_df_ptr[missing_col].isna().sum()))
+                        
+                        if not str(lp).isnumeric():
+                            lp = 'NaN'
+
+                        df_report['dfs'][df_name][missing_col][sensitive] = {}
+                        df_report['dfs'][df_name][missing_col][sensitive]['largest_missing_value'] = lmv
+                        df_report['dfs'][df_name][missing_col][sensitive]['largest_percent']       = lp
+                for missing_col in these_missing_cols:
+                    df_report['dfs'][df_name][missing_col]['number_missing'] = int(this_df_ptr[missing_col].isna().sum())
+                    df_report['dfs'][df_name][missing_col]['total_length'] = len(this_df_ptr[missing_col])
+                        
+        return df_report
+
+    # self.df_protected_cols should already be populated from a previous
+    # check_feasible call (?)
+    def make_response(self, env, kernel_id, cell_id):
+        """form and store the response to send to the frontend"""
+        super().make_response(env, kernel_id, cell_id)
+
+        df_report = self._formulate_df_report_missing(self.df_protected_cols.keys())
+
+        # export the result to a cell
+        if cell_id not in self.data:
+            self.data[cell_id] = []
+        self.data[cell_id].append(df_report)
+
+        # counter
+        self.missing_sent += 1
+
+
+    # loop through all the missing data notes
+    def update(self, env, kernel_id, cell_id, dfs, ns):
+        """check whether the note on this cell needs to be updated"""
+        new_data = {}
+        for cell, note_list in self.data.items():
+            new_notes = []
+            for note in note_list:
+                if note["type"] == "missing":
+                    # grab the dfs that are in the missing note and are flagged to up updated
+                    df_update_list = [df_name for df_name in note['dfs'].keys() if df_name in dfs]
+                    # generate an updated autopsy report based on those dfs only
+                    updated_report = self._formulate_df_report_missing(df_update_list)
+                    # append this note to new_notes
+                    new_notes.append(updated_report)
+
+                    # counter
+                    self.missing_sent += 1
+                else:
+                    # the note stays the same
+                    new_notes.append(note)
+            new_data[cell] = new_notes
+        env.log.debug("[MissingDataNote] updated responses")
+        self.data = new_data
+
 
 class OutliersNote(Notification):
     """
@@ -756,3 +923,110 @@ def bin_col(col):
     new_col = (col != max_val).astype(int)
 
     return new_col
+
+class NewNote(Notification):
+    """
+    A note that computes whether there are outliers in a numeric column
+    defined in a dataframe
+
+    format is {"type" : "outliers", "col_name" : <name of column with outliers>,
+               "value" : <max outlier value>, "std_dev" : <std_dev of value>,
+               "df_name" : <name of dataframe column belongs to>}
+    """
+    def __init__(self, db):
+        super().__init__(db)
+
+    def check_feasible(self, cell_id, env, dfs, ns):
+        # are there any dataframes that we haven't examined?
+        df_cols = {}
+        
+        for df_name, df in dfs.items():
+            if df.isnull().values.any(): return True
+
+        return False
+
+    def make_response(self, env, kernel_id, cell_id):
+        env.log.debug("[NewNote] Debug 2")    
+        curr_ns = self.db.recent_ns()
+        dfs = load_dfs(curr_ns)
+        super().make_response(env, kernel_id, cell_id)
+        self.sent = True
+        resp = {
+            "type" : "missing",
+            "dfs": {}
+        }
+
+        # Format
+        # {
+        #     "df_name": "loans",
+        #     "length-of-df": 2000
+        #     "columns": {
+        #         "income": {
+        #           "count": <int of how many times a null value exists>,
+        #           "mode": [
+        #               [<column name>, <column mode>, <times the mode exists within the shortened df>, <length of the shortened df>]
+        #           ]}
+        #     }
+        # }
+        # Collecting data
+        df_cols = {} 
+        dfs_callable = {}
+        
+        for df_name, df in dfs.items():
+            dfs_callable[df_name] =  df
+            df_cols[df_name] = [col for col in df.columns]
+            resp["dfs"][df_name] = {
+                "df_name": df_name,
+                "columns": {},
+                "total_length": len(dfs_callable[df_name])
+            }
+
+        for df_name, cols in df_cols.items():
+            for col_name in cols:
+                # Get the actual dataframe w/ the columns & count # of rows null
+                df = dfs_callable[df_name]
+                df_col = df[col_name]
+                amount_null = df_col.isnull().sum()
+                if amount_null == 0: continue
+                # Get the entire dataframe where this specific column is null
+                df_col_with_column_null = df[df[col_name].isnull()][df.columns].astype(str)
+                # Iterate over each column and find it's mode
+                null_column_correlation = []
+                for column in df_col_with_column_null:
+                    if column == col_name: continue
+                    mode_raw = df_col_with_column_null[column].mode(dropna=False)
+                    if len(mode_raw) >= 1:
+                        mode = mode_raw[0]
+                    else:
+                        mode = np.nan
+                    if mode == np.nan or mode == "nan" or pd.isna(mode): 
+                        specific_col = df_col_with_column_null[column]
+                        mode_count = specific_col.isnull().sum()
+                        mode = "NaN"
+                    else: mode_count = df_col_with_column_null[column].value_counts(dropna=False)[mode]
+                    null_column_correlation.append([column, mode, int(mode_count), len(df_col_with_column_null)])
+                resp["dfs"][df_name]["columns"][col_name] = {
+                    "count": int(amount_null),
+                    "mode": null_column_correlation
+                }
+
+        if cell_id in self.data:
+            self.data[cell_id].append(resp)
+        else:
+            self.data[cell_id] = [resp]
+
+
+    def update(self, env, kernel_id, cell_id, dfs, ns):
+        """
+        Check that df is still defined, still has outlier column in it,
+        and zscore is still similar
+       
+        If not, then remove and reset 
+        """
+        # Commented out until update logic is worked out
+        # resp = {"type" : "TESTING",
+        #     "to do": "something2"}
+        # if cell_id in self.data:
+        #     self.data[cell_id].append(resp)
+        # else:
+        #     self.data[cell_id] = [resp]

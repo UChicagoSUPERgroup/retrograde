@@ -1,11 +1,11 @@
-from .notifications import ProtectedColumnNote, OutliersNote, EqualizedOddsNote, ProxyColumnNote
+from .notifications import MissingDataNote, ProtectedColumnNote, OutliersNote, EqualizedOddsNote, ProxyColumnNote
 from .config import MODE
 
 if MODE == "EXP_CTS":
     NOTE_RULES = {
         "intro" :[],
         "tutorial" : [ProxyColumnNote],
-        "null_clean" : [ProtectedColumnNote, ProxyColumnNote],
+        "null_clean" : [ProtectedColumnNote, ProxyColumnNote, MissingDataNote],
         "model" : [EqualizedOddsNote],
         "end" : []
     }
@@ -15,5 +15,5 @@ if MODE == "EXP_END":
         "tutorial" : [],
         "null_clean" : [],
         "model" : [],
-        "end" : [ProtectedColumnNote, ProxyColumnNote, OutliersNote, EqualizedOddsNote]
+        "end" : [ProtectedColumnNote, ProxyColumnNote, MissingDataNote, OutliersNote, EqualizedOddsNote]
     }

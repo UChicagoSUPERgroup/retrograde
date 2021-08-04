@@ -2,27 +2,22 @@
   import {
     JupyterFrontEnd
   } from "@jupyterlab/application"
-  
-  // import {
-  //   INotebookTracker,
-  //   Notebook,
-  //   NotebookPanel,
-  // } from "@jupyterlab/notebook";
 
   import {
     INotebookTracker,
     NotebookPanel,
   } from "@jupyterlab/notebook";
   
-  // import { 
-  //   Cell,
-  // } from "@jupyterlab/cells";
-  
   import {
     Listener,
   } from "./cell-listener";
 
   import $ = require('jquery');
+
+  // Global used to construct unique ID's 
+  // This is increased by 1 everytime that a group of notifications
+  // Allows us to have a unique ID for every notification so that repeat notes will open the same widget
+  var global_notification_count : number = 0 
 
   export class Prompter {
     /*
@@ -90,92 +85,95 @@
       $(newNote).find(".close").click( function(e) {
         e.stopPropagation()
         var parentNote = $(this).parent().parent().parent()
-        $(this).parent().parent().css("background-color", "#A3A3A3").find(".more h2").css("background-color", "#939393")
-        $(".prompt-ml-container").append($(parentNote))
-        
-        if( $(parentNote).hasClass("expanded")) {
-          // var expanded = $(parentNote).find("div.expanded")
-          $(parentNote).removeClass("expanded")
-          $(parentNote).addClass("condensed")
-          $(parentNote).find("svg.condensed").toggle(true)
-          $(parentNote).find("svg.expanded").toggle(false)
-          $(parentNote).find(".content").toggle(false)
-      }
+        if(!($(parentNote).hasClass("wasClosed"))) {
+          $(this).parent().parent().css("background-color", "#A3A3A3").find(".more h2").css("background-color", "#939393")
+          $(".prompt-ml-container").append($(parentNote))
+          
+          if( $(parentNote).hasClass("expanded")) {
+            // var expanded = $(parentNote).find("div.expanded")
+            $(parentNote).removeClass("expanded")
+            $(parentNote).addClass("condensed")
+            $(parentNote).find("svg.condensed").toggle(true)
+            $(parentNote).find("svg.expanded").toggle(false)
+            $(parentNote).find(".content").toggle(false)
+          }
+          $(parentNote).addClass("wasClosed")
+        } else {
+          $(this).parent().parent().css("background-color", "#F0B744").find(".more h2").css("background-color", "#F1A204")
+            $(".prompt-ml-container").prepend($(parentNote))
+            $(parentNote).removeClass("wasClosed")
+        }
       })
     }
 
-    private _routeNotice(notice : any) {
+    private _routeNotice(notice : any, note_count : number) {
       if (notice["type"] == "resemble") {
-        var message = this._makeResembleMsg(notice["df"], notice["col"]);
+        var message = this._makeResembleMsg(notice["df"], notice["col"], note_count);
         var stringHTML : string = (message[0] as HTMLDivElement).outerHTML;
         var object : object = message[1];
         return [stringHTML, object];
-      }
-      if (notice["type"] == "variance") {
-        var message = this._makeVarMsg(notice["zip1"], notice["zip2"], notice["demo"]);
+      } else if (notice["type"] == "variance") {
+        var message = this._makeVarMsg(notice["zip1"], notice["zip2"], notice["demo"], note_count);
         var stringHTML : string = (message[0] as HTMLDivElement).outerHTML;
         var object : object = message[1];
         return [stringHTML, object];
-      }
-      if (notice["type"] == "outliers") {
-        var message = this._makeOutliersMsg(notice["col_name"], notice["value"], notice["std_dev"], notice["df_name"]);
+      } else if (notice["type"] == "outliers") {
+        var message = this._makeOutliersMsg(notice["col_name"], notice["value"], notice["std_dev"], notice["df_name"], note_count);
         var stringHTML : string = (message[0] as HTMLDivElement).outerHTML;
         var object : object = message[1];
         return [stringHTML, object];
-      }
-      if (notice["type"] == "model_perf") {
-        var message = this._makePerformanceMsg(notice);
+      } else if (notice["type"] == "model_perf") {
+        var message = this._makePerformanceMsg(notice, note_count);
         var stringHTML : string = (message[0] as HTMLDivElement).outerHTML;
         var object : object = message[1];
         return [stringHTML, object];
-      }
-      if (notice["type"] == "eq_odds") {
-        var message = this._makeEqOddsMsg(notice);
+      } else if (notice["type"] == "eq_odds") {
+        var message = this._makeEqOddsMsg(notice, note_count);
         var stringHTML : string = (message[0] as HTMLDivElement).outerHTML;
         var object : object = message[1];
         return [stringHTML, object];
-      }
-      if (notice["type"] == "proxy") {
-        var message = this._makeProxyMsg(notice);
+      } else if (notice["type"] == "proxy") {
+        var message = this._makeProxyMsg(notice, note_count);
         var stringHTML : string = (message[0] as HTMLDivElement).outerHTML;
         var object : object = message[1];
         return [stringHTML, object];
+      } else if (notice["type"] == "missing") {
+        var message = this._makeMissingMsg(notice, note_count);
+        var stringHTML : string = (message[0] as HTMLDivElement).outerHTML;
+        var object : object = message[1]
+        return [stringHTML, object]
       } else {
         console.log("No notes generated", notice["type"], notice)
       }
     }
   
     private _onInfo(info_object : any) {
-  
-      // var cell : Cell = this._getCell(info_object["cell"], this._tracker);
-      console.log(info_object)
-  
-      // if (info_object["type"] == "multiple") {
-      //   for (let key of Object.keys(info_object["info"])) {
-      //     // cell = this._getCell(key, this._tracker);
-      //     for (let notice of info_object["info"][key]) {
-      //       console.log(notice)
-      //       var noticeResponse = this._routeNotice(notice);
-      //       if(noticeResponse == undefined) return
-      //       let msg : string = noticeResponse[0] as string
-      //       let popupContent : object = noticeResponse[1] as object
-      //       if (msg) { this.appendMsg(msg, popupContent); }
-      //     } 
-      //   }   
-      // }
 
       if (info_object["type"] == "multiple") {
         var cell_id = info_object["info"]["cell"]
         var kernel_id = info_object["kernel_id"]
         var notices = info_object["info"][cell_id]
-        for (var x = 0; x < notices.length; x++) {
-            var notice = notices[x]
-            var noticeResponse = this._routeNotice(notice);
-            if(noticeResponse == undefined) return
-            let msg : string = noticeResponse[0] as string
-            let popupContent : object = noticeResponse[1] as object
-            if (msg) { this.appendMsg(cell_id, kernel_id, msg, popupContent); }
-        }   
+        var note_count : number = 0
+        for(const key in notices) {
+          var list_of_notes = notices[key]
+          if(key == "proxy") {
+            this._handleProxies(list_of_notes, note_count)
+            note_count += 1
+          } else {
+            for(var x = 0; x < list_of_notes.length; x++) {
+              var notice = list_of_notes[x]
+              var noticeResponse = this._routeNotice(notice, note_count);
+              if(noticeResponse == undefined) return
+              let msg : string = noticeResponse[0] as string
+              let popupContent : object = noticeResponse[1] as object
+              if (msg) { 
+                this.appendMsg(cell_id, kernel_id, msg, popupContent);
+                note_count += 1
+              }
+            }
+          }
+
+        }
       }
     
       if (info_object["type"] == "resemble") {
@@ -184,6 +182,7 @@
         var cell_id = info_object["info"]["cell"]
         var kernel_id = info_object["kernel_id"]
         this.appendMsg(cell_id, kernel_id, msg, payload);
+        note_count += 1
       }
       if (info_object["type"] == "wands") { // categorical variance
         let responseMessage = this._makeWandsMsg(info_object["op"], 
@@ -191,43 +190,65 @@
                                               info_object["var"], 
                                               info_object["cat_col"],
                                               info_object["rank"],
-                                              info_object["total"]);
+                                              info_object["total"], note_count);
         let msg : string = (responseMessage[0] as HTMLDivElement).outerHTML;
         let payload = responseMessage[1]
         var cell_id = info_object["info"]["cell"]
         this.appendMsg(cell_id, kernel_id, msg, payload);
+        note_count += 1
       }
       if (info_object["type"] == "cups") {// correlation
         let responseMessage = this._makeCupsMsg(info_object["col_a"], info_object["col_b"],
-                                             info_object["strength"], info_object["rank"]);
+                                             info_object["strength"], info_object["rank"], note_count);
         let msg : string = (responseMessage[0] as HTMLDivElement).outerHTML;
         let payload = responseMessage[1]
         var cell_id = info_object["info"]["cell"]
         var kernel_id = info_object["kernel_id"]
         this.appendMsg(cell_id, kernel_id, msg, payload);
+        note_count += 1
       }
       if (info_object["type"] == "pentacles") { // extreme values
         let responseMessage = this._makePentaclesMsg(info_object["col"],
                                                   info_object["strength"],
                                                   info_object["element"],
-                                                  info_object["rank"]);
+                                                  info_object["rank"], note_count);
         let msg : string = (responseMessage[0] as HTMLDivElement).outerHTML;
         let payload = responseMessage[1]
         var cell_id = info_object["info"]["cell"]
         var kernel_id = info_object["kernel_id"]
         this.appendMsg(cell_id, kernel_id, msg, payload);
+        note_count += 1
       }
       if (info_object["type"] == "swords") { // undefined
-        // let msg : string = this._makeSwordsMsg(info_object["col"], info_object["strength"],
-        //                                        info_object["rank"]).outerHTML;
-        let responseMessage = this._makeSwordsMsg(info_object["col"], info_object["strength"], info_object["rank"]);
+        let responseMessage = this._makeSwordsMsg(info_object["col"], info_object["strength"], info_object["rank"], note_count);
         let msg : string = (responseMessage[0] as HTMLDivElement).outerHTML;
         let payload = responseMessage[1]
         var cell_id = info_object["info"]["cell"]
         var kernel_id = info_object["kernel_id"]
         this.appendMsg(cell_id, kernel_id, msg, payload);
+        note_count += 1
       }
+      global_notification_count += 1
     } 
+
+    private _handleProxies(proxies : { [ key: string ] : any }[], note_count : number) {
+      var d : { [key : string ] : {[key: string] : string[]} } = {};
+      for(var x = 0; x < proxies.length; x++) {
+        var p : any = proxies[x];
+        if(!(p["df"] in d)) d[p["df"]] = {"proxy_col_name": [], "sensitive_col_name": [], "p_vals": []};
+        d[p["df"]]["proxy_col_name"].push(p["proxy_col_name"]);
+        d[p["df"]]["sensitive_col_name"].push(p["sensitive_col_name"]);
+        d[p["df"]]["p_vals"].push(p["p"]);
+      }
+      var message = this._makeProxyMsg(d, note_count);
+      var stringHTML : string = (message[0] as HTMLDivElement).outerHTML;
+      var object : object = message[1];
+      var noticeResponse = [stringHTML, object];
+      if(noticeResponse == undefined) return
+      let msg : string = noticeResponse[0] as string
+      let popupContent : object = noticeResponse[1] as object
+      if (msg) { this.appendMsg(proxies[0]["cell_id"], proxies[0]["kernel_id"], msg, popupContent); }
+    }
 
   
     private _makeContainer(df_name? : string)  : [HTMLDivElement, HTMLDivElement] {
@@ -246,7 +267,7 @@
     }
    
     private _makeWandsMsg(op : string, num_col : string, variance : string, 
-                          cat_col : string, rank : number, total : number) {
+                          cat_col : string, rank : number, total : number, note_count : number) {
       let var_line_1 = document.createElement("p");
       let var_line_2 = document.createElement("p");
       let var_line_3 = document.createElement("p");
@@ -273,12 +294,13 @@
       var payload : object = {
         "title": "Wands Message",
         "htmlContent": $.parseHTML("<p>Testing...</p>"),
+        "typeOfNote": `wands-${global_notification_count}-${note_count}`
       }
 
       return new Array(body, payload);     
     }
   
-    private _makeCupsMsg(col_a : string, col_b : string, strength : string, rank : number) {
+    private _makeCupsMsg(col_a : string, col_b : string, strength : string, rank : number, note_count : number) {
   
       let var_line_1 = document.createElement("p");
       let var_line_2 = document.createElement("p");
@@ -305,13 +327,14 @@
       var payload : object =  {
         "title": "Cups Message",
         "htmlContent": $.parseHTML("<p>Testing...</p>"),
+        "typeOfNote": `cups-${global_notification_count}-${note_count}`
       }
 
       return new Array(body, payload)    
     }
   
     private _makePentaclesMsg(col : string, strength : string, 
-                              element : string, rank : number) {
+                              element : string, rank : number, note_count : number) {
   
       let var_line_1 = document.createElement("p");
       let var_line_2 = document.createElement("p");
@@ -338,12 +361,13 @@
       var payload : object =  {
         "title": "Pentacles Message",
         "htmlContent": $.parseHTML("<p>Testing...</p>"),
+        "typeOfNote": `pentacles-${global_notification_count}-${note_count}`
       }
 
       return new Array(body, payload)  
     }
   
-    private _makeSwordsMsg(col : string, strength : string, rank : number) {
+    private _makeSwordsMsg(col : string, strength : string, rank : number, note_count : number) {
   
       let var_line_1 = document.createElement("p");
       let var_line_2 = document.createElement("p");
@@ -365,11 +389,12 @@
       var payload : object =  {
         "title": "Swords Message",
         "htmlContent": $.parseHTML("<p>Testing...</p>"),
+        "typeOfNote": `swords-${global_notification_count}-${note_count}`
       }
 
       return new Array(body, payload) 
     }
-    private _makeResembleMsg(df_name : string, col_name : string) {
+    private _makeResembleMsg(df_name : string, col_name : string, note_count : number) {
   
       let var_line_1 = document.createElement("p");
       let var_line_2 = document.createElement("p");
@@ -388,12 +413,13 @@
       var payload : object =  {
         "title": "Resemble Message",
         "htmlContent": $.parseHTML("<p>Testing...</p>"),
+        "typeOfNote": `resemble-${global_notification_count}-${note_count}`
       }
 
       return new Array(body, payload)    
     }   
   
-    private _makeVarMsg(zip1 : string, zip2 : string, demo : any) {
+    private _makeVarMsg(zip1 : string, zip2 : string, demo : any, note_count : number) {
   
       let var_line_1 = document.createElement("p");
       let var_line_2 = document.createElement("p");
@@ -411,11 +437,12 @@
       var payload : object =  {
         "title": "Var Message",
         "htmlContent": $.parseHTML("<p>Testing...</p>"),
+        "typeOfNote": `var-${global_notification_count}-${note_count}`
       }
 
       return new Array(body, payload) 
     }
-    private _makeOutliersMsg(col_name : string, value : number, std_dev : number, df_name :string) {
+    private _makeOutliersMsg(col_name : string, value : number, std_dev : number, df_name : string, note_count : number) {
   
       let var_line_1 = document.createElement("p");
       let var_line_2 = document.createElement("p");
@@ -433,11 +460,12 @@
       var payload : object =  {
         "title": "Wands Message",
         "htmlContent": $.parseHTML("<p>Testing...</p>"),
+        "typeOfNote": `outliers-${global_notification_count}-${note_count}`
       }
 
       return new Array(body, payload) 
     }
-    private _makeEqOddsMsg(notice : any) {
+    private _makeEqOddsMsg(notice : any, note_count : number) {
       let msg_l1 = document.createElement("p");
       if (notice["eq"] == "fpr") {
         msg_l1.innerHTML = "Applying a false positive rate equalization to ";
@@ -476,27 +504,72 @@
       var payload : object =  {
         "title": "Equalized Odds Message",
         "htmlContent": $.parseHTML("<p>Testing...</p>"),
+        "typeOfNote": `equalized-${global_notification_count}-${note_count}`
       }
 
       return new Array(body, payload) 
     }
-    private _makeProxyMsg(notice : any) {
-      let msg_l1 = document.createElement("p");
-      msg_l1.innerHTML = "The column "+notice["proxy_col_name"]+" in dataframe "+notice["df_name"]+" may be predictive of "+notice["sensitive_col_name"];
+    private _makeProxyMsg(d : any, note_count : number) {
+      var ul_container = document.createElement("div")
+      for (let df_name in d) {
+        var label = document.createElement("h3")
+        label.innerHTML = `Within ${df_name}`
+        ul_container.appendChild(label)
+        var df  = d[df_name];
+        let ul = document.createElement("ul");
+        for(var x = 0; x < df["proxy_col_name"].length; x++) {
+          var li = document.createElement("li");
+          li.innerHTML = `Column ${df["proxy_col_name"][x]} may be predictive of ${df["sensitive_col_name"][x]}`
+          ul.appendChild(li);
+         };
+         ul_container.appendChild(ul)
+      }
   
       var [body, area] = this._makeContainer();
-      area.appendChild(msg_l1);
+      area.appendChild(ul_container);
 
+      // Expanded view content
+      
+      var container = $.parseHTML("<div class=\"promptMl proxyColumn\" style=\"padding: 15px; overflow: scroll;\"><h1>Proxy Columns</h1><ul></ul></div>")
+      $(container).find("ul").append($.parseHTML(`
+      <li>Certain variables in this notebook may encode or have strong correlations with sensitive variables. In some cases, the use of these correlated variables may produce outcomes that are biased. This bias may be undesirable, unethical and in some cases illegal. <a style=\"color: blue; text-decoration; underline\" target=\"_blank\" href=\"PLACEHOLDER\">(Read More)</a></li>
+      `))
+      $(container).find("ul").append($.parseHTML(`
+      <li>This plugin has detected the presence of certain columns in this notebook that may be correlated with sensitive variables. In some instances, this correlation was detected by computing the correlation between the sensitive column and the candidate proxy column. 
+        <ul>
+          <li>A column may also be correlated with a sensitive variable that is not contained in the data. This plugin also notes when a column may encode data that is known to correlate with a sensitive variable that is not present in the dataset. </li>
+        </ul>
+      </li>
+      `))
+      $(container).find("ul").append($.parseHTML(`
+      <li>The correlations found or suggested here may or may not be meaningful. There also may be situation-specific correlations that are not detected by this plugin. </li>
+      `))
+      for (let df_name in d) {
+        var label = document.createElement("h3")
+        label.innerHTML = `Within <strong>${df_name}</strong>`
+        $(container).append(label)
+        var df  = d[df_name];
+        let ul = document.createElement("ul");
+        for(var x = 0; x < df["proxy_col_name"].length; x++) {
+          var li = document.createElement("li");
+          li.innerHTML = `Column <strong>${df["proxy_col_name"][x]}</strong> ${(df["p_vals"][x] < 0.001) ? "is strongly correlated with" : "may be predictive of"} <strong>${df["sensitive_col_name"][x]}</strong>.` // Rounds to the third decimal place
+          ul.appendChild(li);
+         };
+         $(container).append(ul)
+      }
+      // Make payload
       var title = "Proxy Column";
       $(body).find(".essential h1").text(title);
       var payload : object =  {
         "title": "Proxy Message",
-        "htmlContent": $.parseHTML("<p>Testing...</p>"),
+        "htmlContent": container,
+        "typeOfNote": `proxy-${global_notification_count}-${note_count}`
       }
 
       return new Array(body, payload) 
     }
-    private _makePerformanceMsg(notice : any) {
+
+    private _makePerformanceMsg(notice : any, note_count : number) {
   
       let msg_l1 = document.createElement("p");
       msg_l1.innerHTML = "The model "+notice["model_name"]+" has a training accuracy of "+notice["acc"];
@@ -565,6 +638,77 @@
       var payload : object =  {
         "title": "Performance Message",
         "htmlContent": $.parseHTML("<p>Testing...</p>"),
+        "typeOfNote": `performance-${global_notification_count}-${note_count}`
+      }
+
+      return new Array(body, payload) 
+    }
+
+    private _makeMissingMsg(notice : { [key : string] : { [ key : string ] : any } }, note_count : number ) {
+      // Create container for the small-view content
+      let msg_l1 = document.createElement("div");
+      // Create the container for the expanded-view content
+      var moreInfoContent = $.parseHTML("<div class=\"promptMl missing\" style=\"padding: 15px; overflow: scroll;\"><h1>Missing Data</h1><ul></ul></div>")
+      $(moreInfoContent).find("ul").append($.parseHTML(`
+        <li>There are a number of reasons why data may be missing. In some instances, 
+        it may be due to biased collection practices. It may also be missing due to random 
+        error <a href=\"placeholder\"(Read More)</a></li>
+        <li>This plugin cannot detect whether the missing data are missing at random or whether 
+        they are missing due to observed or unobserved variables.</li>
+      `)) // Static content only for now
+      // Iterating over every dataframe
+      for(var df_name in notice["dfs"]) {
+        // Small-view df container
+        msg_l1.appendChild($.parseHTML(`<h3>Within ${df_name}</h3>`)[0])
+        var df = notice["dfs"][df_name]
+        var ul = document.createElement("ul")
+        msg_l1.appendChild(ul)
+        // Expanded-view df container
+        var possible_ul = document.createElement("ul")
+        moreInfoContent[0].appendChild($.parseHTML(`<h3>Within ${df_name}</h3>`)[0])
+        moreInfoContent[0].appendChild(possible_ul)
+        // Iterating over every column
+        for(const col_name_index in df["missing_columns"]) {
+          // Extract information for the small-view content
+          var col_name = df["missing_columns"][col_name_index]
+          var col_count = df[col_name]["number_missing"]
+          var total_length = df[col_name]["total_length"]
+          // Extract the mode (for expanded view)
+          var modes = []
+          for(const key in df[col_name]) {
+            if(key == "total_length" || key == "number_missing") continue
+            else modes.push([key, df[col_name][key]["largest_percent"]])
+          }
+          modes = modes.sort((a : [string, number][][], b : [string, number][][]) => {
+              if (a[1] === b[1]) {
+                  return 0;
+              }
+              else {
+                  return (a[1] > b[1]) ? -1 : 1;
+              }
+          })
+          // Append the small-view information
+          ul.appendChild($.parseHTML(`<li>Column <strong>${col_name}</strong> is missing <strong>${col_count}</strong>/<strong>${total_length}</strong> entries</li>`)[0])
+          // Append the expanded-view information
+          var cor_col = modes[0][0]
+          var percent = df[col_name][cor_col]["largest_percent"]
+          var cor_mode = df[col_name][cor_col]["largest_missing_value"]
+          possible_ul.appendChild($.parseHTML(`<li>Column <strong>${col_name}</strong> is missing <strong>${col_count}</strong>/<strong>${total_length}</strong> entries</li>`)[0])
+          possible_ul.appendChild($.parseHTML(`<ul><li>This occurs most frequently (${percent}%) when ${cor_col} is ${cor_mode}</li></ul>`)[0])
+        }
+      }
+  
+      var [body, area] = this._makeContainer();
+      area.appendChild(msg_l1);
+
+      // Payload
+
+      var title = "Missing Data Note";
+      $(body).find(".essential h1").text(title);
+      var payload : object =  {
+        "title": title,
+        "htmlContent": moreInfoContent,
+        "typeOfNote": `missing-${global_notification_count}-${note_count}`
       }
 
       return new Array(body, payload) 
