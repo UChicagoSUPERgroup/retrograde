@@ -15,7 +15,7 @@ if MODE == "EXP_END":
         "tutorial" : [],
         "null_clean" : [],
         "model" : [],
-        "end" : [ProtectedColumnNote, ProxyColumnNote, OutliersNote, EqualizedOddsNote]
+        "end" : [ProtectedColumnNote, ProxyColumnNote, MissingDataNote, OutliersNote, EqualizedOddsNote]
     }
 
 SLICE_K = 2 # number of error slices to show users for each FPR/FNR

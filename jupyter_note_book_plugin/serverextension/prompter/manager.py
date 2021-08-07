@@ -93,15 +93,18 @@ class AnalysisManager:
         resp = {}
         resp["info"] = {}
         resp["info"]["cell"] = cell_id
-        resp["info"][cell_id] = []
+        resp["info"][cell_id] = {}
         resp["kernel_id"] = kernel_id
 
         for notes in self.notes.values():
             for note in notes:
                 for cell in note.data:
                     if cell not in resp["info"]:
-                        resp["info"][cell] = []
-                    resp["info"][cell].extend(note.data[cell])
+                        resp["info"][cell] = {}
+                    for note_data in note.data[cell]:
+                        if note_data["type"] not in resp["info"][cell]:
+                            resp["info"][cell][note_data["type"]] = []
+                        resp["info"][cell][note_data["type"]].append(note_data)
                     for response in note.data[cell]:
                         self.db.store_response(kernel_id, cell_id, exec_ct, response)
         resp["type"] = "multiple"
