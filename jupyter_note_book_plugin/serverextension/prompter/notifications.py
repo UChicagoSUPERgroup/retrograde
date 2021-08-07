@@ -12,6 +12,7 @@ from pandas.api.types import is_numeric_dtype
 from .storage import load_dfs
 from .string_compare import check_for_protected
 from .sortilege import is_categorical
+from .slice_finder import err_slices
 
 PVAL_CUTOFF = 0.25 # cutoff for thinking that column is a proxy for a sensitive column
 STD_DEV_CUTOFF = 0.1 # cutoff for standard deviation change that triggers difference in OutliersNotes
@@ -601,6 +602,65 @@ class EqualizedOddsNote(Notification):
          
         self.data[cell_id] = live_resps
 
+class ErrorSliceNote(Notification):
+    """
+    A notification that tests to see if any classifier models that have been
+    trained perform particularly poorly (either FPR or FNR) on certain columns
+    
+    The return format is {"type" : "error", "model_name" : <name of model>,
+                          "metric_name" : <"fpr" or "fnr">, "pos_value" : <value treated as +>,
+                          "neg_value" : <value treated as ->, "slice" : [(col_name, value),...],
+                          "metric_in" : <metric within the slice>, "metric_out" : <metric outside the slice>,
+                          "n" : slice size}
+
+    """
+    def __init__(self, db):
+        super().__init__(db)
+        self.candidate_models = {}
+
+    def _get_noted_models(self):
+        notes = [note for note_set in self.data.values() for note in note_set]
+        note_subset = [note for note in notes if note["type"] == "error"]
+        noted_models = [note["model_name"]  for note in note_subset]
+
+        return noted_models
+
+    def check_feasible(self, cell_id, env, dfs, ns):
+
+        poss_models = env.get_models()
+        old_model_names = self._get_noted_models()
+
+        new_models = {model_name : model_info for model_name, model_info in poss_models.items() if model_name not in old_model_names}
+        defined_new_models = check_call_dfs(dfs, ns, new_models)
+
+        self.candidate_models = defined_new_models # note that this has a parent df type 
+
+        return self.candidate_models != {}
+
+    def make_response(self, env, kernel_id, cell_id):
+        
+        for model, model_data in self.candidate_models:
+           
+            pos_val = model_data["model"].classes_[0]
+            neg_val = model_data["model"].classes_[1]
+            true = (model_data["y"] == pos_val)
+            
+            preds = (model_data["model"].predict(model_data["x"]) == pos_val)
+ 
+            # This may not be super efficient, may need to speed up. 
+            slices = err_slices(model_data["x_df"], preds, true) 
+            
+            for slice_data in slices:
+                if cell_id not in self.data:
+                    self.data[cell_id] = []
+                slice_data["model_name"]  = model
+                slice_data["pos_value"] = str(pos_val)
+                slice_data["neg_value"] = str(neg_val)
+                slice_data["type"] = "error"
+                self.data[cell_id].append(slice_data)
+
+    def update(self, env, kernel_id, cell_id, dfs, ns):
+        pass
 def align_index(obj, values, locs):
     """given a list of index values or row indices, get subset of obj's rows"""
     if isinstance(obj, (pd.Series, pd.DataFrame)):
