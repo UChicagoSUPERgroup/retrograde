@@ -5,7 +5,7 @@ if MODE == "EXP_CTS":
     NOTE_RULES = {
         "intro" :[],
         "tutorial" : [ProxyColumnNote],
-        "null_clean" : [ProtectedColumnNote, ProxyColumnNote],
+        "null_clean" : [ProtectedColumnNote],
         "model" : [ErrorSliceNote],
         "end" : []
     }
