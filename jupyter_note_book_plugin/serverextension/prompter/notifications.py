@@ -798,25 +798,32 @@ class ErrorSliceNote(Notification):
         old_model_names = self._get_noted_models()
 
         new_models = {model_name : model_info for model_name, model_info in poss_models.items() if model_name not in old_model_names}
-        defined_new_models = check_call_dfs(dfs, ns, new_models)
+        env.log.debug("[ErrorSliceNote] dfs {0} ns {1}".format(dfs.keys(), ns.keys()))
+
+        defined_new_models = check_call_dfs(dfs, ns, new_models, env)
 
         self.candidate_models = defined_new_models # note that this has a parent df type 
+        env.log.debug(
+            "[ErrorSliceNote] there are {0} new models out of {1} poss_models with {2} old models".format(len(defined_new_models), len(poss_models), len(old_model_names)))
 
         return self.candidate_models != {}
 
     def make_response(self, env, kernel_id, cell_id):
         
-        for model, model_data in self.candidate_models:
-           
+        for model, model_data in self.candidate_models.items():
+
+            env.log.debug("[ErrorSliceNote] Making error slices for {0}".format(model))
+
             pos_val = model_data["model"].classes_[0]
             neg_val = model_data["model"].classes_[1]
             true = (model_data["y"] == pos_val)
             
             preds = (model_data["model"].predict(model_data["x"]) == pos_val)
- 
+
             # This may not be super efficient, may need to speed up. 
-            slices = err_slices(model_data["x_df"], preds, true) 
-            
+        
+            slices = err_slices(model_data["x_parent"], preds, true, env) 
+     
             for slice_data in slices:
                 if cell_id not in self.data:
                     self.data[cell_id] = []
@@ -824,6 +831,10 @@ class ErrorSliceNote(Notification):
                 slice_data["pos_value"] = str(pos_val)
                 slice_data["neg_value"] = str(neg_val)
                 slice_data["type"] = "error"
+                slice_data["slice"] = [(sl[0], str(sl[1])) for sl in slice_data["slice"]]
+                slice_data["n"] = int(slice_data["n"])
+
+                env.log.debug("[ErrorSliceNote] wrote note {0}".format(slice_data))
                 self.data[cell_id].append(slice_data)
 
     def update(self, env, kernel_id, cell_id, dfs, ns):
@@ -935,7 +946,7 @@ def get_cols(df, cols):
             return df[cols[0]]
     return df[cols]
 
-def check_call_dfs(dfs, non_dfs_ns, models):
+def check_call_dfs(dfs, non_dfs_ns, models, env):
     """
     filter models by whether we can find dataframes assassociated with model.fit call 
     """
@@ -943,12 +954,19 @@ def check_call_dfs(dfs, non_dfs_ns, models):
     
     for model_name, model_info in models.items():
 
+        env.log.debug("[check_call_dfs] processing {0}".format(model_name))
+
         features_col_names = model_info.get("x")
         labels_col_names = model_info.get("y")
         
         labels_df_name = model_info.get("y_df") # if none, then cannot proceed
         features_df_name = model_info.get("x_df") # if none, then cannot proceed 
-        
+
+#        env.log.debug("[check_call_dfs] {0}, {1}, {2}, {3}".format(features_col_names, labels_col_names, labels_df_name, features_df_name))
+        env.log.debug("[check_call_dfs] {0} in dfs {1}".format(features_df_name, features_df_name in dfs.keys()))
+        env.log.debug("[check_call_dfs] {0} in dfs {1}".format(labels_df_name, labels_df_name in dfs.keys()))
+        env.log.debug("[check_call_dfs] {0} in non_dfs {1}".format(labels_df_name, labels_df_name in non_dfs_ns.keys()))
+    
         if (features_df_name in dfs.keys()) and\
            ((labels_df_name in dfs.keys()) or labels_df_name in non_dfs_ns.keys()):
 
@@ -970,6 +988,8 @@ def check_call_dfs(dfs, non_dfs_ns, models):
                 "x_parent" : dfs[features_df_name], 
                 "y_parent" : labels_obj 
             } 
+            env.log.debug("[check_call_df] defined model {0}".format(defined_models[model_name]))
+
     return defined_models
 
 def bin_col(col):
