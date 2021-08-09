@@ -14,7 +14,7 @@ from tornado.routing import Rule, PathMatches
 
 from prompter.storage import DbHandler, RemoteDbHandler
 from prompter.analysis import AnalysisEnvironment, run_code, Aliases
-from prompter.visitors import DataFrameVisitor, ModelFitVisitor
+from prompter.visitors import DataFrameVisitor, ModelScoreVisitor
 from prompter.manager import AnalysisManager
 from prompter.forkingkernel import ForkingKernel
 from prompter.config import table_query # necessary for testing

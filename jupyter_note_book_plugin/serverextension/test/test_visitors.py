@@ -73,7 +73,8 @@ class TestModelVisitor(unittest.TestCase):
     def test_simple(self):
         snippet=\
         """lr = LinearRegression()\n"""+\
-        """lr.fit(X, y)"""
+        """lr.fit(X, y)\n"""+\
+        """lr.score(X,y)"""
 
         test_df = pd.DataFrame(
                     {
