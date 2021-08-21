@@ -838,7 +838,40 @@ class ErrorSliceNote(Notification):
                 self.data[cell_id].append(slice_data)
 
     def update(self, env, kernel_id, cell_id, dfs, ns):
-        pass
+        """
+        Checks if to update under these two circumstances:
+        A) A model of <model name> is no longer defined in the notebook (p easy 
+          to check, example in check_feasible)
+        B) Someone may have reformatted the code that scores this model such 
+          that the plugin can no longer figure out what the input data is 
+          (check_call_dfs returns None in some of the fields we need)
+        """
+        new_data = {}
+        # store the valid model names here:
+        poss_models = env.get_models()
+        old_model_names = self._get_noted_models()
+        new_models = {model_name : model_info for model_name, model_info in poss_models.items() if model_name not in old_model_names}
+
+        models_with_dataframes = check_call_dfs(dfs, ns, new_models, env)
+
+        for cell, note_list in self.data.items():
+            new_notes = []
+            for note in note_list:
+                if note["type"] == "error":
+                    # check A) and B) (if false, this note will go missing)
+                    if (note["model_name"] in new_models) and \
+                    (note["model_name"] in models_with_dataframes):
+                        # TODO: redo calculation and add updated 
+                        # note to new notes
+                        pass
+                else:
+                    # the note stays the same
+                    new_notes.append(note)
+        env.log.debug("[ErrorSliceNote] updated responses")
+        self.data = new_data
+            
+
+
 def align_index(obj, values, locs):
     """given a list of index values or row indices, get subset of obj's rows"""
     if isinstance(obj, (pd.Series, pd.DataFrame)):
