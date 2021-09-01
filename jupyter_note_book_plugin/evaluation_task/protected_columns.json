@@ -3,9 +3,25 @@
 		"overview" : "test overview gender",
 		"legal" : "test legal gender"
 	},
+	"sex":{
+		"overview" : "test overview sex",
+		"legal" : "test legal sex"
+	},
+	"pregnancy":{
+		"overview" : "test overview pregnancy",
+		"legal" : "test legal pregrancy"
+	},
 	"race":{
 		"overview" : "test overview race",
 		"legal" : "test legal race"
+	},
+	"color":{
+		"overview" : "test overview color",
+		"legal" : "test legal color"
+	},
+	"nationality":{
+		"overview" : "test overview nationality",
+		"legal" : "test legal nationality"
 	},
 	"age":{
 		"overview" : "test overview age",
@@ -18,5 +34,13 @@
 	"sexual_orientation":{
 		"overview" : "test overview sexual_orientation", 
 		"legal" : "test legal sexual_orientation"
+	},
+	"disability":{
+		"overview" : "test overview disability",
+		"legal" : "test legal disability"
+	},
+	"genetic_information":{
+		"overview" : "test overview genetic_information",
+		"legal" : "test legal genetic_information"
 	}
 }
