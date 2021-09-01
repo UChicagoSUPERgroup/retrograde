@@ -16,6 +16,10 @@ def check_for_protected(column_names):
         results.extend(next_results)
     return results
 
+def guess_protected(dataframe):
+    
+    pass
+
 def _get_protected():
     '''read in the protected values corpus'''
     protected_values = {}
