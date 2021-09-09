@@ -6,6 +6,8 @@ PROTECTED_PROXY_MATCH_THRESHOLD = 80
 PATH_PROTECTED_JSON = './protected_columns.json'
 PATH_PROTECTED_JSON_FULL = 'evaluation_task/build/protected_columns.json'
 
+PATTERN_THRESHOLD = 0.8
+
 
 def check_for_protected(column_names):
     '''check to see if a list of column names contains any protected groups'''
@@ -17,8 +19,32 @@ def check_for_protected(column_names):
     return results
 
 def guess_protected(dataframe):
-    
-    pass
+    for column in dataframe:
+        """
+        using: https://www.kite.com/python/answers/how-to-count-the-elements-of-a-pandas-dataframe-where-a-condition-is-true-in-python
+        
+        Gender/sex: check if column matches threshold for: 
+            male, female, m, f, man, woman, boy, girl, non-binary, nb
+        Race/color: check if column matches threshold for:
+            black, white, red, yellow, brown, african, asian, caucasian, 
+            indigenous, native, hispanic
+        Religion: check if column matches threshold for:
+            christianity, christian, islam, muslim, judaism, jewish, buddhism, 
+            buddhist, hinduism, hindu, atheist, agnostic, non-believer
+        Age: check if column matches threshold for:
+            integer between 1 and 122
+        Sexual orientation: check if column matches threhold for:
+            gay, straight, pansexual, pan, bisexual, bi, heterosexual, 
+            homosexual, ace, asexual, allosexual, alloromantic, aromantic,
+            aro, questioning, lesbian
+        
+        Nationality: TODO can we import a list of nationalities?
+        Disability: TODO can we import a list of disabilities?
+        Genetic information: TODO can we import a list of genetic diseases?
+
+        Pregnancy: none
+        """
+        pass
 
 def _get_protected():
     '''read in the protected values corpus'''
