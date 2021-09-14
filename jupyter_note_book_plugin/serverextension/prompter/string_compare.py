@@ -1,6 +1,9 @@
 import json
 from fuzzywuzzy import fuzz
 
+import pandas as pd
+from pandas.api.types import is_numeric_dtype
+
 PROTECTED_MATCH_THRESHOLD = 90
 PROTECTED_PROXY_MATCH_THRESHOLD = 80
 PATH_PROTECTED_JSON = './protected_columns.json'
@@ -56,8 +59,8 @@ def guess_protected(dataframe):
             level_match = _string_column_vs_list(dataframe, column, words, 
                                                  PROTECTED_MATCH_THRESHOLD)
             if level_match >= COLUMN_PATTERN_THRESHOLD:
-                results.add(level_match)
-        
+                results.add(column)
+
         # race/color
         for column in dataframe:
             words = ['black', 'white', 'red', 'yellow', 'brown', 'african', 
@@ -66,7 +69,7 @@ def guess_protected(dataframe):
             level_match = _string_column_vs_list(dataframe, column, words, 
                                                  PROTECTED_MATCH_THRESHOLD)
             if level_match >= COLUMN_PATTERN_THRESHOLD:
-                results.add(level_match)
+                results.add(column)
 
         # religion
         for column in dataframe:
@@ -76,10 +79,19 @@ def guess_protected(dataframe):
             level_match = _string_column_vs_list(dataframe, column, words, 
                                                  PROTECTED_MATCH_THRESHOLD)
             if level_match >= COLUMN_PATTERN_THRESHOLD:
-                results.add(level_match)
+                results.add(column)
 
         # age
-        # TODO
+        for column in dataframe:
+            if not is_numeric_dtype(dataframe[column]):
+                continue
+            count = 0
+            for index, row in dataframe.iterrows():
+                if _is_integer(row[column]) and (row[column] <= 125 and row[column] <= 1):
+                    count += 1
+            level_match = float(count) / dataframe.shape[0]
+            if level_match >= COLUMN_PATTERN_THRESHOLD:
+                results.add(column)
 
         # sexual orientation
         for column in dataframe:
@@ -90,7 +102,10 @@ def guess_protected(dataframe):
             level_match = _string_column_vs_list(dataframe, column, words, 
                                                  PROTECTED_MATCH_THRESHOLD)
             if level_match >= COLUMN_PATTERN_THRESHOLD:
-                results.add(level_match)
+                results.add(column)
+    
+        # now we have a set of potentially sensitive columns
+        # NOTE we haven't recorded why they were flagged as such
         return list(results)
 
 def _get_protected():
@@ -131,8 +146,17 @@ def _match_any_string(string, words, threshold):
 # the 'words' list
 def _string_column_vs_list(dataframe, colname, words, threshold):
     count = 0
-    for row in dataframe.iterrows():
+    for index, row in dataframe.iterrows():
         didmatch = _match_any_string(str(row[colname]), words, threshold)
         if didmatch['match']:
             count += 1
     return float(count) / dataframe.shape[0]
+
+# checks if a number is an integer
+def _is_integer(n):
+    try:
+        float(n)
+    except ValueError:
+        return False
+    else:
+        return float(n).is_integer()
