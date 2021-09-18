@@ -1,4 +1,5 @@
 import json
+from os import name
 from random import choice
 
 import pandas as pd
@@ -13,7 +14,7 @@ from aif360.sklearn.postprocessing import CalibratedEqualizedOdds, PostProcessin
 from pandas.api.types import is_numeric_dtype
 
 from .storage import load_dfs
-from .string_compare import check_for_protected
+from .string_compare import check_for_protected, guess_protected
 from .sortilege import is_categorical
 
 import json # REMOVE BEFORE PUSHING
@@ -86,10 +87,17 @@ class ProtectedColumnNote(Notification):
             if df_name not in self.df_protected_cols:
                 df_cols[df_name] = [col for col in df.columns] 
 
+        # columns by name
         for df_name, cols in df_cols.items():
-
             protected_columns = check_for_protected(cols)
             self.df_protected_cols[df_name] = protected_columns
+
+        # update with guesses
+        for df_name, df in dfs.items():
+            guessed_columns = guess_protected(df)
+            named_columns = self.df_protected_cols[df_name]
+            self.df_protected_cols[df_name] = list(set(guessed_columns + named_columns))
+        # this approach weights the two methods equally
 
         if df_cols:
             return True

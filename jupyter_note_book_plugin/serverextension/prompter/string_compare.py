@@ -6,10 +6,12 @@ from pandas.api.types import is_numeric_dtype
 
 PROTECTED_MATCH_THRESHOLD = 90
 PROTECTED_PROXY_MATCH_THRESHOLD = 80
+NATIONALITY_THRESHOLD = 51
+COLUMN_PATTERN_THRESHOLD = 0.8
 PATH_PROTECTED_JSON = './protected_columns.json'
 PATH_PROTECTED_JSON_FULL = 'evaluation_task/build/protected_columns.json'
-
-COLUMN_PATTERN_THRESHOLD = 0.8
+PATH_NATIONALITIES = './nationalities.txt'
+PATH_NATIONALITIES_FULL = 'evaluation_task/build/nationalities.txt'
 
 
 def check_for_protected(column_names):
@@ -40,10 +42,10 @@ def guess_protected(dataframe):
             gay, straight, pansexual, pan, bisexual, bi, heterosexual, 
             homosexual, ace, asexual, allosexual, alloromantic, aromantic,
             aro, questioning, lesbian
-        
-        Nationality: TODO can we import a list of nationalities?
-        Disability: TODO can we import a list of disabilities?
-        Genetic information: TODO can we import a list of genetic diseases?
+        Nationality: Import from World Bank databank, then repeat the above
+
+        Disability: TODO too nuanced to be worth it
+        Genetic information: TODO too nuanced to be worth it
 
         Pregnancy: none
         """
@@ -99,8 +101,21 @@ def guess_protected(dataframe):
                      'heterosexual', 'homosexual', 'ace', 'asexual', 
                      'allosexual', 'alloromantic', 'aromantic', 'aro', 
                      'questioning', 'lesbian']
-            level_match = _string_column_vs_list(dataframe, column, words, 
+            level_match = _string_column_vs_list(dataframe, column, words,
                                                  PROTECTED_MATCH_THRESHOLD)
+            if level_match >= COLUMN_PATTERN_THRESHOLD:
+                results.add(column)
+
+        # nationality
+        for column in dataframe:
+            nationality_file = None
+            try:
+                nationality_file = open(PATH_NATIONALITIES)
+            except FileNotFoundError:
+                nationality_file = open(PATH_NATIONALITIES_FULL)
+            words = nationality_file.readlines()
+            level_match = _string_column_vs_list(dataframe, column, words, 
+                                                 NATIONALITY_THRESHOLD)
             if level_match >= COLUMN_PATTERN_THRESHOLD:
                 results.add(column)
     
