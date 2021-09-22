@@ -6,7 +6,7 @@ from pandas.api.types import is_numeric_dtype
 
 PROTECTED_MATCH_THRESHOLD = 90
 PROTECTED_PROXY_MATCH_THRESHOLD = 80
-NATIONALITY_THRESHOLD = 51
+NATIONALITY_THRESHOLD = 30
 COLUMN_PATTERN_THRESHOLD = 0.8
 PATH_PROTECTED_JSON = './protected_columns.json'
 PATH_PROTECTED_JSON_FULL = 'evaluation_task/build/protected_columns.json'
