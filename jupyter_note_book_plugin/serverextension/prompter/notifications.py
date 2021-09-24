@@ -868,12 +868,33 @@ class ErrorSliceNote(Notification):
                     # check A) and B) (if false, this note will go missing)
                     if (note["model_name"] in new_models) and \
                     (note["model_name"] in models_with_dataframes):
-                        # TODO: redo calculation and add updated 
+                        # redo calculation and add updated 
                         # note to new notes
-                        pass
+
+                        # copied-ish from make_response
+                        this_model = models_with_dataframes[note["model_name"]]
+
+                        pos_val = this_model["model"].classes_[0]
+                        neg_val = this_model["model"].classes_[1]
+                        true = (this_model["y"] == pos_val)
+                        preds = (this_model["model"].predict(this_model["x"]) == pos_val)
+
+                        slices = err_slices(this_model["x_parent"], preds, true, env) 
+
+                        # will return multiple ErrorSliceNotes, but the front-end needs
+                        # to display these as one
+                        for slice_data in slices:
+                            slice_data["model_name"]  = note["model_name"]
+                            slice_data["pos_value"] = str(pos_val)
+                            slice_data["neg_value"] = str(neg_val)
+                            slice_data["type"] = "error"
+                            slice_data["slice"] = [(sl[0], str(sl[1])) for sl in slice_data["slice"]]
+                            slice_data["n"] = int(slice_data["n"])
+                            new_notes.append(slice_data)
                 else:
                     # the note stays the same
                     new_notes.append(note)
+            new_data[cell] = new_notes
         env.log.debug("[ErrorSliceNote] updated responses")
         # self.data = new_data # removed until update is processed, as this overwrites notes.
             
