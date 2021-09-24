@@ -665,52 +665,115 @@
     // }
   private _makeErrorMessage(notices : { [key : string] : any }[], note_count : number ) {
     // Making expanded view container
-    var errorsString = $.parseHTML("<div class='errors'><h2>Errors Note</h2><ul class='model_list'></ul></div>")
-    // Adding dynamic content
-    var models : { [key : string ] : any }= {}
+    var errorsString = $.parseHTML(`
+      <div class='errors'>
+        <h2>Errors Note</h2>
+        <ul class='model_list'></ul>
+      </div>
+      `);
+    // Consolidating the notes sent to the frontend into a usable dictionary
+    // The received data is a list of individual objects, with formats such as
+    // {
+    //    metric_in: 0.5555555555555556,
+    //    metric_name: "fpr",
+    //    metric_out: 0.38461538461538464,
+    //    model_name: "dt",
+    //    n: 21,
+    //    neg_value: "True",
+    //    pos_value: "False",
+    //    slice: {
+    //      ['interest', '(7.22, 9.557]'],
+    //      ['type_home', '0']
+    //    }
+    // }
+    // However, the final list of sorted first by models and then by metrics. Therefore,
+    // we want a format more similar to 
+    // {
+    //   "lr": {
+    //      "fpr": [
+    //        "metric_in": ...,
+    //        ...
+    //       ],
+    //      "fnr": [
+    //        "metric_in": ...,
+    //        ...
+    //      ]
+    //   },
+    //   (other models)
+    // }
+    var models : { [key : string ] : any } = {};
     for(var x = 0; x < notices.length; x++) {
       var notice = notices[x]
-      if(!(notice["model_name"] in models)) models[notice["model_name"]] = []
-      models[notice["model_name"]].push({
+      if(!(notice["model_name"] in models)) models[notice["model_name"]] = {
+        "fpr": [],
+        "fnr": []
+      };
+      models[notice["model_name"]][notice["metric_name"]].push({
         "slice": notice["slice"],
         "count": notice["n"],
-      })
+        "metric_in": notice["metric_in"],
+        "metric_out": notice["metric_out"],
+        "pos_value": notice["pos_value"],
+        "neg_value": notice["neg_value"],
+      });
     }
+    // Generating the dynamic content
     for(var model_name in models) {
-      var model = models[model_name]
-      var slices_string = ""
-      for(var x = 0; x < model.length; x++) {
-        console.log(model)
-        console.log(model[x])
-        slices_string += "<li>"
-        for(var y = 0; y < model[x]["slice"].length; y++) {
-          slices_string += `${model[x]["slice"][y][0]}: ${model[x]["slice"][y][1]}`
-          if(y != model[x]["slice"].length - 1) slices_string += ", "
-        }
-        slices_string += "</li>"
-      }
+      var model_notes = models[model_name];
+      var fprString = this._makeErrorNoteLists(model_notes["fpr"], `Assuming ${model_notes["fpr"][0]["pos_value"]} given the true value of ${model_notes["fpr"][0]["neg_value"]}`);
+      var fnrString = this._makeErrorNoteLists(model_notes["fnr"], `Assuming ${model_notes["fnr"][0]["neg_value"]} given the true value of ${model_notes["fnr"][0]["neg_value"]}`);
       $(errorsString).find(".model_list").append($.parseHTML(`
-        <li><strong>${model_name}</strong> makes mistakes most frequently in:</li>
-        <ul>${slices_string}</ul>
-      `))
+      <li>In the model ${model_name}, there was an unusually high probability of:
+        <ul>
+          <li>${fprString}</li>
+          <li>${fnrString}</li> 
+        </ul>
+      </li>`));
     }
     // Adding static content; creating response object
     var body = this._makeContainer();
     var title = "Errors";
     $(body).find(".essential h1").text(title);
     var payload : object =  {
-      "title": "Outliers",
+      "title": "Errors",
       "htmlContent": errorsString,
       "typeOfNote": `outliers-${global_notification_count}-${note_count}`
-    }
+    };
     // Handling notification attachment
-    var message = new Array(body, payload)
+    var message = new Array(body, payload);
     var stringHTML : string = (message[0] as HTMLDivElement).outerHTML;
     var object : object = message[1];
     var noticeResponse = [stringHTML, object];
-    if(noticeResponse == undefined) return
-    let msg : string = noticeResponse[0] as string
-    let popupContent : object = noticeResponse[1] as object
+    if(noticeResponse == undefined) return;
+    let msg : string = noticeResponse[0] as string;
+    let popupContent : object = noticeResponse[1] as object;
     if (msg) { this.appendMsg(notices[0]["cell_id"], notices[0]["kernel_id"], msg, popupContent); }
   }
+
+  // Takes in a list of slice objects with metric / positive value / negative value information
+  private _makeErrorNoteLists(segments : { [key : string ] : any }[], metricName : string) {
+    // Creating an HTML string that visually represents the object created at the beginning
+    // of _makeErrorMessages. The data that is passed in is the list of objects (accessible
+    // through the "fnr" / "fpr" of the models object)
+    var returnString = metricName;
+    returnString += "<ul>";
+    for(var x = 0; x < segments.length; x++) {
+      var sliceString = "<li>";
+      // Slices are represented as an array, so we iterate over them to combine into a single string
+      for(var y = 0; y < segments[x]["slice"].length; y++) {
+        sliceString += `${segments[x]["slice"][y][0]}: ${segments[x]["slice"][y][1]}`;
+        if(y != segments[x]["slice"].length - 1) sliceString += ", ";
+      }
+      sliceString += `
+      <ul>
+        <li>Slice size was ${segments[x]["count"]}. The outside metric is ${Math.floor(segments[x]["metric_out"] * 100) / 100}. The inside metric is ${Math.floor(100 * segments[x]["metric_in"]) / 100}.</li>
+      </ul>
+      `;
+      sliceString += "</li>";
+      returnString += sliceString;
+    }
+    returnString += "</ul>";
+    return returnString;
+  }
+
 }
