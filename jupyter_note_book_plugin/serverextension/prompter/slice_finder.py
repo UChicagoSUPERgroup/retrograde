@@ -89,10 +89,13 @@ def pre_process_df(raw_df):
     new_cols = {}
 
     for col in raw_df.columns:
-        if is_categorical(raw_df[col]):
-            new_cols[col] = raw_df[col]
-        elif is_numeric_dtype(raw_df[col]):
-            new_cols[col] = pd.cut(raw_df[col], bins=10)
+        col_in_raw_df = raw_df[col]
+        if isinstance(col_in_raw_df, pd.DataFrame):
+            col_in_raw_df = col_in_raw_df.iloc[:, 0]
+        if is_categorical(col_in_raw_df):
+            new_cols[col] = col_in_raw_df
+        elif is_numeric_dtype(col_in_raw_df):
+            new_cols[col] = pd.cut(col_in_raw_df, bins=10)
         else:
             # column is not numeric, but has high entropy
             old_values = raw_df[col].value_counts(sort=True)

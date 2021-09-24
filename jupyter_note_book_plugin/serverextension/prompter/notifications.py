@@ -115,9 +115,10 @@ class ProtectedColumnNote(Notification):
             if df_name not in noted_dfs:
 
                 resp = self._make_resp_entry(df_name)
-                if cell_id not in self.data:
-                    self.data[cell_id] = []
-                self.data[cell_id].append(resp)
+                if len(resp["col"]) > 0: # Prevents notes where there are no columns
+                    if cell_id not in self.data:
+                        self.data[cell_id] = []
+                    self.data[cell_id].append(resp)
 
     def _make_resp_entry(self, df_name):
 
@@ -519,7 +520,11 @@ class OutliersNote(Notification):
 
         resp.update(outlier_cols[0])
  
-        self.data[cell_id] = [resp]
+        if cell_id in self.data:
+            self.data[cell_id].append(resp)
+        else:
+            self.data[cell_id] = [resp]
+        # self.data[cell_id] = [resp] # I believe this was overwriting other notes
 
     def _compute_outliers(self, df, col_name):
         # pylint: disable=no-self-use 
@@ -553,6 +558,7 @@ class OutliersNote(Notification):
             if abs(new_std_dev - std_dev)/std_dev >= STD_DEV_CUTOFF:
                 continue
             live_notes.append({
+                "type": "outliers",
                 "df_name" : df_name,
                 "col_name" : col_name,
                 "std_dev" : new_std_dev,
@@ -818,7 +824,8 @@ class ErrorSliceNote(Notification):
             neg_val = model_data["model"].classes_[1]
             true = (model_data["y"] == pos_val)
             
-            preds = (model_data["model"].predict(model_data["x"]) == pos_val)
+            predictions = model_data["model"].predict(model_data["x_parent"])
+            preds = ( predictions == pos_val)
 
             # This may not be super efficient, may need to speed up. 
         
@@ -889,7 +896,7 @@ class ErrorSliceNote(Notification):
                     new_notes.append(note)
             new_data[cell] = new_notes
         env.log.debug("[ErrorSliceNote] updated responses")
-        self.data = new_data
+        # self.data = new_data # removed until update is processed, as this overwrites notes.
             
 
 
