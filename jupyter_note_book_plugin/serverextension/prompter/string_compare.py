@@ -1,5 +1,6 @@
 import json
 from fuzzywuzzy import fuzz
+from sys import stderr
 
 import pandas as pd
 from pandas.api.types import is_numeric_dtype
@@ -54,20 +55,33 @@ def guess_protected(dataframe):
         # protected, so we should use a set to 
         results = set()
 
-        # gender/sex
+        # gender
         for column in dataframe:
-            words = ['male', 'female', 'm', 'f', 'man', 'woman', 'boy', 'girl', 
-                     'non-binary', 'nb']
+            words = _get_dictioanry('gender')
             level_match = _string_column_vs_list(dataframe, column, words, 
                                                  PROTECTED_MATCH_THRESHOLD)
             if level_match >= COLUMN_PATTERN_THRESHOLD:
                 results.add(column)
 
-        # race/color
+        # sex
         for column in dataframe:
-            words = ['black', 'white', 'red', 'yellow', 'brown', 'african', 
-                     'asian', 'caucasian', 'indigenous', 'native', 'hispanic', 
-                     'pacific islander']
+            words = _get_dictioanry('sex')
+            level_match = _string_column_vs_list(dataframe, column, words, 
+                                                 PROTECTED_MATCH_THRESHOLD)
+            if level_match >= COLUMN_PATTERN_THRESHOLD:
+                results.add(column)
+
+        # race
+        for column in dataframe:
+            words = _get_dictioanry('race')
+            level_match = _string_column_vs_list(dataframe, column, words, 
+                                                 PROTECTED_MATCH_THRESHOLD)
+            if level_match >= COLUMN_PATTERN_THRESHOLD:
+                results.add(column)
+
+        # color
+        for column in dataframe:
+            words = _get_dictioanry('color')
             level_match = _string_column_vs_list(dataframe, column, words, 
                                                  PROTECTED_MATCH_THRESHOLD)
             if level_match >= COLUMN_PATTERN_THRESHOLD:
@@ -75,9 +89,7 @@ def guess_protected(dataframe):
 
         # religion
         for column in dataframe:
-            words = ['christianity', 'christian', 'islam', 'muslim', 'judaism', 
-                     'jewish', 'buddhism', 'buddhist', 'hinduism', 'hindu', 
-                     'atheist', 'agnostic', 'non-believer', 'folk', 'none']
+            words = _get_dictioanry('religion')
             level_match = _string_column_vs_list(dataframe, column, words, 
                                                  PROTECTED_MATCH_THRESHOLD)
             if level_match >= COLUMN_PATTERN_THRESHOLD:
@@ -97,10 +109,7 @@ def guess_protected(dataframe):
 
         # sexual orientation
         for column in dataframe:
-            words = ['gay', 'straight', 'pansexual', 'pan', 'bisexual', 'bi', 
-                     'heterosexual', 'homosexual', 'ace', 'asexual', 
-                     'allosexual', 'alloromantic', 'aromantic', 'aro', 
-                     'questioning', 'lesbian']
+            words = _get_dictioanry('sexual_orientation')
             level_match = _string_column_vs_list(dataframe, column, words,
                                                  PROTECTED_MATCH_THRESHOLD)
             if level_match >= COLUMN_PATTERN_THRESHOLD:
@@ -108,12 +117,34 @@ def guess_protected(dataframe):
 
         # nationality
         for column in dataframe:
-            nationality_file = None
-            try:
-                nationality_file = open(PATH_NATIONALITIES)
-            except FileNotFoundError:
-                nationality_file = open(PATH_NATIONALITIES_FULL)
-            words = nationality_file.readlines()
+            words = _get_dictioanry('nationality')
+            level_match = _string_column_vs_list(dataframe, column, words, 
+                                                 NATIONALITY_THRESHOLD)
+            if level_match >= COLUMN_PATTERN_THRESHOLD:
+                results.add(column)
+
+        # NOTE these last ones return empty lists and add nothing to the results
+        # unless protected_columns.json is modified
+
+        # pregnancy
+        for column in dataframe:
+            words = _get_dictioanry('pregnancy')
+            level_match = _string_column_vs_list(dataframe, column, words, 
+                                                 NATIONALITY_THRESHOLD)
+            if level_match >= COLUMN_PATTERN_THRESHOLD:
+                results.add(column)
+
+        # disability
+        for column in dataframe:
+            words = _get_dictioanry('disability')
+            level_match = _string_column_vs_list(dataframe, column, words, 
+                                                 NATIONALITY_THRESHOLD)
+            if level_match >= COLUMN_PATTERN_THRESHOLD:
+                results.add(column)
+
+        # genetic information
+        for column in dataframe:
+            words = _get_dictioanry('genetic_information')
             level_match = _string_column_vs_list(dataframe, column, words, 
                                                  NATIONALITY_THRESHOLD)
             if level_match >= COLUMN_PATTERN_THRESHOLD:
@@ -175,3 +206,27 @@ def _is_integer(n):
         return False
     else:
         return float(n).is_integer()
+
+# get the "dictioanry" from the main
+def _get_dictioanry(protected_class):
+    protected_values = {}
+    try:
+        with open(PATH_PROTECTED_JSON) as f:
+            protected_values = json.load(f)
+    except FileNotFoundError:
+        with open(PATH_PROTECTED_JSON_FULL) as f:
+            protected_values = json.load(f)
+
+    try:
+        if protected_class == 'nationality':
+            nationality_file = None
+            try:
+                nationality_file = open(PATH_NATIONALITIES)
+            except FileNotFoundError:
+                nationality_file = open(PATH_NATIONALITIES_FULL)
+            words = nationality_file.readlines()
+            return words
+        return protected_values[protected_class]['dictionary']
+    except KeyError:
+        print("[ERROR] \"{}\" not a registered protected class in protected_columns.json".format(protected_class), file=stderr)
+        return []

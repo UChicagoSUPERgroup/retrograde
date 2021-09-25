@@ -1,46 +1,64 @@
 {
 	"gender":{
 		"overview" : "test overview gender",
-		"legal" : "test legal gender"
+		"legal" : "test legal gender",
+		"dictionary" : ["male", "female", "m", "f", "man", "woman", "boy", "girl", "non-binary", "nb"]
 	},
 	"sex":{
 		"overview" : "test overview sex",
-		"legal" : "test legal sex"
+		"legal" : "test legal sex",
+		"dictionary" : ["male", "female", "man", "woman", "m", "f"]
 	},
 	"pregnancy":{
 		"overview" : "test overview pregnancy",
-		"legal" : "test legal pregrancy"
+		"legal" : "test legal pregrancy",
+		"dictionary" : []
 	},
 	"race":{
 		"overview" : "test overview race",
-		"legal" : "test legal race"
+		"legal" : "test legal race",
+		"dictionary" : ["black", "white", "red", "yellow", "brown", "african", 
+			"asian", "caucasian", "indigenous", "native", "hispanic", 
+			"pacific islander"]
 	},
 	"color":{
 		"overview" : "test overview color",
-		"legal" : "test legal color"
+		"legal" : "test legal color",
+		"dictionary" : ["black", "white", "red", "yellow", "brown"]
 	},
 	"nationality":{
 		"overview" : "test overview nationality",
-		"legal" : "test legal nationality"
+		"legal" : "test legal nationality",
+		"dictionary" : [],
+		"_comment" : "Please use nationalities.txt"
 	},
 	"age":{
 		"overview" : "test overview age",
-		"legal" : "test legal age"
+		"legal" : "test legal age",
+		"dictionary" : []
 	},
 	"religion":{
 		"overview" : "test overview religion",
-		"legal" : "test legal religion"
+		"legal" : "test legal religion",
+		"dictionary" : ["christianity", "christian", "islam", "muslim", "judaism", 
+			"jewish", "buddhism", "buddhist", "hinduism", "hindu", 
+			"atheist", "agnostic", "non-believer", "folk", "indigenous", "none"]
 	},
 	"sexual_orientation":{
 		"overview" : "test overview sexual_orientation", 
-		"legal" : "test legal sexual_orientation"
+		"legal" : "test legal sexual_orientation",
+		"dictionary" : ["gay", "straight", "pansexual", "pan", "bisexual", "bi", 
+			"heterosexual", "homosexual", "ace", "asexual", "allosexual", "alloromantic", 
+			"aromantic", "aro",	"questioning", "lesbian"]
 	},
 	"disability":{
 		"overview" : "test overview disability",
-		"legal" : "test legal disability"
+		"legal" : "test legal disability",
+		"dictionary" : []
 	},
 	"genetic_information":{
 		"overview" : "test overview genetic_information",
-		"legal" : "test legal genetic_information"
+		"legal" : "test legal genetic_information",
+		"dictionary" : []
 	}
 }
