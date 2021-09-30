@@ -15,6 +15,7 @@ from pandas.api.types import is_numeric_dtype
 from .storage import load_dfs
 from .string_compare import check_for_protected
 from .sortilege import is_categorical
+from .slice_finder import err_slices
 
 import json # REMOVE BEFORE PUSHING
 
@@ -114,9 +115,10 @@ class ProtectedColumnNote(Notification):
             if df_name not in noted_dfs:
 
                 resp = self._make_resp_entry(df_name)
-                if cell_id not in self.data:
-                    self.data[cell_id] = []
-                self.data[cell_id].append(resp)
+                if len(resp["col"]) > 0: # Prevents notes where there are no columns
+                    if cell_id not in self.data:
+                        self.data[cell_id] = []
+                    self.data[cell_id].append(resp)
 
     def _make_resp_entry(self, df_name):
 
@@ -518,7 +520,11 @@ class OutliersNote(Notification):
 
         resp.update(outlier_cols[0])
  
-        self.data[cell_id] = [resp]
+        if cell_id in self.data:
+            self.data[cell_id].append(resp)
+        else:
+            self.data[cell_id] = [resp]
+        # self.data[cell_id] = [resp] # I believe this was overwriting other notes
 
     def _compute_outliers(self, df, col_name):
         # pylint: disable=no-self-use 
@@ -552,6 +558,7 @@ class OutliersNote(Notification):
             if abs(new_std_dev - std_dev)/std_dev >= STD_DEV_CUTOFF:
                 continue
             live_notes.append({
+                "type": "outliers",
                 "df_name" : df_name,
                 "col_name" : col_name,
                 "std_dev" : new_std_dev,
@@ -768,6 +775,131 @@ class EqualizedOddsNote(Notification):
          
         self.data[cell_id] = live_resps
 
+class ErrorSliceNote(Notification):
+    """
+    A notification that tests to see if any classifier models that have been
+    trained perform particularly poorly (either FPR or FNR) on certain columns
+    
+    The return format is {"type" : "error", "model_name" : <name of model>,
+                          "metric_name" : <"fpr" or "fnr">, "pos_value" : <value treated as +>,
+                          "neg_value" : <value treated as ->, "slice" : [(col_name, value),...],
+                          "metric_in" : <metric within the slice>, "metric_out" : <metric outside the slice>,
+                          "n" : slice size}
+
+    """
+    def __init__(self, db):
+        super().__init__(db)
+        self.candidate_models = {}
+
+    def _get_noted_models(self):
+        notes = [note for note_set in self.data.values() for note in note_set]
+        note_subset = [note for note in notes if note["type"] == "error"]
+        noted_models = [note["model_name"]  for note in note_subset]
+
+        return noted_models
+
+    def check_feasible(self, cell_id, env, dfs, ns):
+
+        poss_models = env.get_models()
+        old_model_names = self._get_noted_models()
+
+        new_models = {model_name : model_info for model_name, model_info in poss_models.items() if model_name not in old_model_names}
+        env.log.debug("[ErrorSliceNote] dfs {0} ns {1}".format(dfs.keys(), ns.keys()))
+
+        defined_new_models = check_call_dfs(dfs, ns, new_models, env)
+
+        self.candidate_models = defined_new_models # note that this has a parent df type 
+        env.log.debug(
+            "[ErrorSliceNote] there are {0} new models out of {1} poss_models with {2} old models".format(len(defined_new_models), len(poss_models), len(old_model_names)))
+
+        return self.candidate_models != {}
+
+    def make_response(self, env, kernel_id, cell_id):
+        
+        for model, model_data in self.candidate_models.items():
+
+            env.log.debug("[ErrorSliceNote] Making error slices for {0}".format(model))
+
+            pos_val = model_data["model"].classes_[0]
+            neg_val = model_data["model"].classes_[1]
+            true = (model_data["y"] == pos_val)
+            
+            predictions = model_data["model"].predict(model_data["x_parent"])
+            preds = ( predictions == pos_val)
+
+            # This may not be super efficient, may need to speed up. 
+        
+            slices = err_slices(model_data["x_parent"], preds, true, env) 
+     
+            for slice_data in slices:
+                if cell_id not in self.data:
+                    self.data[cell_id] = []
+                slice_data["model_name"]  = model
+                slice_data["pos_value"] = str(pos_val)
+                slice_data["neg_value"] = str(neg_val)
+                slice_data["type"] = "error"
+                slice_data["slice"] = [(sl[0], str(sl[1])) for sl in slice_data["slice"]]
+                slice_data["n"] = int(slice_data["n"])
+
+                env.log.debug("[ErrorSliceNote] wrote note {0}".format(slice_data))
+                self.data[cell_id].append(slice_data)
+
+    def update(self, env, kernel_id, cell_id, dfs, ns):
+        """
+        Checks if to update under these two circumstances:
+        A) A model of <model name> is no longer defined in the notebook (p easy 
+          to check, example in check_feasible)
+        B) Someone may have reformatted the code that scores this model such 
+          that the plugin can no longer figure out what the input data is 
+          (check_call_dfs returns None in some of the fields we need)
+        """
+        new_data = {}
+        # store the valid model names here:
+        poss_models = env.get_models()
+        old_model_names = self._get_noted_models()
+        new_models = {model_name : model_info for model_name, model_info in poss_models.items() if model_name not in old_model_names}
+
+        models_with_dataframes = check_call_dfs(dfs, ns, new_models, env)
+
+        for cell, note_list in self.data.items():
+            new_notes = []
+            for note in note_list:
+                if note["type"] == "error":
+                    # check A) and B) (if false, this note will go missing)
+                    if (note["model_name"] in new_models) and \
+                    (note["model_name"] in models_with_dataframes):
+                        # redo calculation and add updated 
+                        # note to new notes
+
+                        # copied-ish from make_response
+                        this_model = models_with_dataframes[note["model_name"]]
+
+                        pos_val = this_model["model"].classes_[0]
+                        neg_val = this_model["model"].classes_[1]
+                        true = (this_model["y"] == pos_val)
+                        preds = (this_model["model"].predict(this_model["x"]) == pos_val)
+
+                        slices = err_slices(this_model["x_parent"], preds, true, env) 
+
+                        # will return multiple ErrorSliceNotes, but the front-end needs
+                        # to display these as one
+                        for slice_data in slices:
+                            slice_data["model_name"]  = note["model_name"]
+                            slice_data["pos_value"] = str(pos_val)
+                            slice_data["neg_value"] = str(neg_val)
+                            slice_data["type"] = "error"
+                            slice_data["slice"] = [(sl[0], str(sl[1])) for sl in slice_data["slice"]]
+                            slice_data["n"] = int(slice_data["n"])
+                            new_notes.append(slice_data)
+                else:
+                    # the note stays the same
+                    new_notes.append(note)
+            new_data[cell] = new_notes
+        env.log.debug("[ErrorSliceNote] updated responses")
+        # self.data = new_data # removed until update is processed, as this overwrites notes.
+            
+
+
 def align_index(obj, values, locs):
     """given a list of index values or row indices, get subset of obj's rows"""
     if isinstance(obj, (pd.Series, pd.DataFrame)):
@@ -875,7 +1007,7 @@ def get_cols(df, cols):
             return df[cols[0]]
     return df[cols]
 
-def check_call_dfs(dfs, non_dfs_ns, models):
+def check_call_dfs(dfs, non_dfs_ns, models, env):
     """
     filter models by whether we can find dataframes assassociated with model.fit call 
     """
@@ -883,12 +1015,19 @@ def check_call_dfs(dfs, non_dfs_ns, models):
     
     for model_name, model_info in models.items():
 
+        env.log.debug("[check_call_dfs] processing {0}".format(model_name))
+
         features_col_names = model_info.get("x")
         labels_col_names = model_info.get("y")
         
         labels_df_name = model_info.get("y_df") # if none, then cannot proceed
         features_df_name = model_info.get("x_df") # if none, then cannot proceed 
-        
+
+#        env.log.debug("[check_call_dfs] {0}, {1}, {2}, {3}".format(features_col_names, labels_col_names, labels_df_name, features_df_name))
+        env.log.debug("[check_call_dfs] {0} in dfs {1}".format(features_df_name, features_df_name in dfs.keys()))
+        env.log.debug("[check_call_dfs] {0} in dfs {1}".format(labels_df_name, labels_df_name in dfs.keys()))
+        env.log.debug("[check_call_dfs] {0} in non_dfs {1}".format(labels_df_name, labels_df_name in non_dfs_ns.keys()))
+    
         if (features_df_name in dfs.keys()) and\
            ((labels_df_name in dfs.keys()) or labels_df_name in non_dfs_ns.keys()):
 
@@ -910,6 +1049,8 @@ def check_call_dfs(dfs, non_dfs_ns, models):
                 "x_parent" : dfs[features_df_name], 
                 "y_parent" : labels_obj 
             } 
+            env.log.debug("[check_call_df] defined model {0}".format(defined_models[model_name]))
+
     return defined_models
 
 def bin_col(col):

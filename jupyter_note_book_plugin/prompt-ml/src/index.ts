@@ -122,6 +122,7 @@ const extension: JupyterFrontEndPlugin<void> = {
           preAdditionChildren.push($(this).attr("id"))
         })
         app.shell.add(popupWidget, "main");
+        $(payload["htmlContent"]).css("padding", "15px")
         $(`.${id}`).append(payload["htmlContent"]);
         // Find the id that the tab was given -- see needed fix below
         setTimeout( () => {

@@ -18,3 +18,10 @@ package-lock.json
 venv/
 jupyter_note_book_plugin/evaluation_task/build/*
 .vscode/*
+node_modules
+lib
+lib64
+bin
+etc
+include
+share

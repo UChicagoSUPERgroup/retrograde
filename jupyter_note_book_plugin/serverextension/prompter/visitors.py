@@ -112,7 +112,7 @@ class DataFrameVisitor(BaseImportVisitor):
         self.context["df_names"] = []
         self.context["non_df_names"] = []
 
-class ModelFitVisitor(BaseImportVisitor):
+class ModelScoreVisitor(BaseImportVisitor):
 
     def __init__(self, pd_alias, model_names, namespace, assign_map):
         super().__init__(pd_alias)
@@ -125,10 +125,10 @@ class ModelFitVisitor(BaseImportVisitor):
         self.unmatched_call = None
 
     def is_model_fit(self, call_node):
-        # test if func node is a call to Classifier.fit
+        # test if func node is a call to Classifier.score
         # note that there are other calls to non-clfs and non-model objects 
         # in sklearn. So we need to test if the object is actually a clf name
-        if isinstance(call_node.func, Attribute) and call_node.func.attr == "fit" and len(call_node.args) > 1:
+        if isinstance(call_node.func, Attribute) and call_node.func.attr == "score" and len(call_node.args) > 1:
             if isinstance(call_node.func.value, Name) and call_node.func.value.id in self.model_names:
                 return True
             elif isinstance(call_node.func.value, Call):

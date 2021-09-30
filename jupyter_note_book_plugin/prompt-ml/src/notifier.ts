@@ -33,42 +33,11 @@
     }
     
     private appendMsg(cell_id : string, kernel_id : string, msg : string, handedPayload : any) {
-  
-      // var outputmodel : IOutputAreaModel = (cell as CodeCell).model.outputs;
-      // commented out -- 5/28 -- 5/28
-      
       var newNote = $.parseHTML(msg)
-      // remove duplicate notes; this will make it appear at the bottom of the list
-      $(".prompt-ml-container > *").each( function() {
-        if($(this)[0].isEqualNode(newNote[0])) $(this).remove()
-      })
 
-      // TO DO: change msg from a string to an actual html element, that way you don't need to do weird stuff w the css selectors
       $(".prompt-ml-container").prepend(newNote) // prepend vs append. prepend makes notes appear at the top, append at the bottom. to discuss during meeting
 
-      // add animations
-      $(newNote).find(".content").toggle()
-      $(newNote).addClass("condensed").removeClass("expanded")
       $(newNote).click( function() {
-        if( $(this).hasClass("condensed")) {
-            $(this).removeClass("condensed")
-            $(this).addClass("expanded")
-            $(this).find("svg.expanded").toggle(true)
-            $(this).find("svg.condensed").toggle(false)
-            $(this).find(".content").toggle(true)
-        } else {
-            $(this).removeClass("expanded")
-            $(this).addClass("condensed")
-            $(this).find("svg.condensed").toggle(true)
-            $(this).find("svg.expanded").toggle(false)
-            $(this).find(".content").toggle(false)
-        }
-    })
-
-      // add "more" button
-      $(newNote).find(".content").append($.parseHTML("<div class=\"more\"><h2>MORE INFO</h2></div>"))
-      $(newNote).find(".more").click( () => {
-        // Payload must contain the structure of the popup to render
         if(handedPayload == {}) {
           var payload : object =  {
             "title": "Default Page",
@@ -77,7 +46,6 @@
         } else {
           payload = handedPayload
         }
-
         $(".prompt-ml-container").trigger("prompt-ml:note-added", { "payload": payload })
     })
   
@@ -104,6 +72,31 @@
             $(parentNote).removeClass("wasClosed")
         }
       })
+
+      // Removing duplicate notes: two options presented -- delete whichever isn't the intended functionality.
+
+      // Option 1: Preventing duplicate notes from re-appearing
+                // If someone closes a note or leaves it open, no note will re-appear with the same exact content
+                // var divs = $(".prompt-ml-container > div")
+                // for(var x = 0; x < divs.length; x++) {
+                //     var targetDiv = divs[x]
+                //     if($(newNote).is($(targetDiv))) continue
+                //     if($(targetDiv).text() == $(newNote).text()) {
+                //       // A note with the same text already appears
+                //       $(newNote).remove()
+                //     }
+                // }
+      // Option 2: Removing old duplicate notes and re-displaying them
+        // If you close a note and this (new) one appears, it will appear as if it jumped to the top and now has not been closed
+        var divs = $(".prompt-ml-container > div")
+        for(var x = 0; x < divs.length; x++) {
+            var targetDiv = divs[x]
+            if($(newNote).is($(targetDiv))) continue
+            if($(targetDiv).text() == $(newNote).text()) {
+            // A note with the same text already appears
+            $(targetDiv).remove()
+            }
+        }
     }
 
     private _routeNotice(notice : any, note_count : number) {
@@ -142,7 +135,7 @@
         var stringHTML : string = (message[0] as HTMLDivElement).outerHTML;
         var object : object = message[1]
         return [stringHTML, object]
-      } else {
+      }else {
         console.log("No notes generated", notice["type"], notice)
       }
     }
@@ -158,6 +151,9 @@
           var list_of_notes = notices[key]
           if(key == "proxy") {
             this._handleProxies(list_of_notes, note_count)
+            note_count += 1
+          } else if (key == "error") {
+            this._makeErrorMessage(list_of_notes, note_count);
             note_count += 1
           } else {
             for(var x = 0; x < list_of_notes.length; x++) {
@@ -251,49 +247,36 @@
     }
 
   
-    private _makeContainer(df_name? : string)  : [HTMLDivElement, HTMLDivElement] {
+    private _makeContainer(df_name? : string)  : HTMLDivElement {
       /* 
       the template for prompt containers returns top level container and element that 
       the notification should be put into
       */
       let note : HTMLDivElement = document.createElement("div")
-      note.append($.parseHTML('<div class="note condensed"><!-- gap --><div class="essential"> <!-- gap --><div class="dropDown"> <!-- gap --><svg class="condensed" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 250 250"> <!-- gap --><path class="cls-4" d="M58.6,226.057L184.69,129,58.6,31.943"/> <!-- gap --></svg> <!-- gap --><svg class="expanded" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 250 250" style="display: none;"> <!-- gap --><path class="cls-4" d="M28.443,62L125.5,187.782,222.557,62"/> <!-- gap --></svg> <!-- gap --></div> <!-- gap --><div class="text"> <!-- gap --><h1>Note Name</h1> <!-- gap --></div> <!-- gap --><div class="close"> <!-- gap --><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500"><path class="prompt-ml-close-svg-path" d="M91.5,93.358L409.461,406.6"/><path class="prompt-ml-close-svg-path" d="M91.5,406.6L409.461,93.358"/></svg></div> <!-- gap --></div> <!-- gap --> <!-- gap --></div> <!-- gap -->')[0])
-
-      let content : HTMLDivElement = document.createElement("div")
-      content.classList.add("content")
-      $(note).find(".note")[0].append(content)
+      note.append($.parseHTML(`<div class="note condensed"><!-- gap --><div class="essential"><!-- gap --><div class="dropDown"><svg xmlns="http://www.w3.org/2000/svg" width="75%" height="75%" viewBox="0 0 500 500"><g id="Artboard_1" data-name="Artboard 1">  <g id="BR"><path id="Perfect_Square" data-name="Perfect Square" class="cls-5" d="M400,485h84V400.114"/><path class="cls-5" d="M472.212,474.212L363.788,365.788"/>  </g>  <g id="TR"><path id="Perfect_Square-2" data-name="Perfect Square" class="cls-5" d="M479,102.426v-84H394.114"/><path class="cls-5" d="M462.212,32.214L353.788,140.638"/>  </g>  <g id="TL"><path id="Perfect_Square-3" data-name="Perfect Square" class="cls-5" d="M102.385,19.219h-84v84.886"/><path class="cls-5" d="M33.173,32.007L141.6,140.431"/>  </g>  <g id="BL"><path id="Perfect_Square-4" data-name="Perfect Square" class="cls-5" d="M18.375,396.99v84h84.886"/><path class="cls-5" d="M29.163,469.2L137.587,360.778"/>  </g></g>  </svg>  </div> <!-- gap --><div class="text"><!-- gap --><h1>Note Name</h1> <!-- gap --></div> <!-- gap --><div class="close"><!-- gap --><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500"><path class="prompt-ml-close-svg-path" d="M91.5,93.358L409.461,406.6" /><path class="prompt-ml-close-svg-path" d="M91.5,406.6L409.461,93.358" /></svg></div> <!-- gap --></div> <!-- gap --><!-- gap --></div> <!-- gap -->`)[0])
    
-      return [note, content]; 
+      return note; 
     }
    
     private _makeWandsMsg(op : string, num_col : string, variance : string, 
                           cat_col : string, rank : number, total : number, note_count : number) {
-      let var_line_1 = document.createElement("p");
-      let var_line_2 = document.createElement("p");
-      let var_line_3 = document.createElement("p");
-  
-      var_line_1.innerHTML = "The <b>"+op+"</b> of <b>"+num_col+"</b> broken down by ";
-      var_line_1.innerHTML += "<b>"+cat_col +"</b> has variance "+variance.slice(0,5);
-  
-      var_line_2.innerHTML = "There are "+ (rank - 1).toString() + " combinations of variables with higher variance";
+
+      var wandsString = `
+      <h2>Variance Note</h2>
+      <p>The <b>${op}</b> of <b>${num_col}</b> broken down by <b>${cat_col}</b> has variance ${variance.slice(0,5)}</p>
+      <p>There are ${ (rank - 1).toString() } combinations of variables with higher variance</p>
+      <p><a href="https://en.wikipedia.org/wiki/Variance>What is variance?</a></p>
+      `
+
       
-      let link = document.createElement("a");
-      link.href = "https://en.wikipedia.org/wiki/Variance";
-  
-      link.innerText = "What is variance?";
-      var_line_3.appendChild(link);
-      
-      var [body, area] = this._makeContainer();
-      area.appendChild(var_line_1);
-      area.appendChild(var_line_2);
-      area.appendChild(var_line_3);
+      var body = this._makeContainer();
   
       var title = "Variance";
       $(body).find(".essential h1").text(title);
 
       var payload : object = {
-        "title": "Wands Message",
-        "htmlContent": $.parseHTML("<p>Testing...</p>"),
+        "title": "Variance",
+        "htmlContent": $.parseHTML(wandsString),
         "typeOfNote": `wands-${global_notification_count}-${note_count}`
       }
 
@@ -302,31 +285,21 @@
   
     private _makeCupsMsg(col_a : string, col_b : string, strength : string, rank : number, note_count : number) {
   
-      let var_line_1 = document.createElement("p");
-      let var_line_2 = document.createElement("p");
-      let var_line_3 = document.createElement("p");
-  
-      var_line_1.innerHTML = "<b>"+col_a+"</b> has a correlation with <b>"+col_b+"</b>";
-      var_line_1.innerHTML += " with a strength of "+strength.slice(0,5);
-      var_line_2.innerHTML = "There are "+ (rank - 1).toString() + " combinations of variables with higher correlation strength";
+      var cupsString = `
+      <h2>Correlation Note</h2>
+      <p><b>${col_a}</b> has a correlation with <b>${col_b}</b> with a strength of ${strength.slice(0, 5)}.</p>
+      <p>There are ${(rank - 1).toString()} combinations of variables with higher correlation strength.</p>
+      <p><a href="https://en.wikipedia.org/wiki/Pearson_correlation_coefficient">What is correlation?</a></p>
+      `
       
-      let link = document.createElement("a");
-      link.href = "https://en.wikipedia.org/wiki/Pearson_correlation_coefficient";
-  
-      link.innerText = "What is correlation?";
-      var_line_3.appendChild(link);
-      
-      let [body, area] = this._makeContainer();
-      area.appendChild(var_line_1);
-      area.appendChild(var_line_2);
-      area.appendChild(var_line_3);
+      let body = this._makeContainer();
 
       var title = "Correlation";
       $(body).find(".essential h1").text(title);
 
       var payload : object =  {
-        "title": "Cups Message",
-        "htmlContent": $.parseHTML("<p>Testing...</p>"),
+        "title": "Correlation",
+        "htmlContent": $.parseHTML(cupsString),
         "typeOfNote": `cups-${global_notification_count}-${note_count}`
       }
 
@@ -335,32 +308,21 @@
   
     private _makePentaclesMsg(col : string, strength : string, 
                               element : string, rank : number, note_count : number) {
-  
-      let var_line_1 = document.createElement("p");
-      let var_line_2 = document.createElement("p");
-      let var_line_3 = document.createElement("p");
-  
-      var_line_1.innerHTML = "<b>"+col+"</b> contains the value <b>"+element+"</b>";
-      var_line_1.innerHTML += " which is "+strength.slice(0,5)+" standard deviations out from the column mean";
-      var_line_2.innerHTML = "There are "+ (rank - 1).toString() + " other variables with more extreme outliers";
+      var pentaclesString = `
+      <H2>Outliers Note</h2>
+      <p><b>${col}</b> contains the value <b>${element}</b> which is ${strength.slice(0, 5)} standard deviations out from the column mean.</p>
+      <p>There are ${(rank - 1).toString()} other variables with more extreme outliers. <a href="https://en.wikipedia.org/wiki/Standard_score">What is an outlier?</a></p>
+      `
       
-      let link = document.createElement("a");
-      link.href = "https://en.wikipedia.org/wiki/Standard_score";
-  
-      link.innerText = "What is an outlier?";
-      var_line_3.appendChild(link);
-      
-      let [body, area] = this._makeContainer();
-      area.appendChild(var_line_1);
-      area.appendChild(var_line_2);
-      area.appendChild(var_line_3);
+      let body = this._makeContainer();
+
   
       var title = "Outliers";
       $(body).find(".essential h1").text(title);
 
       var payload : object =  {
-        "title": "Pentacles Message",
-        "htmlContent": $.parseHTML("<p>Testing...</p>"),
+        "title": "Outliers",
+        "htmlContent": $.parseHTML(pentaclesString),
         "typeOfNote": `pentacles-${global_notification_count}-${note_count}`
       }
 
@@ -369,26 +331,22 @@
   
     private _makeSwordsMsg(col : string, strength : string, rank : number, note_count : number) {
   
-      let var_line_1 = document.createElement("p");
-      let var_line_2 = document.createElement("p");
-  
       let prop : number = parseFloat(strength);
       let pct : number = prop*100;
-  
-      var_line_1.innerHTML = pct.toString().slice(0,5)+"% of entries in <b>"+col+"</b> are null";
-  
-      var_line_2.innerHTML = "There are "+ (rank - 1).toString() + " other variables with more null entries";
-      
-      let [body, area] = this._makeContainer();
-      area.appendChild(var_line_1);
-      area.appendChild(var_line_2);
-  
+
+      var swordsString = `
+        <h2>Null Entries Note</h2>
+        <p>${pct.toString().slice(0, 5)}% of entries in <b>${col}</b> are null.</p>
+        <p>There are ${(rank - 1).toString()} other variables with more null entries.</p>
+      `
+
+      let body = this._makeContainer();
       var title = "Null Entries";
       $(body).find(".essential h1").text(title);
 
       var payload : object =  {
-        "title": "Swords Message",
-        "htmlContent": $.parseHTML("<p>Testing...</p>"),
+        "title": "Null Entries",
+        "htmlContent": $.parseHTML(swordsString),
         "typeOfNote": `swords-${global_notification_count}-${note_count}`
       }
 
@@ -396,23 +354,20 @@
     }
     private _makeResembleMsg(df_name : string, col_name : string, note_count : number) {
   
-      let var_line_1 = document.createElement("p");
-      let var_line_2 = document.createElement("p");
-  
-      var_line_1.innerHTML = "The dataframe <b>"+df_name+"</b> contains a column <b>"+col_name+"</b>.";
-  
-      var_line_2.innerHTML = "Using this column may be discriminatory.";
+      var resembleString = `
+        <h2>Protected Column Note</h2>
+        <p>The dataframe <b>${df_name}</b> contains a column <b>${col_name}</b>.</p>
+        <p>Using this column may be descriminatory.</p>
+      `
       
-      var [body, area] = this._makeContainer();
-      area.appendChild(var_line_1);
-      area.appendChild(var_line_2);
+      var body = this._makeContainer();
 
       var title = "Protected Column";
       $(body).find(".essential h1").text(title);
   
       var payload : object =  {
         "title": "Resemble Message",
-        "htmlContent": $.parseHTML("<p>Testing...</p>"),
+        "htmlContent": $.parseHTML(resembleString),
         "typeOfNote": `resemble-${global_notification_count}-${note_count}`
       }
 
@@ -420,46 +375,40 @@
     }   
   
     private _makeVarMsg(zip1 : string, zip2 : string, demo : any, note_count : number) {
+      var varString = `
+      <h2>Zip Code Demographics Note</h2>
+      <p>Zip code ${zip1} is ${demo[zip1]}% black.</p>
+      <p>Zip code ${zip2} is ${demo[zip2]}% white.</p>
+      `
   
-      let var_line_1 = document.createElement("p");
-      let var_line_2 = document.createElement("p");
-  
-      var_line_1.innerHTML = "Zip code <b>"+zip1+"</b> is "+demo[zip1]+"% black";
-      var_line_2.innerHTML = "Zip code <b>"+zip2+"</b> is "+demo[zip2]+"% white";
-  
-      var [body, area] = this._makeContainer();
-      area.appendChild(var_line_1);
-      area.appendChild(var_line_2);
+      var body = this._makeContainer();
   
       var title = "Zip Code Demographics";
       $(body).find(".essential h1").text(title);
 
       var payload : object =  {
-        "title": "Var Message",
-        "htmlContent": $.parseHTML("<p>Testing...</p>"),
+        "title": "Zip Code Demographics",
+        "htmlContent": $.parseHTML(varString),
         "typeOfNote": `var-${global_notification_count}-${note_count}`
       }
 
       return new Array(body, payload) 
     }
     private _makeOutliersMsg(col_name : string, value : number, std_dev : number, df_name : string, note_count : number) {
-  
-      let var_line_1 = document.createElement("p");
-      let var_line_2 = document.createElement("p");
-  
-      var_line_1.innerHTML = "The column <b>"+col_name+"</b> in data frame <b>"+df_name+"</b> contains values greater than "+value;
-      var_line_2.innerHTML = value + " is "+std_dev.toString().slice(0,5)+" standard deviations above the average for that column";
-  
-      var [body, area] = this._makeContainer();
-      area.appendChild(var_line_1);
-      area.appendChild(var_line_2);
+      var outliersString = `
+      <h2>Outliers Note</h2>
+      <p>The column <b>${col_name}</b> in data frame <b>${df_name}</b> contains values greater than ${value}.</p>
+      <p>${value} is ${std_dev.toString().slice(0, 5)} standard deviations above the average for that column</p>
+      `
+
+      var body = this._makeContainer();
   
       var title = "Outliers";
       $(body).find(".essential h1").text(title);
 
       var payload : object =  {
-        "title": "Wands Message",
-        "htmlContent": $.parseHTML("<p>Testing...</p>"),
+        "title": "Outliers",
+        "htmlContent": $.parseHTML(outliersString),
         "typeOfNote": `outliers-${global_notification_count}-${note_count}`
       }
 
@@ -472,38 +421,23 @@
       } else if (notice["eq"] == "fnr") {
         msg_l1.innerHTML = "Applying a false negative rate equalization to ";
       }
-  
-      msg_l1.innerHTML += notice["model_name"]
-      msg_l1.innerHTML += " achieved a training accuracy of "+notice["acc_corr"].toString().slice(0,5);
-      msg_l1.innerHTML += " (Original: "+notice["acc_orig"].toString().slice(0,5)+")";
-  
-      let msg_l2 = document.createElement("p");
-      msg_l2.innerHTML = "This correction changed "+notice["num_changed"]+" predictions"; 
-  
-      let msg_l3 = document.createElement("p"); // more info about correction 
-      msg_l3.innerHTML = "This correction was a "
-      
-      let link = document.createElement("a");
-      link.href = "https://aif360.readthedocs.io/en/v0.2.3/modules/postprocessing.html";
-      link.innerText = "equalized odds post-processing ";
-      
-      msg_l3.appendChild(link);
-      
-      msg_l3.innerHTML += " correction. It used the majority group in "+notice["grp"];
-      msg_l3.innerHTML += " as those belonging to the privileged group";
-  
-      var [body, area] = this._makeContainer(notice["model_name"]);
-  
-      area.appendChild(msg_l1);
-      area.appendChild(msg_l2);
-      area.appendChild(msg_l3);
+
+      var equalizedOddsString = `
+        <h2>Equalized Odds Note</h2>
+        <p>${notice["model_name"]} acheived a training accuracy of ${notice["acc_corr"].toString().slice(0, 5)} (Original: ${notice["acc_orig"].toString().slice(0, 5)})</p>
+        <p>This correction changed ${notice["num_changed"]} predictions.</p>
+        <p>This correlation was a <a href="https://aif360.readthedocs.io/en/v0.2.3/modules/postprocessing.html">equalized odds post-processing</a> correction. It used the majority group in ${notice["grp"]} as those beloning to the priviledged group.</p>
+
+      `
+      var body = this._makeContainer(notice["model_name"]);
+
 
       var title = "Equalized Odds";
       $(body).find(".essential h1").text(title);
   
       var payload : object =  {
-        "title": "Equalized Odds Message",
-        "htmlContent": $.parseHTML("<p>Testing...</p>"),
+        "title": "Equalized Odds",
+        "htmlContent": $.parseHTML(equalizedOddsString),
         "typeOfNote": `equalized-${global_notification_count}-${note_count}`
       }
 
@@ -525,12 +459,11 @@
          ul_container.appendChild(ul)
       }
   
-      var [body, area] = this._makeContainer();
-      area.appendChild(ul_container);
+      var body = this._makeContainer();
 
       // Expanded view content
       
-      var container = $.parseHTML("<div class=\"promptMl proxyColumn\" style=\"padding: 15px; overflow: scroll;\"><h1>Proxy Columns</h1><ul></ul></div>")
+      var container = $.parseHTML("<div class=\"promptMl proxyColumn\" style=\"padding: 15px; overflow: scroll;\"><h1>Proxy Columns Note</h1><ul></ul></div>")
       $(container).find("ul").append($.parseHTML(`
       <li>Certain variables in this notebook may encode or have strong correlations with sensitive variables. In some cases, the use of these correlated variables may produce outcomes that are biased. This bias may be undesirable, unethical and in some cases illegal. <a style=\"color: blue; text-decoration; underline\" target=\"_blank\" href=\"PLACEHOLDER\">(Read More)</a></li>
       `))
@@ -558,10 +491,10 @@
          $(container).append(ul)
       }
       // Make payload
-      var title = "Proxy Column";
+      var title = "Proxy Columns";
       $(body).find(".essential h1").text(title);
       var payload : object =  {
-        "title": "Proxy Message",
+        "title": "Proxy Columns",
         "htmlContent": container,
         "typeOfNote": `proxy-${global_notification_count}-${note_count}`
       }
@@ -626,8 +559,13 @@
         }  
       }
   
-      var [body, area] = this._makeContainer();
+      var body = this._makeContainer();
   
+
+      var area = document.createElement("div")
+      var noteHeader = document.createElement("h2")
+      noteHeader.innerHTML = "Performance Note"
+      area.appendChild(noteHeader)
       area.appendChild(msg_l1);
       area.appendChild(msg_l2);
       area.appendChild(table_elt);
@@ -636,8 +574,8 @@
       $(body).find(".essential h1").text(title);
 
       var payload : object =  {
-        "title": "Performance Message",
-        "htmlContent": $.parseHTML("<p>Testing...</p>"),
+        "title": "Performance",
+        "htmlContent": area,
         "typeOfNote": `performance-${global_notification_count}-${note_count}`
       }
 
@@ -648,7 +586,7 @@
       // Create container for the small-view content
       let msg_l1 = document.createElement("div");
       // Create the container for the expanded-view content
-      var moreInfoContent = $.parseHTML("<div class=\"promptMl missing\" style=\"padding: 15px; overflow: scroll;\"><h1>Missing Data</h1><ul></ul></div>")
+      var moreInfoContent = $.parseHTML("<div class=\"promptMl missing\" style=\"padding: 15px; overflow: scroll;\"><h1>Missing Data Note</h1><ul></ul></div>")
       $(moreInfoContent).find("ul").append($.parseHTML(`
         <li>There are a number of reasons why data may be missing. In some instances, 
         it may be due to biased collection practices. It may also be missing due to random 
@@ -698,12 +636,11 @@
         }
       }
   
-      var [body, area] = this._makeContainer();
-      area.appendChild(msg_l1);
+      var body = this._makeContainer();
 
       // Payload
 
-      var title = "Missing Data Note";
+      var title = "Missing Data";
       $(body).find(".essential h1").text(title);
       var payload : object =  {
         "title": title,
@@ -726,5 +663,117 @@
   
     //   return null;
     // }
+  private _makeErrorMessage(notices : { [key : string] : any }[], note_count : number ) {
+    // Making expanded view container
+    var errorsString = $.parseHTML(`
+      <div class='errors'>
+        <h2>Errors Note</h2>
+        <ul class='model_list'></ul>
+      </div>
+      `);
+    // Consolidating the notes sent to the frontend into a usable dictionary
+    // The received data is a list of individual objects, with formats such as
+    // {
+    //    metric_in: 0.5555555555555556,
+    //    metric_name: "fpr",
+    //    metric_out: 0.38461538461538464,
+    //    model_name: "dt",
+    //    n: 21,
+    //    neg_value: "True",
+    //    pos_value: "False",
+    //    slice: {
+    //      ['interest', '(7.22, 9.557]'],
+    //      ['type_home', '0']
+    //    }
+    // }
+    // However, the final list of sorted first by models and then by metrics. Therefore,
+    // we want a format more similar to 
+    // {
+    //   "lr": {
+    //      "fpr": [
+    //        "metric_in": ...,
+    //        ...
+    //       ],
+    //      "fnr": [
+    //        "metric_in": ...,
+    //        ...
+    //      ]
+    //   },
+    //   (other models)
+    // }
+    var models : { [key : string ] : any } = {};
+    for(var x = 0; x < notices.length; x++) {
+      var notice = notices[x]
+      if(!(notice["model_name"] in models)) models[notice["model_name"]] = {
+        "fpr": [],
+        "fnr": []
+      };
+      models[notice["model_name"]][notice["metric_name"]].push({
+        "slice": notice["slice"],
+        "count": notice["n"],
+        "metric_in": notice["metric_in"],
+        "metric_out": notice["metric_out"],
+        "pos_value": notice["pos_value"],
+        "neg_value": notice["neg_value"],
+      });
+    }
+    // Generating the dynamic content
+    for(var model_name in models) {
+      var model_notes = models[model_name];
+      var fprString = this._makeErrorNoteLists(model_notes["fpr"], `Assuming ${model_notes["fpr"][0]["pos_value"]} given the true value of ${model_notes["fpr"][0]["neg_value"]}`);
+      var fnrString = this._makeErrorNoteLists(model_notes["fnr"], `Assuming ${model_notes["fnr"][0]["neg_value"]} given the true value of ${model_notes["fnr"][0]["neg_value"]}`);
+      $(errorsString).find(".model_list").append($.parseHTML(`
+      <li>In the model ${model_name}, there was an unusually high probability of:
+        <ul>
+          <li>${fprString}</li>
+          <li>${fnrString}</li> 
+        </ul>
+      </li>`));
+    }
+    // Adding static content; creating response object
+    var body = this._makeContainer();
+    var title = "Errors";
+    $(body).find(".essential h1").text(title);
+    var payload : object =  {
+      "title": "Errors",
+      "htmlContent": errorsString,
+      "typeOfNote": `outliers-${global_notification_count}-${note_count}`
+    };
+    // Handling notification attachment
+    var message = new Array(body, payload);
+    var stringHTML : string = (message[0] as HTMLDivElement).outerHTML;
+    var object : object = message[1];
+    var noticeResponse = [stringHTML, object];
+    if(noticeResponse == undefined) return;
+    let msg : string = noticeResponse[0] as string;
+    let popupContent : object = noticeResponse[1] as object;
+    if (msg) { this.appendMsg(notices[0]["cell_id"], notices[0]["kernel_id"], msg, popupContent); }
   }
-  
+
+  // Takes in a list of slice objects with metric / positive value / negative value information
+  private _makeErrorNoteLists(segments : { [key : string ] : any }[], metricName : string) {
+    // Creating an HTML string that visually represents the object created at the beginning
+    // of _makeErrorMessages. The data that is passed in is the list of objects (accessible
+    // through the "fnr" / "fpr" of the models object)
+    var returnString = metricName;
+    returnString += "<ul>";
+    for(var x = 0; x < segments.length; x++) {
+      var sliceString = "<li>";
+      // Slices are represented as an array, so we iterate over them to combine into a single string
+      for(var y = 0; y < segments[x]["slice"].length; y++) {
+        sliceString += `${segments[x]["slice"][y][0]}: ${segments[x]["slice"][y][1]}`;
+        if(y != segments[x]["slice"].length - 1) sliceString += ", ";
+      }
+      sliceString += `
+      <ul>
+        <li>Slice size was ${segments[x]["count"]}. The outside metric is ${Math.floor(segments[x]["metric_out"] * 100) / 100}. The inside metric is ${Math.floor(100 * segments[x]["metric_in"]) / 100}.</li>
+      </ul>
+      `;
+      sliceString += "</li>";
+      returnString += sliceString;
+    }
+    returnString += "</ul>";
+    return returnString;
+  }
+
+}

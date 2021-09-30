@@ -65,8 +65,22 @@ textarea {
 .cls-4 {
   fill: none;
   stroke: #0e0f10;
-  stroke-width: 15px;
+  stroke-width: 25px;
   fill-rule: evenodd;
+}
+
+.cls-5 {
+  fill: none;
+}
+
+.cls-5, .cls-6 {
+  stroke: #000;
+  stroke-width: 25px;
+  fill-rule: evenodd;
+}
+
+.cls-6 {
+  fill: transparent;
 }
 
 /*  Side-column note styling  */
@@ -80,7 +94,7 @@ textarea {
 
 .note h1 {
   font-weight: 600;
-  font-size: 22px;
+  font-size: 16px;
   text-overflow: ellipsis;
   overflow: hidden;
   white-space: nowrap;
@@ -98,10 +112,6 @@ textarea {
 
 .note.condensed .essential .dropDown p {
   transform: rotate(0deg) translate(-50%, -50%);
-}
-
-.note.expanded .essential .dropDown p {
-  transform: rotate(90deg) translate(-50%, 50%);
 }
 
 .note .essential .dropDown p {
@@ -172,7 +182,7 @@ textarea {
   fill: none;
   stroke: #000;
   stroke-linecap: round;
-  stroke-width: 15px;
+  stroke-width: 25px;
   fill-rule: evenodd;
 }
 
