@@ -20,7 +20,7 @@ from datetime import datetime
 from jupyter_client.manager import start_new_kernel
 
 from .storage import load_dfs
-from .visitors import DataFrameVisitor, ModelFitVisitor
+from .visitors import DataFrameVisitor, ModelScoreVisitor
 
 #from code import InteractiveInterpreter
 
@@ -71,7 +71,7 @@ class AnalysisEnvironment:
         df_visitor.visit(cell_code) 
         self.ptr_set.update(df_visitor.assign_map)  
 
-        model_visitor = ModelFitVisitor(self.pandas_alias, model_names, full_ns, self.ptr_set) 
+        model_visitor = ModelScoreVisitor(self.pandas_alias, model_names, full_ns, self.ptr_set) 
         model_visitor.visit(cell_code)
        
         # handle updates, update columns, model fit calls etc
@@ -96,6 +96,7 @@ class AnalysisEnvironment:
                         self.entry_points[df_name]["columns"][c]["type"] = str(df_obj[c].dtypes)
         # new model fit calls? 
         new_models = model_visitor.models
+        self.log.debug("[AnalysisEnv] new models are {0}".format(new_models)) 
         for model_name in new_models.keys():
             if model_name in self.models:
                 if ("x" in self.models[model_name] and\

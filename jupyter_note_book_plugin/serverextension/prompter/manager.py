@@ -6,6 +6,7 @@ import sys, os, re
 import json
 
 import mysql.connector
+import dill
 
 from random import choice
 
@@ -78,10 +79,12 @@ class AnalysisManager:
         ns = self.db.recent_ns()
         dfs = load_dfs(ns)
 
+        non_dfs = dill.loads(ns["namespace"])
+
         for r in self.notes[cell_mode]:
-            if r.feasible(cell_id, env, dfs, ns):
+            if r.feasible(cell_id, env, dfs, non_dfs):
                 r.make_response(env, kernel_id, cell_id) 
-            r.update(env, kernel_id, cell_id, dfs, ns)
+            r.update(env, kernel_id, cell_id, dfs, non_dfs)
         response = self.send_notifications(kernel_id, cell_id, request["exec_ct"])
  
         self._nb.log.info("[MANAGER] sending response {0}".format(response))

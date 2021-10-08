@@ -73,7 +73,8 @@ class TestModelVisitor(unittest.TestCase):
     def test_simple(self):
         snippet=\
         """lr = LinearRegression()\n"""+\
-        """lr.fit(X, y)"""
+        """lr.fit(X, y)\n"""+\
+        """lr.score(X,y)"""
 
         test_df = pd.DataFrame(
                     {
@@ -87,14 +88,17 @@ class TestModelVisitor(unittest.TestCase):
             "y" : test_df["c"],
             "lr": LinearRegression().fit(test_df[["a", "b"]], test_df["c"])} 
 
-        expected = {"lr" : {"x" : ["a", "b"], "y" : ["c"]}}
-        df_visit = prompter.DataFrameVisitor(set(["X", "y"]), prompter.Aliases("pandas"))
+        expected = {"lr" : {"x" : ["a", "b"], "y" : ["c"], "x_df": "X", "y_df" : "y"}}
+
+        pd_alias = prompter.Aliases("pandas")
+
+        df_visit = prompter.DataFrameVisitor(set(["X", "y"]), pd_alias)
         df_visit.visit(parse(snippet))
         
-        visitor = prompter.ModelFitVisitor(["lr"], namespace, df_visit.assign_map)
+        visitor = prompter.ModelFitVisitor(pd_alias, ["lr"], namespace, df_visit.assign_map)
 
         visitor.visit(parse(snippet))
-        self.assertEqual(visitor.models, expected)
+        self.assertEqual(visitor.models, expected, "Actual {0}, expected {1}".format(visitor.models, expected))
 
     def test_intercell(self):
 
@@ -115,22 +119,24 @@ class TestModelVisitor(unittest.TestCase):
             "lr": LinearRegression().fit(test_df[["a", "b"]], test_df["c"])} 
 
         expected_0 = {"lr" : {}}
-        expected_1 = {"lr" : {"x" : ["a", "b"], "y" : ["c"]}}
+        expected_1 = {"lr" : {"x" : ["a", "b"], "y" : ["c"], "y_df" : "y", "x_df" : "X"}}
 
-        df_visit = prompter.DataFrameVisitor(set(["X", "y"]), prompter.Aliases("pandas"))
+        pd_alias = prompter.Aliases("pandas")
+
+        df_visit = prompter.DataFrameVisitor(set(["X", "y"]), pd_alias)
         df_visit.visit(parse(snippet_0))
         assign_map = df_visit.assign_map
  
-        visitor = prompter.ModelFitVisitor(["lr"], namespace, assign_map)
+        visitor = prompter.ModelFitVisitor(pd_alias, ["lr"], namespace, assign_map)
         visitor.visit(parse(snippet_0))
             
         self.assertEqual(visitor.models, expected_0)
         
-        df_visit = prompter.DataFrameVisitor(set(["X", "y"]), prompter.Aliases("pandas"))
+        df_visit = prompter.DataFrameVisitor(set(["X", "y"]),pd_alias) 
         df_visit.visit(parse(snippet_1))
         assign_map.update(df_visit.assign_map)
 
-        visitor = prompter.ModelFitVisitor(["lr"], namespace, assign_map)
+        visitor = prompter.ModelFitVisitor(pd_alias, ["lr"], namespace, assign_map)
         visitor.visit(parse(snippet_1))
         self.assertEqual(visitor.models, expected_1)
 
@@ -155,11 +161,14 @@ class TestModelVisitor(unittest.TestCase):
             "y" : test_df["c"],
             "lr": LinearRegression().fit(X_train, test_df["c"])} 
        
-        expected = {"lr" : {"x" : ["a", "b"], "y" : ["c"]}}
-        df_visit = prompter.DataFrameVisitor(set(["X", "y"]), prompter.Aliases("pandas"))
+        expected = {"lr" : {"x" : ["a", "b"], "y" : ["c"], "y_df" : "y", "x_df" : "X"}}
+        
+        pd_alias = prompter.Aliases("pandas")
+
+        df_visit = prompter.DataFrameVisitor(set(["X", "y"]), pd_alias)
         df_visit.visit(parse(snippet))
 
-        visitor = prompter.ModelFitVisitor(["lr"], namespace, df_visit.assign_map)
+        visitor = prompter.ModelFitVisitor(pd_alias, ["lr"], namespace, df_visit.assign_map)
         visitor.visit(parse(snippet))
 
         self.assertEqual(visitor.models, expected)
@@ -236,11 +245,12 @@ class TestModelVisitor(unittest.TestCase):
             "lr": LinearRegression().fit(test_df[["a", "b"]], test_df["c"])} 
        
         expected = {"lr" : {"x" : ["a", "b"], "y" : ["c"]}}
+        pd_alias = prompter.Aliases("pandas")
 
-        df_visit = prompter.DataFrameVisitor(set(["test_df"]), prompter.Aliases("pandas"))
+        df_visit = prompter.DataFrameVisitor(set(["test_df"]), pd_alias)
         df_visit.visit(parse(snippet_cols))
 
-        visitor = prompter.ModelFitVisitor(["lr"], namespace, df_visit.assign_map)
+        visitor = prompter.ModelFitVisitor(pd_alias, ["lr"], namespace, df_visit.assign_map)
 
         visitor.visit(parse(snippet_cols))
         
@@ -341,7 +351,8 @@ class TestModelVisitor(unittest.TestCase):
         """lr.fit(test_df[["a", "b"], var], test_df[test_df.columns.isin(["c"]), var])"""
 
         expected = {"lr" : {"x_cols" : ["a", "b"], "y_cols" : ["c"]}}
-        visitor = prompter.ModelFitVisitor()
+
+        visitor = prompter.ModelFitVisitor(pd_alias, model_names, namespace, assign_map)
         visitor.visit(parse(snippet_loc))
         
         self.assertEqual(visitor.models, expected)
