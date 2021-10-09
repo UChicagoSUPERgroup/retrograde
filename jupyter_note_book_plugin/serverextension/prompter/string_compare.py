@@ -209,13 +209,7 @@ def _is_integer(n):
 
 # get the "dictioanry" from the main
 def _get_dictioanry(protected_class):
-    protected_values = {}
-    try:
-        with open(PATH_PROTECTED_JSON) as f:
-            protected_values = json.load(f)
-    except FileNotFoundError:
-        with open(PATH_PROTECTED_JSON_FULL) as f:
-            protected_values = json.load(f)
+    protected_values = _get_protected()
 
     try:
         if protected_class == 'nationality':
