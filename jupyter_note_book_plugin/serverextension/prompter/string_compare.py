@@ -101,7 +101,7 @@ def guess_protected(dataframe):
                 continue
             count = 0
             for index, row in dataframe.iterrows():
-                if _is_integer(row[column]) and (row[column] <= 125 and row[column] <= 1):
+                if _is_integer(row[column]) and (row[column] <= 125 and row[column] >= 1):
                     count += 1
             level_match = float(count) / dataframe.shape[0]
             if level_match >= COLUMN_PATTERN_THRESHOLD:
