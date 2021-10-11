@@ -72,8 +72,6 @@ class AnalysisManager:
         except RuntimeError as e:
             self._nb.log.error("[MANAGER] Analysis environment encountered exception {0}, call back {1}".format(e, sys.exc_info()[0]))
 
-        self.new_data(kernel_id) # add columns and data to db
-
     #    self.update_notifications(kernel_id, cell_id)
     #    self.new_notifications(kernel_id, cell_id, cell_mode)
         ns = self.db.recent_ns()
@@ -148,15 +146,3 @@ class AnalysisManager:
             for rule in feasible_rules:
                 self._nb.log.debug("[MANAGER] running rule {0}".format(rule))
                 rule.make_response(self.analyses[kernel_id], kernel_id, cell_id)
-
-    def new_data(self, kernel_id): 
-        """ check if data in the env is new, and if so, register and send event"""
-        env = self.analyses[kernel_id]
-        new_data_response = {} 
-        for name, info in env.entry_points.items():
-            data_entry = self.db.find_data(info)
-            if not data_entry:
-                new_data_response[name] = info
-                env._nbapp.log.debug("[MANAGER] Adding new data {0}".format(info))
-                self.db.add_data(info, 1)
-        return new_data_response
