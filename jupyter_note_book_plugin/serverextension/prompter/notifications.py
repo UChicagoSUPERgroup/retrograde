@@ -82,7 +82,9 @@ class ProtectedColumnNote(Notification):
 
         # are there any dataframes that we haven't examined?
         df_cols = {}
-        
+
+        self.db.get_unmarked_columns(env._kernel_id)
+
         for df_name, df in dfs.items():
             if df_name not in self.df_protected_cols:
                 df_cols[df_name] = [col for col in df.columns] 
@@ -120,6 +122,21 @@ class ProtectedColumnNote(Notification):
                         self.data[cell_id] = []
                     self.data[cell_id].append(resp)
 
+        input_data = {}
+
+        for resp_list in self.data.values():
+            for entry in resp_list:
+
+                if entry["df"] not in input_data:
+                    input_data[entry["df"]] = {}
+
+                for col, category in zip(entry["col_names"], entry["category"].split(",")):
+
+                    input_data[entry["df"]][col] = {"is_sensitive": True, "user_specified" : False, "fields" : category}
+    
+        self.db.update_marked_columns(kernel_id, input_data)
+            
+#            input_data[df_name] = {col_name : {"sensitive", "user_designated", "fields"} 
     def _make_resp_entry(self, df_name):
 
         protected_columns_string = ', '.join([p["original_name"] for p in self.df_protected_cols[df_name]])
