@@ -14,7 +14,6 @@ PATH_PROTECTED_JSON_FULL = 'evaluation_task/build/protected_columns.json'
 PATH_NATIONALITIES = './nationalities.txt'
 PATH_NATIONALITIES_FULL = 'evaluation_task/build/nationalities.txt'
 
-
 def check_for_protected(column_names):
     '''check to see if a list of column names contains any protected groups'''
     protected_corpus = _get_protected()
@@ -25,7 +24,6 @@ def check_for_protected(column_names):
     return results
 
 def guess_protected(dataframe):
-    for column in dataframe:
         """
         using: https://www.kite.com/python/answers/how-to-count-the-elements-of-a-pandas-dataframe-where-a-condition-is-true-in-python
         
@@ -50,110 +48,57 @@ def guess_protected(dataframe):
 
         Pregnancy: none
         """
+        columns = set(dataframe.columns)
+        results = []
+        protected_corpus = _get_protected()
 
-        # this process may flag the same column multiple times as potentially
-        # protected, so we should use a set to 
-        results = set()
-
-        # gender
-        for column in dataframe:
-            words = _get_dictioanry('gender')
-            level_match = _string_column_vs_list(dataframe, column, words, 
-                                                 PROTECTED_MATCH_THRESHOLD)
-            if level_match >= COLUMN_PATTERN_THRESHOLD:
-                results.add(column)
-
-        # sex
-        for column in dataframe:
-            words = _get_dictioanry('sex')
-            level_match = _string_column_vs_list(dataframe, column, words, 
-                                                 PROTECTED_MATCH_THRESHOLD)
-            if level_match >= COLUMN_PATTERN_THRESHOLD:
-                results.add(column)
-
-        # race
-        for column in dataframe:
-            words = _get_dictioanry('race')
-            level_match = _string_column_vs_list(dataframe, column, words, 
-                                                 PROTECTED_MATCH_THRESHOLD)
-            if level_match >= COLUMN_PATTERN_THRESHOLD:
-                results.add(column)
-
-        # color
-        for column in dataframe:
-            words = _get_dictioanry('color')
-            level_match = _string_column_vs_list(dataframe, column, words, 
-                                                 PROTECTED_MATCH_THRESHOLD)
-            if level_match >= COLUMN_PATTERN_THRESHOLD:
-                results.add(column)
-
-        # religion
-        for column in dataframe:
-            words = _get_dictioanry('religion')
-            level_match = _string_column_vs_list(dataframe, column, words, 
-                                                 PROTECTED_MATCH_THRESHOLD)
-            if level_match >= COLUMN_PATTERN_THRESHOLD:
-                results.add(column)
-
-        # age
-        for column in dataframe:
-            if not is_numeric_dtype(dataframe[column]):
-                continue
-            count = 0
-            for index, row in dataframe.iterrows():
-                if _is_integer(row[column]) and (row[column] <= 125 and row[column] >= 1):
-                    count += 1
-            level_match = float(count) / dataframe.shape[0]
-            if level_match >= COLUMN_PATTERN_THRESHOLD:
-                results.add(column)
-
-        # sexual orientation
-        for column in dataframe:
-            words = _get_dictioanry('sexual_orientation')
-            level_match = _string_column_vs_list(dataframe, column, words,
-                                                 PROTECTED_MATCH_THRESHOLD)
-            if level_match >= COLUMN_PATTERN_THRESHOLD:
-                results.add(column)
-
-        # nationality
-        for column in dataframe:
-            words = _get_dictioanry('nationality')
-            level_match = _string_column_vs_list(dataframe, column, words, 
-                                                 NATIONALITY_THRESHOLD)
-            if level_match >= COLUMN_PATTERN_THRESHOLD:
-                results.add(column)
-
-        # NOTE these last ones return empty lists and add nothing to the results
-        # unless protected_columns.json is modified
-
-        # pregnancy
-        for column in dataframe:
-            words = _get_dictioanry('pregnancy')
-            level_match = _string_column_vs_list(dataframe, column, words, 
-                                                 NATIONALITY_THRESHOLD)
-            if level_match >= COLUMN_PATTERN_THRESHOLD:
-                results.add(column)
-
-        # disability
-        for column in dataframe:
-            words = _get_dictioanry('disability')
-            level_match = _string_column_vs_list(dataframe, column, words, 
-                                                 NATIONALITY_THRESHOLD)
-            if level_match >= COLUMN_PATTERN_THRESHOLD:
-                results.add(column)
-
-        # genetic information
-        for column in dataframe:
-            words = _get_dictioanry('genetic_information')
-            level_match = _string_column_vs_list(dataframe, column, words, 
-                                                 NATIONALITY_THRESHOLD)
-            if level_match >= COLUMN_PATTERN_THRESHOLD:
-                results.add(column)
+        for k,v in protected_corpus.items():
+            iter_cols = columns.copy()
+            for column in iter_cols:
+                if "use_func" not in v.keys():
+                    words = v["dictionary"]
+                    level_match = _string_column_vs_list(dataframe, column, words, 
+                                                         PROTECTED_MATCH_THRESHOLD)
+                    if level_match >= COLUMN_PATTERN_THRESHOLD:
+                        results.append({"protected_value" : k, 
+                                        "protected_value_background" : v,
+                                        "original_name": column})
+                        columns.remove(column)
+                        continue # we make a guess once and don't consider it again. We could consider choosing category with highest match score
+                else:
+                    level_match = SPECIAL_FUNC[v["use_func"]](dataframe, column, v, PROTECTED_MATCH_THRESHOLD)
+                    if level_match >= COLUMN_PATTERN_THRESHOLD:
+                        results.append({"protected_value" : k,
+                                        "protected_value_background" : v,
+                                        "original_name" : column})
+                        columns.remove(column)
+                        continue
+        return results
+def get_nations(dataframe, column, v, PROTECTED_MATCH_THRESHOLD):
+    """
+    return match level of column against nations specifically. 
     
-        # now we have a set of potentially sensitive columns
-        # NOTE we haven't recorded why they were flagged as such
-        return list(results)
+    This is required because we need to load in nationalities from a separate file
+    """
+    nationality_file = None
+    try:
+        nationality_file = open(PATH_NATIONALITIES)
+    except FileNotFoundError:
+        nationality_file = open(PATH_NATIONALITIES_FULL)
+    words = nationality_file.readlines()
+    level_match = _string_column_vs_list(dataframe, column, words, 
+                                         NATIONALITY_THRESHOLD)
+    return level_match
 
+def get_age(dataframe, column, v, PROTECTED_MATCH_THRESHOLD):
+
+    if not is_numeric_dtype(dataframe[column]):
+        return 0
+    count = 0
+    count = dataframe[column].astype(float).apply(float.is_integer).sum()
+    level_match = float(count) / dataframe.shape[0]
+    return level_match
+ 
 def _get_protected():
     '''read in the protected values corpus'''
     protected_values = {}
@@ -224,3 +169,4 @@ def _get_dictioanry(protected_class):
     except KeyError:
         print("[ERROR] \"{}\" not a registered protected class in protected_columns.json".format(protected_class), file=stderr)
         return []
+SPECIAL_FUNC = {"get_age" : get_age, "get_nations" : get_nations}
