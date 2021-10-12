@@ -97,8 +97,17 @@ class ProtectedColumnNote(Notification):
         for df_name, df in dfs.items():
             guessed_columns = guess_protected(df)
             named_columns = self.df_protected_cols[df_name]
-            self.df_protected_cols[df_name] = list(set(guessed_columns + named_columns))
-        # this approach weights the two methods equally
+           
+            # deduplicate, possibly a way to optimize guess_protected, by eliminating
+            # search in columns that have already been marked 
+            prot_cols = named_columns
+            prot_col_names = [prot_col["original_name"] for prot_col in prot_cols]
+            for guess_col in guessed_columns:
+                if guess_col["original_name"] not in prot_col_names:
+                    prot_cols.append(guess_col)
+                    prot_col_names.append(guess_col["original_name"])
+             
+            self.df_protected_cols[df_name] = prot_cols
 
         if df_cols:
             return True
