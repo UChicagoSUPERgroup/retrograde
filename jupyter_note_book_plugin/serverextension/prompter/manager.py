@@ -47,11 +47,17 @@ class AnalysisManager:
         """
         self._nb.log.debug("[MANAGER] received {0}".format(request))
 
-        if request["type"] != "execute":
+        req_type = request["type"]
+        kernel_id = request["kernel"]
+
+        if req_type != "execute":
+            if req_type == "update_cols":
+                self._nb.log.info("[MANAGER] handling updated user designations request {0}".format(request))
+                self.db.update_marked_columns(kernel_id, request["designations"])
+                return
             self._nb.log.info("[MANAGER] received non-execution request {0}".format(request))
             return
 
-        kernel_id = request["kernel"]
         cell_id = request["cell_id"]
         code = request["contents"]
         metadata = json.loads(request["metadata"])
@@ -88,6 +94,10 @@ class AnalysisManager:
         self._nb.log.info("[MANAGER] sending response {0}".format(response))
 
         return response
+
+    def handle_update(self, request):
+        """Routes a request of type 'update_cols' to DbHandler.update_marked_columns()"""
+        pass
 
     def send_notifications(self, kernel_id, cell_id, exec_ct):
 
