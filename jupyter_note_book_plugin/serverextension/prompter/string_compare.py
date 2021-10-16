@@ -14,6 +14,16 @@ PATH_PROTECTED_JSON_FULL = 'evaluation_task/build/protected_columns.json'
 PATH_NATIONALITIES = './nationalities.txt'
 PATH_NATIONALITIES_FULL = 'evaluation_task/build/nationalities.txt'
 
+
+# try to pre-load the nationalitie file
+nationality_file = None
+try:
+    nationality_file = open(PATH_NATIONALITIES)
+except FileNotFoundError:
+    nationality_file = open(PATH_NATIONALITIES_FULL)
+NATIONALITY_WORDS = nationality_file.readlines()
+
+
 def check_for_protected(column_names):
     '''check to see if a list of column names contains any protected groups'''
     protected_corpus = _get_protected()
@@ -80,12 +90,7 @@ def get_nations(dataframe, column, v, PROTECTED_MATCH_THRESHOLD):
     
     This is required because we need to load in nationalities from a separate file
     """
-    nationality_file = None
-    try:
-        nationality_file = open(PATH_NATIONALITIES)
-    except FileNotFoundError:
-        nationality_file = open(PATH_NATIONALITIES_FULL)
-    words = nationality_file.readlines()
+    words = NATIONALITY_WORDS
     level_match = _string_column_vs_list(dataframe, column, words, 
                                          NATIONALITY_THRESHOLD)
     return level_match
