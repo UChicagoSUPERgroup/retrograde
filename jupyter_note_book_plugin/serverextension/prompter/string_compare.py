@@ -1,6 +1,7 @@
 import json
 from fuzzywuzzy import fuzz
 from sys import stderr
+from math import floor, log2
 
 import pandas as pd
 from pandas.api.types import is_numeric_dtype
@@ -58,6 +59,39 @@ def guess_protected(dataframe):
 
         Pregnancy: none
         """
+
+        results = []
+        protected_corpus = _get_protected()
+
+        # by only testing a logarithmic sample of the rows in each column,
+        # we can reduce this process from polynomial ~O(n^2) time 
+        # to linearithmic ~O(n log n) time
+
+        # avoids duplication by picking the first possible protected 
+        # value that passes the threshold. We could consider choosing 
+        # category with highest match score
+        for column in dataframe.columns:
+            for k,v in protected_corpus.items():
+                if "use_func" not in v.keys():
+                    words = v["dictionary"]
+                    level_match = _string_column_vs_list(dataframe, column, words, 
+                                                         PROTECTED_MATCH_THRESHOLD,
+                                                         log_sample=True)
+                    if level_match >= COLUMN_PATTERN_THRESHOLD:
+                        results.append({"protected_value" : k, 
+                                        "protected_value_background" : v,
+                                        "original_name": column})
+                        break # we make a guess once and don't consider it again
+                else:
+                    level_match = SPECIAL_FUNC[v["use_func"]](dataframe, column, v, PROTECTED_MATCH_THRESHOLD, log_sample=True)
+                    if level_match >= COLUMN_PATTERN_THRESHOLD:
+                        results.append({"protected_value" : k,
+                                        "protected_value_background" : v,
+                                        "original_name" : column})
+                        break
+        return results
+
+
         columns = set(dataframe.columns)
         results = []
         protected_corpus = _get_protected()
@@ -84,7 +118,7 @@ def guess_protected(dataframe):
                         columns.remove(column)
                         continue
         return results
-def get_nations(dataframe, column, v, PROTECTED_MATCH_THRESHOLD):
+def get_nations(dataframe, column, v, PROTECTED_MATCH_THRESHOLD, log_sample=False):
     """
     return match level of column against nations specifically. 
     
@@ -92,16 +126,22 @@ def get_nations(dataframe, column, v, PROTECTED_MATCH_THRESHOLD):
     """
     words = NATIONALITY_WORDS
     level_match = _string_column_vs_list(dataframe, column, words, 
-                                         NATIONALITY_THRESHOLD)
+                                         NATIONALITY_THRESHOLD, log_sample)
     return level_match
 
-def get_age(dataframe, column, v, PROTECTED_MATCH_THRESHOLD):
-
+def get_age(dataframe, column, v, PROTECTED_MATCH_THRESHOLD, log_sample=False):
     if not is_numeric_dtype(dataframe[column]):
         return 0
+
+    use_df = dataframe
+    n = dataframe.shape[0]
+    if log_sample:
+        n = floor(log2(n))
+        use_df = use_df.sample(n=n)
+
     count = 0
-    count = dataframe[column].astype(float).apply(float.is_integer).sum()
-    level_match = float(count) / dataframe.shape[0]
+    count = use_df[column].astype(float).apply(float.is_integer).sum()
+    level_match = float(count) / n
     return level_match
  
 def _get_protected():
@@ -140,13 +180,18 @@ def _match_any_string(string, words, threshold):
 
 # count the number of values in this column match any string in
 # the 'words' list
-def _string_column_vs_list(dataframe, colname, words, threshold):
+def _string_column_vs_list(dataframe, colname, words, threshold, log_sample=False):
+    use_df = dataframe
+    n = dataframe.shape[0]
+    if log_sample:
+        n = floor(log2(n))
+        use_df = use_df.sample(n=n)
     count = 0
-    for index, row in dataframe.iterrows():
+    for _, row in use_df.iterrows():
         didmatch = _match_any_string(str(row[colname]), words, threshold)
         if didmatch['match']:
             count += 1
-    return float(count) / dataframe.shape[0]
+    return float(count) / n
 
 # checks if a number is an integer
 def _is_integer(n):
