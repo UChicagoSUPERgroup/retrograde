@@ -1,11 +1,12 @@
 import json
 from random import choice
 
+import math
+import operator
+
 import pandas as pd
 import numpy as np
-import operator
 import dill
-import math
 
 from scipy.stats import zscore, f_oneway, chi2_contingency
 from sklearn.base import ClassifierMixin
@@ -16,8 +17,6 @@ from .storage import load_dfs
 from .string_compare import check_for_protected
 from .sortilege import is_categorical
 from .slice_finder import err_slices
-
-import json # REMOVE BEFORE PUSHING
 
 PVAL_CUTOFF = 0.25 # cutoff for thinking that column is a proxy for a sensitive column
 STD_DEV_CUTOFF = 0.1 # cutoff for standard deviation change that triggers difference in OutliersNotes
@@ -77,26 +76,26 @@ class ProtectedColumnNote(Notification):
 
         super().__init__(db)
         self.df_protected_cols = {}
+        self.df_not_protected_cols = {}
 
     def check_feasible(self, cell_id, env, dfs, ns):
 
         # are there any dataframes that we haven't examined?
-        df_cols = {}
+        self.df_protected_cols = {}
+        self.df_not_protected_cols = {}
 
-        self.db.get_unmarked_columns(env._kernel_id)
+        poss_cols = self.db.get_unmarked_columns(env._kernel_id)
 
-        for df_name, df in dfs.items():
-            if df_name not in self.df_protected_cols:
-                df_cols[df_name] = [col for col in df.columns] 
-
-        for df_name, cols in df_cols.items():
+        for df_name, cols in poss_cols.items():
 
             protected_columns = check_for_protected(cols)
-            self.df_protected_cols[df_name] = protected_columns
 
-        if df_cols:
-            return True
-        return False
+            if protected_columns != []:
+                self.df_protected_cols[df_name] = protected_columns        
+                self.df_not_protected_cols[df_name] = [c for c in cols if c not in protected_columns]
+
+        return self.df_protected_cols != {}
+
     def _noted_dfs(self, note_type):
         """return list of df names that have had notes issued on them already""" 
         notes = [note for note_set in self.data.values() for note in note_set]
@@ -111,10 +110,10 @@ class ProtectedColumnNote(Notification):
 
         #using protected columns found in csv build string to display in notification
         # find if there are dfs without notes generated on them
-        noted_dfs = self._noted_dfs("resemble")
+
+        input_data = {}
 
         for df_name in self.df_protected_cols.keys():
-            if df_name not in noted_dfs:
 
                 resp = self._make_resp_entry(df_name)
                 if len(resp["col"]) > 0: # Prevents notes where there are no columns
@@ -122,18 +121,15 @@ class ProtectedColumnNote(Notification):
                         self.data[cell_id] = []
                     self.data[cell_id].append(resp)
 
-        input_data = {}
+                if resp["df"] not in input_data:
+                    input_data[resp["df"]] = {}
 
-        for resp_list in self.data.values():
-            for entry in resp_list:
+                for col, category in zip(resp["col_names"], resp["category"].split(",")):
 
-                if entry["df"] not in input_data:
-                    input_data[entry["df"]] = {}
+                    input_data[resp["df"]][col] = {"is_sensitive": True, "user_specified" : False, "fields" : category}
+                for col in self.df_not_protected_cols[df_name]:
+                    input_data[df_name][col] = {"is_sensitive" : False, "user_specified" : False, "fields" : None}
 
-                for col, category in zip(entry["col_names"], entry["category"].split(",")):
-
-                    input_data[entry["df"]][col] = {"is_sensitive": True, "user_specified" : False, "fields" : category}
-    
         self.db.update_marked_columns(kernel_id, input_data)
             
 #            input_data[df_name] = {col_name : {"sensitive", "user_designated", "fields"} 
@@ -152,23 +148,40 @@ class ProtectedColumnNote(Notification):
 
     def update(self, env, kernel_id, cell_id, dfs, ns):
         # pylint: disable=too-many-arguments
+
+        # if df has been reloaded with new columns, then captured
+        # in the check_feasible step
+
+        # so check 1. that the noted dfs are still defined, 2. that
+        # noted defined dfs still have same columns 3. that columns in
+        # noted defined dfs are still 
+
         new_data = {}
+        new_df_names = list(self.df_protected_cols.keys())
+
         for cell, note_list in self.data.items():
+
             new_notes = []
+
             for note in note_list:
                 if note["type"] == "resemble":
 
                     df_name = note["df"]
-                    
-                    if df_name in dfs:
 
-                        protected_cols = check_for_protected(dfs[df_name].columns)
-                        self.df_protected_cols[df_name] = protected_cols
-                        new_notes.append(self._make_resp_entry(df_name))
+                    if df_name not in dfs:
+                        continue
+                    if df_name in new_df_names:
+                        new_notes.append(note)
+                        continue
+                    # does the df_name still have the same column names/values?
+                    # column names must be the same, but the values may have
+                    # changed. Therefore TODO: change this to do check_values cols
+                    protected_cols = check_for_protected(dfs[df_name].columns)
+                    self.df_protected_cols[df_name] = protected_cols
+                    new_notes.append(self._make_resp_entry(df_name))
                 else:
                     new_notes.append(note)
             new_data[cell] = new_notes
-
         env.log.debug("[ProtectedColumnNote] updated responses")
 
         self.data = new_data
@@ -325,6 +338,7 @@ class ProxyColumnNote(ProtectedColumnNote):
         self.data = live_resps
 
 # TODO: inheret from ProxyColumnNote, and check both protected and proxy columns
+
 class MissingDataNote(ProtectedColumnNote):
     """
     A notification that measures whether there exists columns with missing data.
