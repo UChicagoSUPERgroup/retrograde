@@ -19,13 +19,14 @@ SQL_CMDS = {
   "INSERT_CELLS" : """INSERT INTO cells(id, contents, num_exec, last_exec, kernel, user, metadata) VALUES (?,?,?,?,?,?,?);""",
   "UPDATE_CELLS" : """UPDATE cells SET contents = ?, num_exec = num_exec + 1, last_exec = ?, kernel = ?, metadata = ? WHERE id = ? AND user = ?;""",
   "INSERT_VERSIONS" : """INSERT INTO versions(user, kernel, id, version, time, contents, exec_ct) VALUES (?,?,?,?,?,?,?);""",
-  "DATA_VERSIONS" : """SELECT kernel, source, name, version, user FROM data WHERE source = ? AND name = ? AND user = ? ORDER BY version""",
+  "DATA_VERSIONS" : """SELECT kernel, source, name, version, user FROM data WHERE source = ? AND name = ? AND user = ? AND kernel = ? ORDER BY version""",
+  "DATA_VERSIONS_NO_SOURCE" : """SELECT kernel, source, name, version, user FROM data WHERE name = ? AND user = ? AND kernel = ? ORDER BY version""",
   "ADD_DATA" : """INSERT INTO data(kernel, cell, version, source, name, user) VALUES (?, ?, ?, ?, ?, ?)""",
   "ADD_COLS" : """INSERT INTO columns(user, kernel, name, version, col_name, type, size) VALUES (?, ?, ?, ?, ?, ?, ?)""",
   "GET_VERSIONS" : """SELECT contents, version FROM versions WHERE kernel = ? AND id = ? AND user = ? ORDER BY version DESC LIMIT 1""",
   "GET_COLS" : """SELECT * FROM columns WHERE user = ? AND col_name = ?""",
   "GET_ALL_COLS" : """SELECT * FROM columns WHERE user = ? AND kernel = ? AND name = ? AND version = ?""",
-  "GET_UNMARKED" : """SELECT col_name, name, version, type, size FROM columns WHERE kernel = ? AND user = ? AND checked = FALSE""",
+  "GET_UNMARKED" : """SELECT col_name, name, version, type, size FROM columns WHERE kernel = ? AND user = ? AND name = ? AND version = ? AND checked = FALSE""",
   "UPDATE_COL_TYPES" : """UPDATE columns SET fields = ?, is_sensitive = ?, user_specified = ?, checked = ? WHERE user = ? AND kernel = ? AND name = ? AND version = ? AND col_name = ?""",
   "GET_MAX_VERSION" : """SELECT name,MAX(version) FROM data WHERE user = ? AND kernel = ? GROUP BY name""",
   "STORE_RESP" : """INSERT INTO notifications(kernel, user, cell, resp, exec_ct) VALUES (?, ?, ?, ?, ?)""",
@@ -40,7 +41,10 @@ LOCAL_SQL_CMDS = { # cmds that will always get executed locally
 }
 
 class DbHandler:
-
+    """
+    DbHandler class handles connections between sqlite3 or MySQL database
+    Provides single place for updating database entries
+    """
     def __init__(self, dirname = DB_DIR, dbname = DB_NAME):
 
         db_path_resolved = os.path.expanduser(dirname)
@@ -201,7 +205,14 @@ class DbHandler:
                     entry_matched = False
                 if entry_matched:
                     return version["version"]
+
             max_version = max([v["version"] for v in data_versions])
+
+            if "source" not in entry_point:
+
+                max_data_version = [v for v in data_versions if v["version"] == max_version][0]
+                entry_point["source"] = max_data_version["source"] 
+
             self.add_data(entry_point, max_version+1) 
             return max_version + 1
         else:
@@ -212,16 +223,28 @@ class DbHandler:
     def find_data(self, data):
         """look up if data entry exists, return if exists, None if not"""
         # note that will *not* compare columns
+        if "source" in data.keys():
+            source = data["source"]
+            name = data["name"] 
+            kernel = data["kernel"] 
 
-        source = data["source"]
-        name = data["name"] 
+            self.renew_connection() 
+            self._cursor.execute(self.cmds["DATA_VERSIONS"], 
+                                 (source, name, self.user, kernel))
+            data_versions = self._cursor.fetchall()
 
-        self.renew_connection() 
-        self._cursor.execute(self.cmds["DATA_VERSIONS"], 
-                             (source, name, self.user))
+            if data_versions == []: 
+                return None
+            return data_versions
+
+        name = data["name"]
+        kernel = data["kernel"] 
+
+        self.renew_connection()
+        self._cursor.execute(self.cmds["DATA_VERSIONS_NO_SOURCE"], (name, self.user, kernel))
         data_versions = self._cursor.fetchall()
 
-        if data_versions == []: 
+        if data_versions == []:
             return None
         return data_versions
 
@@ -270,24 +293,27 @@ class DbHandler:
         """
         return columns that have not been scanned for whether they are sensitive
         or not.
-
-        format is {df_name : {version_1 : [col_names], version_2 : [col_names]}}
+        
+        format is {df_name : [col_names]}
+    
         """
         self.renew_connection()
-        self._cursor.execute(self.cmds["GET_UNMARKED"], (kernel, self.user))
-        results = self._cursor.fetchall()
+        self._cursor.execute(self.cmds["GET_MAX_VERSION"], (self.user, kernel))
 
-        max_rows = {}
+        max_versions = self._cursor.fetchall()
+        unmarked_cols = {}
 
-        for result in results:
-            if result["name"] not in max_rows:
-                max_rows[result["name"]] = {result["version"] : [result["col_name"]]}              
-            elif result["version"] not in max_rows[result["name"]]:
-                max_rows[result["name"]][result["version"]] = [result["col_name"]]
-            else:
-                max_rows[result["name"]][result["version"]].append(result["col_name"])
-        return max_rows
-  
+        for max_version in max_versions:
+
+            name = max_version["name"]
+            version = max_version["MAX(version)"]
+            self._cursor.execute(self.cmds["GET_UNMARKED"], (kernel, self.user, name, version))
+            results = self._cursor.fetchall()
+            
+            unmarked_cols[name] = [res["col_name"] for res in results]
+
+        return unmarked_cols
+
     def update_marked_columns(self, kernel, input_data):
         """
         update columns
