@@ -63,6 +63,8 @@ def guess_protected(dataframe):
         results = []
         protected_corpus = _get_protected()
 
+        # dataframe[col].unique()
+
         # by only testing a logarithmic sample of the rows in each column,
         # we can reduce this process from polynomial ~O(n^2) time 
         # to linearithmic ~O(n log n) time
@@ -118,6 +120,8 @@ def guess_protected(dataframe):
                         columns.remove(column)
                         continue
         return results
+
+
 def get_nations(dataframe, column, v, PROTECTED_MATCH_THRESHOLD, log_sample=False):
     """
     return match level of column against nations specifically. 
