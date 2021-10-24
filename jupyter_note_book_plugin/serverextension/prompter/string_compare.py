@@ -14,15 +14,18 @@ PATH_PROTECTED_JSON = './protected_columns.json'
 PATH_PROTECTED_JSON_FULL = 'evaluation_task/build/protected_columns.json'
 PATH_NATIONALITIES = './nationalities.txt'
 PATH_NATIONALITIES_FULL = 'evaluation_task/build/nationalities.txt'
+NATIONALITY_WORDS = None
 
+# try to pre-load the nationalities file
+def load_nationalities():
+    global NATIONALITY_WORDS
 
-# try to pre-load the nationalitie file
-nationality_file = None
-try:
-    nationality_file = open(PATH_NATIONALITIES)
-except FileNotFoundError:
-    nationality_file = open(PATH_NATIONALITIES_FULL)
-NATIONALITY_WORDS = nationality_file.readlines()
+    nationality_file = None
+    try:
+        nationality_file = open(PATH_NATIONALITIES)
+    except FileNotFoundError:
+        nationality_file = open(PATH_NATIONALITIES_FULL)
+    NATIONALITY_WORDS = nationality_file.readlines()
 
 
 def check_for_protected(column_names):
@@ -59,6 +62,11 @@ def guess_protected(dataframe):
 
         Pregnancy: none
         """
+        global NATIONALITY_WORDS
+
+        # only load nationalities once
+        if NATIONALITY_WORDS is None:
+            load_nationalities()
 
         results = []
         protected_corpus = _get_protected()
@@ -94,34 +102,6 @@ def guess_protected(dataframe):
         return results
 
 
-        columns = set(dataframe.columns)
-        results = []
-        protected_corpus = _get_protected()
-
-        for k,v in protected_corpus.items():
-            iter_cols = columns.copy()
-            for column in iter_cols:
-                if "use_func" not in v.keys():
-                    words = v["dictionary"]
-                    level_match = _string_column_vs_list(dataframe, column, words, 
-                                                         PROTECTED_MATCH_THRESHOLD)
-                    if level_match >= COLUMN_PATTERN_THRESHOLD:
-                        results.append({"protected_value" : k, 
-                                        "protected_value_background" : v,
-                                        "original_name": column})
-                        columns.remove(column)
-                        continue # we make a guess once and don't consider it again. We could consider choosing category with highest match score
-                else:
-                    level_match = SPECIAL_FUNC[v["use_func"]](dataframe, column, v, PROTECTED_MATCH_THRESHOLD)
-                    if level_match >= COLUMN_PATTERN_THRESHOLD:
-                        results.append({"protected_value" : k,
-                                        "protected_value_background" : v,
-                                        "original_name" : column})
-                        columns.remove(column)
-                        continue
-        return results
-
-
 def get_nations(dataframe, column, v, PROTECTED_MATCH_THRESHOLD, log_sample=False):
     """
     return match level of column against nations specifically. 
@@ -133,18 +113,36 @@ def get_nations(dataframe, column, v, PROTECTED_MATCH_THRESHOLD, log_sample=Fals
                                          NATIONALITY_THRESHOLD, log_sample)
     return level_match
 
-def get_age(dataframe, column, v, PROTECTED_MATCH_THRESHOLD, log_sample=False):
-    if not is_numeric_dtype(dataframe[column]):
+
+def get_age(dataframe, colname, v, PROTECTED_MATCH_THRESHOLD, log_sample=False):
+    if not is_numeric_dtype(dataframe[colname]):
         return 0
 
     use_df = dataframe
-    n = dataframe.shape[0]
+    n = len(dataframe.index)
     if log_sample:
-        n = floor(log2(n))
-        use_df = use_df.sample(n=n)
+        # get the size of log2(n) and the number of unique elements in this
+        # column
+        sizelog2 = floor(log2(n))
+        sizeunique = len(pd.unique(use_df[colname]))
+
+        # we want to reduce the chance we're using duplicate values for our
+        # guess, but we want to make sure the guessing algorithm runs on a 
+        # sample no greater than log2(n), or that would defeat the purpose
+        # of ensuring linearithmic time
+        
+        # fastest known way to drop duplicates
+        temp = use_df[[colname]]
+        use_df = temp[~temp.index.duplicated(keep='first')]
+
+        # if the size is larger than log2(n), make a random sample of that
+        # size
+        if sizeunique > sizelog2:
+            use_df = use_df.sample(n=sizelog2)
+        n = len(use_df.index)
 
     count = 0
-    count = use_df[column].astype(float).apply(float.is_integer).sum()
+    count = use_df[colname].astype(float).apply(float.is_integer).sum()
     level_match = float(count) / n
     return level_match
  
@@ -185,11 +183,20 @@ def _match_any_string(string, words, threshold):
 # count the number of values in this column match any string in
 # the 'words' list
 def _string_column_vs_list(dataframe, colname, words, threshold, log_sample=False):
+    # same as before TODO consider moving to a seperate function?
     use_df = dataframe
-    n = dataframe.shape[0]
+    n = len(dataframe.index)
     if log_sample:
-        n = floor(log2(n))
-        use_df = use_df.sample(n=n)
+        sizelog2 = floor(log2(n))
+        sizeunique = len(pd.unique(use_df[colname]))
+        
+        temp = use_df[[colname]]
+        use_df = temp[~temp.index.duplicated(keep='first')]
+
+        if sizeunique > sizelog2:
+            use_df = use_df.sample(n=sizelog2)
+        n = len(use_df.index)
+    
     count = 0
     for _, row in use_df.iterrows():
         didmatch = _match_any_string(str(row[colname]), words, threshold)
