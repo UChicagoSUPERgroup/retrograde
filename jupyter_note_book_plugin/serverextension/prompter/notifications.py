@@ -87,7 +87,7 @@ class ProtectedColumnNote(Notification):
         poss_cols = self.db.get_unmarked_columns(env._kernel_id)
 
         for df_name, cols in poss_cols.items():
-
+            # TODO: when guess_protected integrated, should also call guess protected here
             protected_columns = check_for_protected(cols)
 
             if protected_columns != []:
@@ -140,10 +140,19 @@ class ProtectedColumnNote(Notification):
 
         resp = {"type" : "resemble"}
         resp["df"] = df_name
+
+        # TODO: remove these once frontend updated
         resp["col"] = protected_columns_string
         resp["category"] = protected_values_string
         resp["col_names"] = [p["original_name"] for p in self.df_protected_cols[df_name]]
+        # end TODO
 
+        resp["columns"] = {}
+
+        for col in self.df_protected_cols[df_name]:
+            resp["columns"][col["original_name"]] = {"sensitive" : True, "field" : col["protected_value"]}
+        for col in self.df_not_protected_cols[df_name]:
+            resp["columns"][col] = {"sensitive" : False, "field" : None}
         return resp
 
     def update(self, env, kernel_id, cell_id, dfs, ns):
@@ -153,8 +162,11 @@ class ProtectedColumnNote(Notification):
         # in the check_feasible step
 
         # so check 1. that the noted dfs are still defined, 2. that
-        # noted defined dfs still have same columns 3. that columns in
-        # noted defined dfs are still 
+        # noted defined df still has columns 3. that columns in
+        # noted defined dfs are still of the same value 
+
+        # Also should check that judgments about columns in noted defined
+        # df have not changed. 
 
         new_data = {}
         new_df_names = list(self.df_protected_cols.keys())
@@ -178,10 +190,14 @@ class ProtectedColumnNote(Notification):
                     # changed. Therefore TODO: change this to do check_values cols
                     protected_cols = check_for_protected(dfs[df_name].columns)
                     self.df_protected_cols[df_name] = protected_cols
+                    protected_col_names = [col["original_name"] for col in protected_cols]
+                    self.df_not_protected_cols[df_name] = [col for col in dfs[df_name].columns if col not in protected_col_names]
+                
                     new_notes.append(self._make_resp_entry(df_name))
                 else:
                     new_notes.append(note)
             new_data[cell] = new_notes
+        # TODO update protected in database
         env.log.debug("[ProtectedColumnNote] updated responses")
 
         self.data = new_data
