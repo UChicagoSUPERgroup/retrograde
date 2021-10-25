@@ -8,12 +8,13 @@ import json
 import mysql.connector
 import dill
 
-from random import choice
+from random import choice, randrange
 
 from .storage import DbHandler, RemoteDbHandler, load_dfs
 from .analysis import AnalysisEnvironment
 from .config import MODE, remote_config
 from .note_config import NOTE_RULES
+
 
 class AnalysisManager:
     """
@@ -47,8 +48,27 @@ class AnalysisManager:
         """
         self._nb.log.debug("[MANAGER] received {0}".format(request))
 
+        if("requestType" in request):
+            if request["requestType"] == "sensitivityModification":
+                ######################################
+                # One way to intercept the request
+                #
+                # This prob isn't the best way, I was just
+                # using it for testing. Feel free to replace!
+                print("Sensitivity request received")
+                print(request["df"])
+                print(request["col"])
+                print(request["sensitivity"])
+                return "Updated"
+            elif request["requestType"] == "columnInformation":
+                print("Column information request received")
+                print(request["df"])
+                print(request["col"])
+                return '{"valueCounts":["random","' + str(randrange(0, 10)) + '"],"sensitivity":"some reason ' + str(randrange(0, 10)) + '"}'
+
         req_type = request["type"]
         kernel_id = request["kernel"]
+
 
         if req_type != "execute":
             if req_type == "update_cols":
