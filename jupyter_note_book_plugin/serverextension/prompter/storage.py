@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 import json
 import sqlite3
 import os
+from sqlite3.dbapi2 import version
 import dill
 
 from mysql.connector import connect
@@ -25,6 +26,7 @@ SQL_CMDS = {
   "ADD_COLS" : """INSERT INTO columns(user, kernel, name, version, col_name, type, size) VALUES (?, ?, ?, ?, ?, ?, ?)""",
   "GET_VERSIONS" : """SELECT contents, version FROM versions WHERE kernel = ? AND id = ? AND user = ? ORDER BY version DESC LIMIT 1""",
   "GET_COLS" : """SELECT * FROM columns WHERE user = ? AND col_name = ?""",
+  "GET_FIELDS" : """SELECT fields FROM columns WHERE user = ? AND kernel = ? AND name = ? AND version = ? AND col_name = ?""",
   "GET_ALL_COLS" : """SELECT * FROM columns WHERE user = ? AND kernel = ? AND name = ? AND version = ?""",
   "GET_UNMARKED" : """SELECT col_name, name, version, type, size FROM columns WHERE kernel = ? AND user = ? AND name = ? AND version = ? AND checked = FALSE""",
   "UPDATE_COL_TYPES" : """UPDATE columns SET fields = ?, is_sensitive = ?, user_specified = ?, checked = ? WHERE user = ? AND kernel = ? AND name = ? AND version = ? AND col_name = ?""",
@@ -380,6 +382,54 @@ class DbHandler:
         """renew the connection to the database"""
         # pylint: disable=no-self-use
         return True # only relevant when db is remote
+    
+    def provide_col_info(self, kernel_id, request):
+        """
+        provide the info for the column(s) a user requests
+
+        request is a dictionary with {“requestType”: “columnInformation”, “df”: <String dataframe name>, “col”: <String column name>}
+
+        Returns: {“valueCounts”: <Series results of .valueCounts()>, “sensitivity”: <String explaining sensitivity>}
+        """
+        self.renew_connection()
+        query_tuples = []
+
+        # TODO: add some error handling
+        curr_ns = self.db.recent_ns()
+        dfs = load_dfs(curr_ns)
+        # find col in question
+        df_name = request["df"] 
+        col_name = request["col"]
+        df_callable = dfs[df_name]
+        col = df_callable[col_name]
+        col_val_counts = col.value_counts()
+        
+        # TODO: fetch sensitivity reasoning
+
+        self._cursor.execute(self.cmds["GET_MAX_VERSION"], (self.user, kernel_id))
+        version_dict = {} 
+        # find max versions of all dfs
+        # TODO: Only find max version of dfs that we're looking at
+        for resp in self._cursor.fetchall():
+            key = (self.user, kernel_id, resp["name"])
+            value = resp["MAX(version)"]
+
+            if key in version_dict:
+                raise Exception("Duplicate keys {")
+            version_dict[key] = value
+        
+        
+
+        version = version_dict[(self.user, kernel_id, df_name)]
+        query_params = (self.user, kernel_id, df_name, version, col_name)
+        self._cursor.executemany(self.cmds["GET_FIELDS"], query_params)
+        results = self._cursor.fetchone()
+
+        if not results:
+            # TODO: is this fine to return ?
+            return {"error": f"no record found in the table for {self.user}, {df_name}, {col_name}, {kernel_id}, version{version}"}
+        sensitivity_field = results[0]
+        return {"valueCounts": col_val_counts, "sensitivity": sensitivity_field} # how to get note text here?
 
 class RemoteDbHandler(DbHandler):
     """when we want the database to be remote"""

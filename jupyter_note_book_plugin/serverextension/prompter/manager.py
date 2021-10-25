@@ -51,9 +51,13 @@ class AnalysisManager:
         kernel_id = request["kernel"]
 
         if req_type != "execute":
-            if req_type == "update_cols":
+            if req_type == "update_cols": # this is the changing column sensitivity?
                 self._nb.log.info("[MANAGER] handling updated user designations request {0}".format(request))
                 self.db.update_marked_columns(kernel_id, request["designations"])
+                return
+            elif req_type == "columnInformation":
+                self._nb.log.info("[MANAGAER] handling request for column information {0}".format(request))
+                self.handle_col_info(kernel_id, request)
                 return
             self._nb.log.info("[MANAGER] received non-execution request {0}".format(request))
             return
@@ -97,6 +101,9 @@ class AnalysisManager:
 
     def handle_update(self, request):
         """Routes a request of type 'update_cols' to DbHandler.update_marked_columns()"""
+        pass
+
+    def handle_col_info(self, kernel_id, request):
         pass
 
     def send_notifications(self, kernel_id, cell_id, exec_ct):
