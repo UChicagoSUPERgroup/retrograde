@@ -12,9 +12,10 @@ import {
   Listener,
 } from "./cell-listener";
 
-import {
-  PopupNotification,
-} from "./PopupNotification";
+import { PopupNotification } from "./components/PopupNotification";
+import { ProtectedColumnNote } from "./components/ProtectedColumnNote";
+
+
 
 import $ = require('jquery');
 
@@ -76,9 +77,7 @@ export class Prompter {
 
   // Route function for notifications that are added individually
   private _routeNotice(notice: any, note_count: number) {
-    if (notice["type"] == "resemble") {
-      return this._makeResembleMsg(notice["df"], notice["col"], note_count);
-    } else if (notice["type"] == "outliers") {
+    if (notice["type"] == "outliers") {
       return this._makeOutliersMsg(notice["col_name"], notice["value"], notice["std_dev"], notice["df_name"], note_count);
     } else if (notice["type"] == "eq_odds") {
       return this._makeEqOddsMsg(notice, note_count);
@@ -105,6 +104,8 @@ export class Prompter {
       } else if (notice_type == "error") {
         this._makeErrorMessage(list_of_notes, note_count);
         note_count += 1
+      } else if (notice_type == "resemble") {
+        this._makeResembleMsg(list_of_notes, note_count)
       } else {
         for (var x = 0; x < list_of_notes.length; x++) {
           var notice = list_of_notes[x]
@@ -129,12 +130,10 @@ export class Prompter {
   }
 
   // To check
-  private _makeResembleMsg(df_name: string, col_name: string, note_count: number) {
-    var note = new PopupNotification("resemble", false, "Protected Column Note");
-    note.addHeader("Protected Column Note");
-    note.addParagraph(`The dataframe <b>${df_name}</b> contains a column <b>${col_name}</b>.`);
-    note.addParagraph(`sing this column may be descriminatory.`);
-    return note.generateFormattedOutput(global_notification_count, note_count);
+  private _makeResembleMsg(notices : any[], note_count : number) {
+    var note = new ProtectedColumnNote(notices);
+    var message = note.generateFormattedOutput(global_notification_count, note_count);
+    this._appendNote(notices[0]["cell_id"], notices[0]["kernel_id"], message);
   }
 
   // To check
