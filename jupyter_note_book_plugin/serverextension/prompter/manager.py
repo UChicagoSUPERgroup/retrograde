@@ -51,9 +51,9 @@ class AnalysisManager:
         kernel_id = request["kernel"]
 
         if req_type != "execute":
-            if req_type == "update_cols": # this is the changing column sensitivity?
-                self._nb.log.info("[MANAGER] handling updated user designations request {0}".format(request))
-                self.db.update_marked_columns(kernel_id, request["designations"])
+            if req_type == "sensitivityModification": # changing column sensitivity
+                self._nb.log.info("[MANAGER] handling updated sensitivity modification request {0}".format(request))
+                self.db.update_marked_columns(kernel_id, request["designations"]) # Q?: what is the name of the key holding the input data dict? (not in luca's design google doc)
                 return
             elif req_type == "columnInformation":
                 self._nb.log.info("[MANAGAER] handling request for column information {0}".format(request))
@@ -104,7 +104,14 @@ class AnalysisManager:
         pass
 
     def handle_col_info(self, kernel_id, request):
-        pass
+        """Routes a request of type 'columnInformation' to DbHandler.provide_col_info()"""
+        result = self.db.provide_col_info(kernel_id, request)
+        # Q?: figure out what else to do with result? (Update in UI... how?)
+        if "error" in result:
+            self._nb.log.warning("[MANAGER] Unable to provide columnInformation.\nRequest: {0}\nError: {1}".format(request, result))
+        else:
+            # do something
+            pass
 
     def send_notifications(self, kernel_id, cell_id, exec_ct):
 

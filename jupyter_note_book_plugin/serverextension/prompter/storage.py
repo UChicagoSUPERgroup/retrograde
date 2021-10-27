@@ -7,7 +7,6 @@ from datetime import datetime, timedelta
 import json
 import sqlite3
 import os
-from sqlite3.dbapi2 import version
 import dill
 
 from mysql.connector import connect
@@ -403,13 +402,10 @@ class DbHandler:
         df_callable = dfs[df_name]
         col = df_callable[col_name]
         col_val_counts = col.value_counts()
-        
-        # TODO: fetch sensitivity reasoning
 
         self._cursor.execute(self.cmds["GET_MAX_VERSION"], (self.user, kernel_id))
         version_dict = {} 
         # find max versions of all dfs
-        # TODO: Only find max version of dfs that we're looking at
         for resp in self._cursor.fetchall():
             key = (self.user, kernel_id, resp["name"])
             value = resp["MAX(version)"]
@@ -426,7 +422,7 @@ class DbHandler:
         results = self._cursor.fetchone()
 
         if not results:
-            # TODO: is this fine to return ?
+            # Q?: is this fine to return if something later is expecting a result?
             return {"error": f"no record found in the table for {self.user}, {df_name}, {col_name}, {kernel_id}, version{version}"}
         sensitivity_field = results[0]
         return {"valueCounts": col_val_counts, "sensitivity": sensitivity_field} # how to get note text here?
