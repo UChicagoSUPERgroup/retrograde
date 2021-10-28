@@ -413,8 +413,6 @@ class DbHandler:
             if key in version_dict:
                 raise Exception("Duplicate keys {")
             version_dict[key] = value
-        
-        
 
         version = version_dict[(self.user, kernel_id, df_name)]
         query_params = (self.user, kernel_id, df_name, version, col_name)
@@ -422,7 +420,6 @@ class DbHandler:
         results = self._cursor.fetchone()
 
         if not results:
-            # Q?: is this fine to return if something later is expecting a result?
             return {"error": f"no record found in the table for {self.user}, {df_name}, {col_name}, {kernel_id}, version{version}"}
         sensitivity_field = results[0]
         return {"valueCounts": col_val_counts, "sensitivity": sensitivity_field} # how to get note text here?

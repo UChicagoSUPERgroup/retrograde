@@ -47,18 +47,22 @@ class AnalysisManager:
         """
         self._nb.log.debug("[MANAGER] received {0}".format(request))
 
-        req_type = request["type"]
-        kernel_id = request["kernel"]
+        req_type = ""
+        kernel_id = ""
+        if "requestType" in request:
+            req_type = request["requestType"]
+        if "kernel" in request:
+            kernel_id = request["kernel"]
 
         if req_type != "execute":
-            if req_type == "sensitivityModification": # changing column sensitivity
+            if req_type == "sensitivityModification":
                 self._nb.log.info("[MANAGER] handling updated sensitivity modification request {0}".format(request))
                 self.db.update_marked_columns(kernel_id, request["designations"]) # Q?: what is the name of the key holding the input data dict? (not in luca's design google doc)
-                return
+                return "Updated"
             elif req_type == "columnInformation":
                 self._nb.log.info("[MANAGAER] handling request for column information {0}".format(request))
-                self.handle_col_info(kernel_id, request)
-                return
+                result = self.handle_col_info(kernel_id, request)
+                return result
             self._nb.log.info("[MANAGER] received non-execution request {0}".format(request))
             return
 
@@ -99,19 +103,12 @@ class AnalysisManager:
 
         return response
 
-    def handle_update(self, request):
-        """Routes a request of type 'update_cols' to DbHandler.update_marked_columns()"""
-        pass
-
     def handle_col_info(self, kernel_id, request):
         """Routes a request of type 'columnInformation' to DbHandler.provide_col_info()"""
         result = self.db.provide_col_info(kernel_id, request)
-        # Q?: figure out what else to do with result? (Update in UI... how?)
         if "error" in result:
             self._nb.log.warning("[MANAGER] Unable to provide columnInformation.\nRequest: {0}\nError: {1}".format(request, result))
-        else:
-            # do something
-            pass
+        return result
 
     def send_notifications(self, kernel_id, cell_id, exec_ct):
 
