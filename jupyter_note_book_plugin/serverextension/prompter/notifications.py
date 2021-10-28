@@ -21,7 +21,6 @@ from .slice_finder import err_slices
 PVAL_CUTOFF = 0.25 # cutoff for thinking that column is a proxy for a sensitive column
 STD_DEV_CUTOFF = 0.1 # cutoff for standard deviation change that triggers difference in OutliersNotes
 
-
 class Notification:
     """Abstract base class for all notifications"""
     def __init__(self, db):
@@ -91,8 +90,10 @@ class ProtectedColumnNote(Notification):
             protected_columns = check_for_protected(cols)
 
             if protected_columns != []:
+
+                protected_col_names = [c["original_name"] for c in protected_columns]
                 self.df_protected_cols[df_name] = protected_columns        
-                self.df_not_protected_cols[df_name] = [c for c in cols if c not in protected_columns]
+                self.df_not_protected_cols[df_name] = [c for c in cols if c not in protected_col_names]
 
         return self.df_protected_cols != {}
 
@@ -123,13 +124,12 @@ class ProtectedColumnNote(Notification):
 
                 if resp["df"] not in input_data:
                     input_data[resp["df"]] = {}
-
+                # TODO: somehow protected columns are not getting marked as sensitive
+                env.log.debug("[ProtectedColumn] resp {0}".format(resp))
                 for col, category in zip(resp["col_names"], resp["category"].split(",")):
-
                     input_data[resp["df"]][col] = {"is_sensitive": True, "user_specified" : False, "fields" : category}
                 for col in self.df_not_protected_cols[df_name]:
                     input_data[df_name][col] = {"is_sensitive" : False, "user_specified" : False, "fields" : None}
-
         self.db.update_marked_columns(kernel_id, input_data)
             
 #            input_data[df_name] = {col_name : {"sensitive", "user_designated", "fields"} 
@@ -220,25 +220,39 @@ class ProxyColumnNote(ProtectedColumnNote):
         self.avail_dfs = {} # df_name -> {df: <df>, sense_cols : [], non_sense_cols: []}
         
     def check_feasible(self, cell_id, env, dfs, ns):
-        super().check_feasible(cell_id, env, dfs, ns) # populates self.df_protected_cols
-        # note that we don't care about return value because even if there are no 
-        # new dfs, the columns may have changed
- 
+
+        # note is feasible if there are columns of most recent
+        # data versions, which are sensitive, and there are columns
+        # in most recent data versions which are not sensitive
+
+        # note that by using DB, we only issue notes when a Protected
+        # note has already been sent.
+  
         self.avail_dfs = {}
 
         # find dfs that have not had notes issued on them already
         noted_dfs = self._noted_dfs("proxy")
+        recent_cols = self.db.get_recent_cols(env._kernel_id)
+        env.log.debug("[ProxyNote] recent_cols {0}".format(recent_cols))
 
-        for df_name in self.df_protected_cols:
-            if df_name not in noted_dfs:
-                sense_col_names = [c["original_name"] for c in self.df_protected_cols[df_name]]
-                non_sensitive_cols = [c for c in dfs[df_name].columns if c not in sense_col_names]
-                if len(non_sensitive_cols) != 0 and len(sense_col_names) != 0: 
-                    self.avail_dfs[df_name] = {
-                        "df" : dfs[df_name],    
-                        "sens_cols" : sense_col_names,
-                        "non_sense_cols" : non_sensitive_cols
-                    }
+        candidates = {}
+        for col in recent_cols:
+
+            df_name = col["name"]
+            if df_name in noted_dfs or df_name not in dfs:
+                continue
+            if df_name not in candidates:
+                candidates[df_name] = {
+                    "df" : dfs[df_name],
+                    "sens_cols" : [],
+                    "non_sense_cols" : []
+                }
+            if col["checked"] and col["is_sensitive"]:
+                candidates[df_name]["sens_cols"].append(col["col_name"])
+            elif col["checked"]:
+                candidates[df_name]["non_sense_cols"].append(col["col_name"])
+        self.avail_dfs = {k : v for k,v in candidates.items() if v["sens_cols"] != [] and v["non_sense_cols"] != []}
+        env.log.debug("[ProxyNote] available dfs {0}, out of {1}".format(self.avail_dfs.keys(), candidates))
         return len(self.avail_dfs) > 0
 
     def make_response(self, env, kernel_id, cell_id):
