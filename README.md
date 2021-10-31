@@ -93,7 +93,7 @@ Then in notebook-server/, copy over config.yml.tmpl to config.yml, fill out the 
 
 Then to run the webserver, run pipenv run python3 wsgi.py. This starts the webserver on port 5000.
 
-To test the server, go to <hostname>:5000/<USER_ID>/<MODE>. <MODE> is either EXP_CTS or EXP_END and USER_ID can be anything you want. It's helpful to make it relatively unique as it will enable us to debug any issues that may arise. 
+To test the server, go to (hostname)>:5000/(USER_ID)/(MODE). (MODE) is either EXP_CTS or EXP_END and USER_ID can be anything you want. It's helpful to make it relatively unique as it will enable us to debug any issues that may arise. 
 	
 
 
