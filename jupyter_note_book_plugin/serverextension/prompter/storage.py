@@ -335,7 +335,7 @@ class DbHandler:
         """
         update columns
         
-        input_data is a dictionary mapping df_name -> {col_name : { "sensitive" : "user_designated" : "fields" : }}
+        input_data is a dictionary mapping df_name -> {col_name : { "sensitive" : <boolean>, "user_designated" : <boolean>, "fields" : <string> }}
         """
         self.renew_connection()
         query_tuples = [] 

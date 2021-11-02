@@ -8,9 +8,8 @@ import pandas as pd
 import numpy as np
 import dill
 
-from scipy.stats import zscore, f_oneway, chi2_contingency
+from scipy.stats import zscore, f_oneway, chi2_contingency, spearmanr
 from sklearn.base import ClassifierMixin
-from aif360.sklearn.postprocessing import CalibratedEqualizedOdds, PostProcessingMeta
 from pandas.api.types import is_numeric_dtype
 
 from .storage import load_dfs
@@ -218,7 +217,8 @@ class ProxyColumnNote(ProtectedColumnNote):
     def __init__(self, db):
         super().__init__(db)
         self.avail_dfs = {} # df_name -> {df: <df>, sense_cols : [], non_sense_cols: []}
-        
+        self.combo_ledger = {} # combinations considered df_name -> {"sensitive" : [], "not_sensitive" : []}
+ 
     def check_feasible(self, cell_id, env, dfs, ns):
 
         # note is feasible if there are columns of most recent
@@ -233,9 +233,8 @@ class ProxyColumnNote(ProtectedColumnNote):
         # find dfs that have not had notes issued on them already
         noted_dfs = self._noted_dfs("proxy")
         recent_cols = self.db.get_recent_cols(env._kernel_id)
-        env.log.debug("[ProxyNote] recent_cols {0}".format(recent_cols))
-
         candidates = {}
+
         for col in recent_cols:
 
             df_name = col["name"]
@@ -252,9 +251,36 @@ class ProxyColumnNote(ProtectedColumnNote):
             elif col["checked"]:
                 candidates[df_name]["non_sense_cols"].append(col["col_name"])
         self.avail_dfs = {k : v for k,v in candidates.items() if v["sens_cols"] != [] and v["non_sense_cols"] != []}
-        env.log.debug("[ProxyNote] available dfs {0}, out of {1}".format(self.avail_dfs.keys(), candidates))
         return len(self.avail_dfs) > 0
 
+    def _test_combo(self, df, sens_col, not_sense_col):
+       
+        sens_col_type = resolve_col_type(df[sens_col])
+        not_sense_col_type = resolve_col_type(df[not_sense_col])
+        
+        if sens_col_type == "unknown" or not_sense_col_type == "unknown":
+            return None
+        if sens_col_type == "categorical" and not_sense_col_type == "numeric":
+            p = self._apply_ANOVA(df, sens_col, not_sense_col)
+            if p < PVAL_CUTOFF:
+                return {"df" : df, "sensitive_col_name" : sens_col, 
+                        "proxy_col_name" : not_sense_col, "p" : p}
+        if sens_col_type == "categorical" and not_sense_col_type == "categorical":
+            p = self._apply_chisq(df, sens_col, not_sense_col)
+            if p < PVAL_CUTOFF:
+                return {"df" : df, "sensitive_col_name" : sens_col,
+                        "proxy_col_name" : not_sense_col, "p" : p}
+        if sens_col_type == "numeric" and not_sense_col_type == "numeric":
+            p = self._apply_spearmen(df, sens_col, not_sense_col)
+            if p < PVAL_CUTOFF:
+                return {"df" : df, "sensitive_col_name" : sens_col,
+                        "proxy_col_name" : not_sense_col, "p" : p} 
+        if sens_col_type == "numeric" and not_sense_col_type == "categorical":
+            p = self._apply_ANOVA(df, not_sense_col, sens_col)
+            if p < PVAL_CUTOFF:
+                return {"df" : df, "sensitive_col_name" : sens_col,
+                        "proxy_col_name" : not_sense_col, "p" : p} 
+        return None
     def make_response(self, env, kernel_id, cell_id):
         # pylint: disable=too-many-locals
         # This just checks to make sure that the note is feasible
@@ -270,6 +296,8 @@ class ProxyColumnNote(ProtectedColumnNote):
             df = df_obj["df"]
             sense_cols = df_obj["sens_cols"]
             non_sens_cols = df_obj["non_sense_cols"]
+
+            self.combo_ledger[df_name] = {"sensitive" : sens_cols, "not_sensitive" : non_sens_cols}
 
             for col in non_sens_cols:
                 if is_categorical(df[col]):
@@ -330,6 +358,10 @@ class ProxyColumnNote(ProtectedColumnNote):
 
         return result[1] # returns the p-value 
 
+    def _apply_spearman(df, sens_col, not_sens_col):
+        result = spearmanr(df[sens_col], df[not_sens_col], nan_policy="omit")
+        return result[1]
+
     def update(self, env, kernel_id, cell_id, dfs, ns):
         # pylint: disable=too-many-arguments
         """
@@ -340,7 +372,19 @@ class ProxyColumnNote(ProtectedColumnNote):
         live_resps = {}
 
         for cell in self.data:
+
             live_resps[cell] = []
+            recent_cols = self.db.get_recent_cols(kernel_id)
+            updated_cols = {}
+
+            for col in recent_cols:
+                if col["name"] not in updated_cols:
+                    updated_cols[col["name"]] = {"sensitive" : [], "not_sensitive" : []}
+                if col["checked"] and col["is_sensitive"]:
+                    updated_cols[col["name"]]["sensitive"].append(col["col_name"])
+                elif col["checked"]:
+                    updated_cols[col["name"]]["not_sensitive"].append(col["col_name"])
+            
             for note in self.data[cell]:
 
                 df_name = note["df"]
@@ -349,8 +393,16 @@ class ProxyColumnNote(ProtectedColumnNote):
 
                 if df_name not in dfs:
                     continue
+
                 df = dfs[df_name]
+
+                # check if sensitive column is still sensitive
+                # and check if there are other columns that were 
+                # not sensitive, and are sensitive now
+
                 if proxy_col not in df.columns or sense_col not in df.columns:
+                    continue
+                if proxy_col not in updated_cols[df_name]["not_sensitive"] or sense_col not in updated_cols[df_name]["sensitive"]:
                     continue
                 if is_categorical(df[proxy_col]):
                     p = self._apply_chisq(df, sense_col, proxy_col)
@@ -364,6 +416,12 @@ class ProxyColumnNote(ProtectedColumnNote):
                 new_note = note
                 new_note["p"] = p 
                 live_resps[cell].append(new_note)
+            # check columns that may have been moved around
+            new_sense_cols = [col for col in updated_cols[df_name]["sensitive"] if col not in self.combo_ledger[df_name]["sensitive"]]
+            new_data_cols = [col for col in updated_cols[df_name]["not_sensitive"] if col not in self.combo_ledger[df_name]["not_sensitive"]]
+
+            # test new sensitive cols with all current data cols
+            # test all current sensitive cols with new data cols
 
         self.data = live_resps
 
@@ -1026,3 +1084,10 @@ class NewNote(Notification):
         #     self.data[cell_id].append(resp)
         # else:
         #     self.data[cell_id] = [resp]
+def resolve_col_type(column):
+    if is_numeric(column):
+        return "numeric"
+    elif is_categorical(column):
+        return "categorical"
+    else:
+        return "unknown"
