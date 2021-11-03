@@ -217,7 +217,6 @@ class ProxyColumnNote(ProtectedColumnNote):
     def __init__(self, db):
         super().__init__(db)
         self.avail_dfs = {} # df_name -> {df: <df>, sense_cols : [], non_sense_cols: []}
-        self.combo_ledger = {} # combinations considered df_name -> {"sensitive" : [], "not_sensitive" : []}
  
     def check_feasible(self, cell_id, env, dfs, ns):
 
@@ -263,22 +262,22 @@ class ProxyColumnNote(ProtectedColumnNote):
         if sens_col_type == "categorical" and not_sense_col_type == "numeric":
             p = self._apply_ANOVA(df, sens_col, not_sense_col)
             if p < PVAL_CUTOFF:
-                return {"df" : df, "sensitive_col_name" : sens_col, 
+                return {"sensitive_col_name" : sens_col, 
                         "proxy_col_name" : not_sense_col, "p" : p}
         if sens_col_type == "categorical" and not_sense_col_type == "categorical":
             p = self._apply_chisq(df, sens_col, not_sense_col)
             if p < PVAL_CUTOFF:
-                return {"df" : df, "sensitive_col_name" : sens_col,
+                return {"sensitive_col_name" : sens_col,
                         "proxy_col_name" : not_sense_col, "p" : p}
         if sens_col_type == "numeric" and not_sense_col_type == "numeric":
             p = self._apply_spearmen(df, sens_col, not_sense_col)
             if p < PVAL_CUTOFF:
-                return {"df" : df, "sensitive_col_name" : sens_col,
+                return {"sensitive_col_name" : sens_col,
                         "proxy_col_name" : not_sense_col, "p" : p} 
         if sens_col_type == "numeric" and not_sense_col_type == "categorical":
             p = self._apply_ANOVA(df, not_sense_col, sens_col)
             if p < PVAL_CUTOFF:
-                return {"df" : df, "sensitive_col_name" : sens_col,
+                return {"sensitive_col_name" : sens_col,
                         "proxy_col_name" : not_sense_col, "p" : p} 
         return None
     def make_response(self, env, kernel_id, cell_id):
@@ -297,70 +296,16 @@ class ProxyColumnNote(ProtectedColumnNote):
             sense_cols = df_obj["sens_cols"]
             non_sens_cols = df_obj["non_sense_cols"]
 
-            self.combo_ledger[df_name] = {"sensitive" : sens_cols, "not_sensitive" : non_sens_cols}
-
-            for col in non_sens_cols:
-                if is_categorical(df[col]):
-                    for sense_col in sense_cols:
-                        combos["categorical"].append((df_name, sense_col, col))
-                elif is_numeric_dtype(df[col]):
-                    for sense_col in sense_cols:
-                        combos["numeric"].append((df_name, sense_col, col))
-                else:
-                    env.log.debug("[ProxyNote] ProxyNote.make_response encountered column {0} of uncertain type {1} in {2}".format(col, df[col].dtypes, df_name))
-
-            results = []
-            # for numeric, apply one way ANOVA to see if sensitive category -> difference in numeric variable
-            for num_combos in combos["numeric"]:
-                env.log.debug("[ProxyNote] make_response : analyzing column {0} as numeric".format(num_combos[2]))
-                results.append({"df" : num_combos[0], 
-                                "sensitive_col_name" : num_combos[1],
-                                "proxy_col_name" : num_combos[2],
-                                "p" : self._apply_ANOVA(df, num_combos[1], num_combos[2])}) 
-            # if proxy candidate is categorical, use chi square test
-            for num_combos in combos["categorical"]:
-                env.log.debug("[ProxyNote] make_response : analyzing column {0} as categorical".format(num_combos[2]))
-                results.append({"df" : num_combos[0], 
-                                "sensitive_col_name" : num_combos[1],
-                                "proxy_col_name" : num_combos[2],
-                                "p" : self._apply_chisq(df, num_combos[1], num_combos[2])})
-
-            results.sort(key = lambda x: x["p"]) 
-            env.log.debug("[ProxyNote] ProxyNote.make_response, there are {0} possible combinations, min value {1}, max {2}".format(len(results), results[0], results[-1]))
-
-            for result in results:
-                if result["p"] <= PVAL_CUTOFF:
-                    resp = {"type" : "proxy"}
-                    resp.update(result)
-                    if cell_id not in self.data:
-                        self.data[cell_id] = []
-                    self.data[cell_id].append(resp)
-          
-    def _apply_ANOVA(self, df, sense_col, num_col):
-
-        # pylint: disable=no-self-use
-
-        # slight preference for keeping this as self-method just b/c
-        # of code organization
-
-        sense_col_values = df[sense_col].dropna().unique()
-        value_cols = [df[num_col][df[sense_col] == v].dropna() for v in sense_col_values]
+            for sens_col in sense_cols:
+                for non_sens_col in non_sens_cols:
+                    result = self._test_combo(df, sens_col, non_sens_col)
+                    if result:
+                        resp = {"type" : "proxy", "df" : df_name}
+                        resp.update(result)
  
-        result = f_oneway(*value_cols)
-
-        return result[1] # this returns the p-value
- 
-    def _apply_chisq(self, df, sense_col, cat_col):
-        # pylint: disable=no-self-use
-        # contingency table
-        table = pd.crosstab(df[sense_col], df[cat_col])
-        result = chi2_contingency(table.to_numpy())
-
-        return result[1] # returns the p-value 
-
-    def _apply_spearman(df, sens_col, not_sens_col):
-        result = spearmanr(df[sens_col], df[not_sens_col], nan_policy="omit")
-        return result[1]
+                        if cell_id not in self.data:
+                            self.data[cell_id] = []
+                        self.data[cell_id].append(resp)
 
     def update(self, env, kernel_id, cell_id, dfs, ns):
         # pylint: disable=too-many-arguments
@@ -391,7 +336,7 @@ class ProxyColumnNote(ProtectedColumnNote):
                 proxy_col = note["proxy_col_name"]
                 sense_col = note["sensitive_col_name"]
 
-                if df_name not in dfs:
+                if df_name not in dfs or df_name not in updated_cols:
                     continue
 
                 df = dfs[df_name]
@@ -400,30 +345,42 @@ class ProxyColumnNote(ProtectedColumnNote):
                 # and check if there are other columns that were 
                 # not sensitive, and are sensitive now
 
-                if proxy_col not in df.columns or sense_col not in df.columns:
-                    continue
-                if proxy_col not in updated_cols[df_name]["not_sensitive"] or sense_col not in updated_cols[df_name]["sensitive"]:
-                    continue
-                if is_categorical(df[proxy_col]):
-                    p = self._apply_chisq(df, sense_col, proxy_col)
-                elif is_numeric_dtype(df[proxy_col]):
-                    p = self._apply_ANOVA(df, sense_col, proxy_col)
-                else:
-                    continue
-                if p > PVAL_CUTOFF:
-                    continue
-
-                new_note = note
-                new_note["p"] = p 
-                live_resps[cell].append(new_note)
-            # check columns that may have been moved around
-            new_sense_cols = [col for col in updated_cols[df_name]["sensitive"] if col not in self.combo_ledger[df_name]["sensitive"]]
-            new_data_cols = [col for col in updated_cols[df_name]["not_sensitive"] if col not in self.combo_ledger[df_name]["not_sensitive"]]
-
-            # test new sensitive cols with all current data cols
-            # test all current sensitive cols with new data cols
+                for sens_col in updated_cols[df_name]["sensitive"]:
+                    for non_sens_col in updated_cols[df_name]["not_sensitive"]:
+                        result = self._test_combo(df, sens_col, non_sens_col)                        
+                        if result:
+                            resp = {"type" : "proxy", "df" : df_name}
+                            resp.update(result)
+ 
+                            live_resps[cell].append(resp)
 
         self.data = live_resps
+    def _apply_ANOVA(self, df, sense_col, num_col):
+
+        # pylint: disable=no-self-use
+
+        # slight preference for keeping this as self-method just b/c
+        # of code organization
+
+        sense_col_values = df[sense_col].dropna().unique()
+        value_cols = [df[num_col][df[sense_col] == v].dropna() for v in sense_col_values]
+ 
+        result = f_oneway(*value_cols)
+
+        return result[1] # this returns the p-value
+ 
+    def _apply_chisq(self, df, sense_col, cat_col):
+        # pylint: disable=no-self-use
+        # contingency table
+        table = pd.crosstab(df[sense_col], df[cat_col])
+        result = chi2_contingency(table.to_numpy())
+
+        return result[1] # returns the p-value 
+
+    def _apply_spearman(df, sens_col, not_sens_col):
+        result = spearmanr(df[sens_col], df[not_sens_col], nan_policy="omit")
+        return result[1]
+
 
 # TODO: inheret from ProxyColumnNote, and check both protected and proxy columns
 
@@ -1085,7 +1042,7 @@ class NewNote(Notification):
         # else:
         #     self.data[cell_id] = [resp]
 def resolve_col_type(column):
-    if is_numeric(column):
+    if is_numeric_dtype(column):
         return "numeric"
     elif is_categorical(column):
         return "categorical"
