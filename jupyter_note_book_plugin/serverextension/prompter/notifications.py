@@ -10,7 +10,7 @@ import dill
 
 from scipy.stats import zscore, f_oneway, chi2_contingency
 from sklearn.base import ClassifierMixin
-from aif360.sklearn.postprocessing import CalibratedEqualizedOdds, PostProcessingMeta
+# from aif360.sklearn.postprocessing import CalibratedEqualizedOdds, PostProcessingMeta
 from pandas.api.types import is_numeric_dtype
 
 from .storage import load_dfs
@@ -623,10 +623,12 @@ class EqualizedOddsNote(Notification):
     
     Fomat: {"type" : "eq_odds", "model_name" : <name of model>,
             "acc_orig" : <original training acc>,
-            "acc_corr" : <training accuracy, when correction is applied>,
-            "eq" : <"fpr" or "fnr", the metric being equalized>,
-            "num_changed" : <number of different predictions after correction applied>,
-            "groups" : <the group the metric is equalized w.r.t.>}
+            "groups" : <the group the metric is equalized w.r.t.>,
+            "error_rates" : <dict of groups with error rates separated by member (another dict)>,
+            "k_highest_error_rates" : <dict of groups with highest error rates>
+            }
+            error_rates format is {<group_name> : {<member_name>: error rates} }
+            error_rates are given in a tuple that looks like (precision, recall, f1score, fpr, fnr)
     """
     def __init__(self, db):
         super().__init__(db)
@@ -635,6 +637,7 @@ class EqualizedOddsNote(Notification):
         # mapping of model name -> (x,y), used so that when doing update
         # we don't need to redo the alignment testing
         self.columns = {}
+        self.k = 2 #Q? what should k be? how can user change k? (this is k highest error rates to display)
 
     def _get_new_models(self, cell_id, env, non_dfs_ns): 
         """
@@ -675,10 +678,84 @@ class EqualizedOddsNote(Notification):
             return True                            
         return False
 
+    def group_based_error_rates(self, prot_group, df, y_true, y_pred):
+        """
+        Compute precision, recall and f1score for a protected group in the df
+
+        Returns: error rates for member in group : Dict{<member_value_from_group>: (precision, recall, f1score, fpr, fnr)}
+        """
+        error_rates_by_member = {}  # {member : tuple of precision, recall, f1score}
+
+        if prot_group in df.columns:
+            group_col = df[prot_group]
+        else:
+            # raise error, group not in df
+            pass
+        for member in group_col.unique():
+            # only want to pass in the indices of the group
+            member_indices = df[df[prot_group] == member].index
+            if isinstance(y_true, (pd.Series, np.array)):
+                y_true_member = y_true[member_indices]
+            else:
+                # do work 
+                # honestly shouldn't happen but just in case we should throw an error
+                pass
+
+            if isinstance(y_pred, (pd.Series, np.array)):
+                y_pred_member = y_pred[member_indices]
+            else:
+                # do work
+                # honestly shouldn't happen but just in case we should throw an error
+                pass
+            error_rates_by_member[member] = error_rates(acc_measures(y_true_member, y_pred_member))
+        return error_rates_by_member
+    
+    def sort_error_rates(self, error_rates_by_group):
+        """
+        Sort the error rates by the highest error rate
+        sort in order of f1score, fpr, fnr, precision, recall
+        Returns: error_rates_by_group = {
+                                            group : 
+                                                {
+                                                    member :(precision, recall, f1score, fpr, fnr)
+                                                }    
+                                        } 
+        """
+        sorted_error_rates_by_group = {}
+        for group_key in error_rates_by_group.keys():
+            group = error_rates_by_group[group_key]
+            sorting_key = lambda x: (x[1][2], x[1][3], x[1][4], x[1][0], x[1][1])
+            sorted_error_rates_by_group[group_key] = dict(sorted(group.items(), key=sorting_key, reverse=True))
+        return sorted_error_rates_by_group
+
+    def get_sorted_k_highest_error_rates(self, env, col_names, model_name, preds):
+        """
+        Method that handles getting all the error rates for the model on groups 
+        specififed in `col_names`
+        """
+        all_error_rates = {} # {group_name : error_rates_by_member}
+        for group in col_names: # list of columns identified as protected by search_for_sensitive_cols
+            group_error_rates = self.group_based_error_rates(group, 
+                                            self.aligned_models[model_name]["x_parent"], 
+                                            self.aligned_models[model_name]['y'], 
+                                            preds)
+            # log the error rates
+            for member in group_error_rates:
+                precision, recall, f1score, fpr, fnr = group_error_rates[member]
+                env.log.debug("[EqOddsNote] has computed these error rates for member, {4}, in group:{0}\nPrecision: {1:.4g}\nRecall: {2:.4g}\nF1Score: {3:.4g}\nFalse Positive Rate: {5:.4g}\nFalse Negative Rate: {6:.4g}"\
+                                .format(group, precision, recall, f1score, member, fpr, fnr))
+            # save them
+            all_error_rates[group] = group_error_rates
+        sorted_error_rates = self.sort_error_rates(all_error_rates)
+        # sort most important k error_rates (this is relative, no normative judgment here)
+        k_highest_rates = {key: val for n, (key, val) in enumerate(sorted_error_rates.items()) if n < self.k}
+        return sorted_error_rates, k_highest_rates
+
     def make_response(self, env, kernel_id, cell_id):
         # pylint: disable=too-many-locals,too-many-statements
         super().make_response(env, kernel_id, cell_id)
         
+        # Q?: why random choice?
         model_name = choice(list(self.aligned_models.keys()))
         resp = {"type" : "eq_odds", "model_name" : model_name}
 
@@ -691,7 +768,8 @@ class EqualizedOddsNote(Notification):
         match_indexer = self.aligned_models[model_name]["match"]["indexer"]
 
         col_names = [col.name for col in match_cols]
-
+        match_cols = [bin_col(col) for col in match_cols]
+        """Old AI Fairness 360 code
         # do the alignment of the data if necessary
         if match_indexer is not None:
 
@@ -699,7 +777,6 @@ class EqualizedOddsNote(Notification):
             y = align_index(y, match_indexer["values"], match_indexer["loc"])
 
             match_cols = [align_index(col, match_indexer["values"], match_indexer["o_loc"]) for col in match_cols]
-
         match_cols = [bin_col(col) for col in match_cols]
         # create the properly indexed dataframes
         if isinstance(X.index, pd.MultiIndex):
@@ -714,11 +791,18 @@ class EqualizedOddsNote(Notification):
             y.index = X_index
         else:
             y = pd.Series({"y" : y}, index=X_index)
-              
+        """
         # get acc_orig on indexed/subsetted df
         acc_orig = model.score(X, y)
         orig_preds = model.predict(X)
 
+        # Find error rates for protected groups
+        if col_names is None: 
+            # exit? nothing to do if no groups
+            pass
+        else:
+            sorted_error_rates, k_highest_rates = self.get_sorted_k_highest_error_rates(env, col_names, model_name, orig_preds)      
+        """Old AI Fairness 360 code
         # apply correction
         corrections = []
 
@@ -741,12 +825,11 @@ class EqualizedOddsNote(Notification):
         # we could also try selecting the change that would affect the smallest number of predictions
         env.log.debug("[EqOddsNote] possible corrections are {0}".format(corrections)) 
         inv = max(corrections, key = lambda corr: corr["acc"])
-
-        resp["acc_corr"] = inv["acc"]
-        resp["eq"] = inv["constraint"]
-        resp["num_changed"] = int(inv["preds"])
-        resp["groups"] = inv["grp"]
+        """
         resp["acc_orig"] = acc_orig
+        resp["groups"] = col_names
+        resp["error_rates"] = sorted_error_rates
+        resp["k_highest_rates"] = k_highest_rates
 
         env.log.debug("[EqOddsNote] response is {0}".format(resp))
 
@@ -793,11 +876,20 @@ class EqualizedOddsNote(Notification):
         live_resps = [resp for resp in self.data[cell_id] if check_if_defined(resp)]
 
         for resp in live_resps:
-
+            # TODO: Might be helpful to show a diff? or at least just show the last result so the user can see what has changed
             X,y = self.columns[resp["model_name"]][cell_id]
-            model = non_dfs_ns[resp["model_name"]]
-            grp = resp["groups"]
-            constraint = resp["eq"]
+            model_name = resp["model_name"]
+            model = non_dfs_ns[model_name]
+            groups = resp["groups"]
+            # error_rates = resp["error_rates"]
+            # k_highest_error_rates = resp["k_highest_error_rates"]
+            new_preds = model.predict(X)
+            new_acc = model.score(X, y)
+            sorted_error_rates, k_highest_error_rates = self.get_sorted_k_highest_error_rates(env, groups, model_name, new_preds)
+            resp["acc_orig"] = new_acc
+            resp["error_rates"] = sorted_error_rates
+            resp["k_highest_error_rates"] = k_highest_error_rates
+            '''constraint = resp["eq"]
 
             acc_orig = model.score(X,y)
             pred_orig = model.predict(X)
@@ -810,7 +902,7 @@ class EqualizedOddsNote(Notification):
 
             resp["acc_corr"] = acc
             resp["acc_orig"] = acc_orig
-            resp["num_changed"] = int(sum(pred_orig != preds))
+            resp["num_changed"] = int(sum(pred_orig != preds))'''
 
 
         # remember to clean up non-live elements of self.columns
@@ -945,7 +1037,37 @@ class ErrorSliceNote(Notification):
         env.log.debug("[ErrorSliceNote] updated responses")
         # self.data = new_data # removed until update is processed, as this overwrites notes.
             
+def error_rates(tp, fp, tn, fn):
+    """Returns precision, recall, f1score, false positive rate and false negative rate """
+    precision = tp / (tp+fp)
+    recall = tp / (tp+fn)
+    f1score = 2*(precision*recall) / (precision+recall)
+    fpr = fp / (fp+tn)
+    fnr = fn / (fn+tp)
+    return precision, recall, f1score, fpr, fnr
 
+def acc_measures(y_true, y_pred):
+    """
+    Computes accuracy measures for a given set of predictions and true values.
+
+    Returns: tp, fp, tn, fn
+    """
+    tp = 0
+    fp = 0
+    tn = 0
+    fn = 0
+    for i in range(len(y_true)):
+        if y_true[i] == y_pred[i]:
+            if y_true[i] == 1:
+                tp += 1
+            else:
+                tn += 1
+        else:
+            if y_true[i] == 1:
+                fn += 1
+            else:
+                fp += 1
+    return tp, fp, tn, fn
 
 def align_index(obj, values, locs):
     """given a list of index values or row indices, get subset of obj's rows"""
