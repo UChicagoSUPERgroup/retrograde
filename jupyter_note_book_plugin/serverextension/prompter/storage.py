@@ -217,6 +217,8 @@ class DbHandler:
             return max_version + 1
         else:
             # data is new, add data and columns to database
+            if "source" not in entry_point:
+                entry_point["source"] = "unknown"
             self.add_data(entry_point, 1)
             return 1
 
