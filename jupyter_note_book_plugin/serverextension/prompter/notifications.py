@@ -250,6 +250,8 @@ class ProxyColumnNote(ProtectedColumnNote):
             elif col["checked"]:
                 candidates[df_name]["non_sense_cols"].append(col["col_name"])
         self.avail_dfs = {k : v for k,v in candidates.items() if v["sens_cols"] != [] and v["non_sense_cols"] != []}
+
+        env.log.debug("[ProxyNote] available dfs {0}".format(self.avail_dfs))
         return len(self.avail_dfs) > 0
 
     def _test_combo(self, df, sens_col, not_sense_col):
@@ -288,8 +290,6 @@ class ProxyColumnNote(ProtectedColumnNote):
         
         resp = {"type" : "proxy"}
         
-        combos = {"categorical" : [], "numeric" : []}
- 
         for df_name, df_obj in self.avail_dfs.items():
 
             df = df_obj["df"]
@@ -315,28 +315,31 @@ class ProxyColumnNote(ProtectedColumnNote):
         """
         
         live_resps = {}
+        recent_cols = self.db.get_recent_cols(kernel_id)
+        updated_cols = {}
+
+        for col in recent_cols:
+            if col["name"] not in updated_cols:
+                updated_cols[col["name"]] = {"sensitive" : [], "not_sensitive" : []}
+            if col["checked"] and col["is_sensitive"]:
+                updated_cols[col["name"]]["sensitive"].append(col["col_name"])
+            elif col["checked"]:
+                updated_cols[col["name"]]["not_sensitive"].append(col["col_name"])
+
+        env.log.debug("[ProxyNote] updating {0}".format(updated_cols))
+        checked_dfs = []
 
         for cell in self.data:
 
             live_resps[cell] = []
-            recent_cols = self.db.get_recent_cols(kernel_id)
-            updated_cols = {}
 
-            for col in recent_cols:
-                if col["name"] not in updated_cols:
-                    updated_cols[col["name"]] = {"sensitive" : [], "not_sensitive" : []}
-                if col["checked"] and col["is_sensitive"]:
-                    updated_cols[col["name"]]["sensitive"].append(col["col_name"])
-                elif col["checked"]:
-                    updated_cols[col["name"]]["not_sensitive"].append(col["col_name"])
-            
             for note in self.data[cell]:
 
                 df_name = note["df"]
                 proxy_col = note["proxy_col_name"]
                 sense_col = note["sensitive_col_name"]
 
-                if df_name not in dfs or df_name not in updated_cols:
+                if df_name not in dfs or df_name not in updated_cols or df_name in checked_dfs:
                     continue
 
                 df = dfs[df_name]
@@ -353,8 +356,10 @@ class ProxyColumnNote(ProtectedColumnNote):
                             resp.update(result)
  
                             live_resps[cell].append(resp)
+                checked_dfs.append(df_name) 
 
         self.data = live_resps
+
     def _apply_ANOVA(self, df, sense_col, num_col):
 
         # pylint: disable=no-self-use
@@ -363,6 +368,10 @@ class ProxyColumnNote(ProtectedColumnNote):
         # of code organization
 
         sense_col_values = df[sense_col].dropna().unique()
+
+        if len(df[num_col].dropna().unique()) < 2: # f test is not defined if values are uniform
+            return 1.0
+
         value_cols = [df[num_col][df[sense_col] == v].dropna() for v in sense_col_values]
  
         result = f_oneway(*value_cols)
@@ -378,9 +387,9 @@ class ProxyColumnNote(ProtectedColumnNote):
         return result[1] # returns the p-value 
 
     def _apply_spearman(df, sens_col, not_sens_col):
+
         result = spearmanr(df[sens_col], df[not_sens_col], nan_policy="omit")
         return result[1]
-
 
 # TODO: inheret from ProxyColumnNote, and check both protected and proxy columns
 
