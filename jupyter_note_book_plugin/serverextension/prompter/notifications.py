@@ -339,9 +339,10 @@ class ProxyColumnNote(ProtectedColumnNote):
                 proxy_col = note["proxy_col_name"]
                 sense_col = note["sensitive_col_name"]
 
-                if df_name not in dfs or df_name not in updated_cols or df_name in checked_dfs:
+                if df_name not in dfs or df_name not in updated_cols:
                     continue
-
+                if df_name in checked_dfs:
+                    continue
                 df = dfs[df_name]
 
                 # check if sensitive column is still sensitive
@@ -354,9 +355,9 @@ class ProxyColumnNote(ProtectedColumnNote):
                         if result:
                             resp = {"type" : "proxy", "df" : df_name}
                             resp.update(result)
- 
                             live_resps[cell].append(resp)
-                checked_dfs.append(df_name) 
+
+                checked_dfs.append(df_name)
 
         self.data = live_resps
 
