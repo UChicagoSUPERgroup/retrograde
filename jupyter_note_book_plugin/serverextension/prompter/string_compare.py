@@ -197,11 +197,9 @@ def _string_column_vs_list(dataframe, colname, words, threshold, log_sample=Fals
             use_df = use_df.sample(n=sizelog2)
         n = len(use_df.index)
     
-    count = 0
-    for _, row in use_df.iterrows():
-        didmatch = _match_any_string(str(row[colname]), words, threshold)
-        if didmatch['match']:
-            count += 1
+    matches = [_match_any_string(str(a), words, threshold)["match"] for a in use_df[colname].unique()]
+    count = sum(matches)
+
     return float(count) / n
 
 # checks if a number is an integer

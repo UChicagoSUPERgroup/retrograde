@@ -37,7 +37,7 @@ class DataFrameVisitor(BaseImportVisitor):
     It returns information about information like source on a best
     effort basis
     """
-
+    # TODO: visitor needs to tag when a known df object is assigned to as well
     def __init__(self, df_names, pd_alias):
 
         super().__init__(pd_alias)
@@ -95,6 +95,19 @@ class DataFrameVisitor(BaseImportVisitor):
                 if self.context["info"] != []:
                     info = self.context["info"].pop()
                     self.info[name] = info
+                else:
+                    self.info[name] = {}
+        if lhs_has_df and rhs_has_df:
+            for name in lhs_names:
+                if self.context["info"] != []:
+                    info = self.context["info"].pop()
+                    self.info[name] = info
+                # copy right info from rhs
+                elif rhs_df_names != []:
+                    rhs_name = rhs_df_names.pop()
+                    self.info[name] = {"source" : rhs_name, "format": "derived"}
+                else:
+                    self.info[name] = {}
         if not lhs_has_df:
             for name in self.context["non_df_names"]:
                 try:

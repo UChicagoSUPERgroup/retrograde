@@ -2,11 +2,12 @@ import json
 from os import name
 from random import choice
 
+import math
+import operator
+
 import pandas as pd
 import numpy as np
-import operator
 import dill
-import math
 
 from scipy.stats import zscore, f_oneway, chi2_contingency
 from sklearn.base import ClassifierMixin
@@ -17,8 +18,6 @@ from .storage import load_dfs
 from .string_compare import check_for_protected, guess_protected
 from .sortilege import is_categorical
 from .slice_finder import err_slices
-
-import json # REMOVE BEFORE PUSHING
 
 PVAL_CUTOFF = 0.25 # cutoff for thinking that column is a proxy for a sensitive column
 STD_DEV_CUTOFF = 0.1 # cutoff for standard deviation change that triggers difference in OutliersNotes
@@ -78,40 +77,29 @@ class ProtectedColumnNote(Notification):
 
         super().__init__(db)
         self.df_protected_cols = {}
+        self.df_not_protected_cols = {}
 
     def check_feasible(self, cell_id, env, dfs, ns):
 
         # are there any dataframes that we haven't examined?
-        df_cols = {}
-        
-        for df_name, df in dfs.items():
-            if df_name not in self.df_protected_cols:
-                df_cols[df_name] = [col for col in df.columns] 
+        self.df_protected_cols = {}
+        self.df_not_protected_cols = {}
 
-        # columns by name
-        for df_name, cols in df_cols.items():
+        poss_cols = self.db.get_unmarked_columns(env._kernel_id)
+
+        for df_name, cols in poss_cols.items():
+            # TODO: when guess_protected integrated, should also call guess protected here
             protected_columns = check_for_protected(cols)
-            self.df_protected_cols[df_name] = protected_columns
+            protected_columns.extend(guess_protected(dfs[df_name]))
+      
+            env.log.debug("[ProtectedColumnNote] protected columsn are {0}".format(protected_columns))
+  
+            if protected_columns != []:
+                self.df_protected_cols[df_name] = protected_columns        
+                self.df_not_protected_cols[df_name] = [c for c in cols if c not in protected_columns]
 
-        # update with guesses
-        for df_name, df in dfs.items():
-            guessed_columns = guess_protected(df)
-            named_columns = self.df_protected_cols[df_name]
-           
-            # deduplicate, possibly a way to optimize guess_protected, by eliminating
-            # search in columns that have already been marked 
-            prot_cols = named_columns
-            prot_col_names = [prot_col["original_name"] for prot_col in prot_cols]
-            for guess_col in guessed_columns:
-                if guess_col["original_name"] not in prot_col_names:
-                    prot_cols.append(guess_col)
-                    prot_col_names.append(guess_col["original_name"])
-             
-            self.df_protected_cols[df_name] = prot_cols
+        return self.df_protected_cols != {}
 
-        if df_cols:
-            return True
-        return False
     def _noted_dfs(self, note_type):
         """return list of df names that have had notes issued on them already""" 
         notes = [note for note_set in self.data.values() for note in note_set]
@@ -126,10 +114,10 @@ class ProtectedColumnNote(Notification):
 
         #using protected columns found in csv build string to display in notification
         # find if there are dfs without notes generated on them
-        noted_dfs = self._noted_dfs("resemble")
+
+        input_data = {}
 
         for df_name in self.df_protected_cols.keys():
-            if df_name not in noted_dfs:
 
                 resp = self._make_resp_entry(df_name)
                 if len(resp["col"]) > 0: # Prevents notes where there are no columns
@@ -137,6 +125,18 @@ class ProtectedColumnNote(Notification):
                         self.data[cell_id] = []
                     self.data[cell_id].append(resp)
 
+                if resp["df"] not in input_data:
+                    input_data[resp["df"]] = {}
+
+                for col, category in zip(resp["col_names"], resp["category"].split(",")):
+
+                    input_data[resp["df"]][col] = {"is_sensitive": True, "user_specified" : False, "fields" : category}
+                for col in self.df_not_protected_cols[df_name]:
+                    input_data[df_name][col] = {"is_sensitive" : False, "user_specified" : False, "fields" : None}
+
+        self.db.update_marked_columns(kernel_id, input_data)
+            
+#            input_data[df_name] = {col_name : {"sensitive", "user_designated", "fields"} 
     def _make_resp_entry(self, df_name):
 
         protected_columns_string = ', '.join([p["original_name"] for p in self.df_protected_cols[df_name]])
@@ -144,31 +144,64 @@ class ProtectedColumnNote(Notification):
 
         resp = {"type" : "resemble"}
         resp["df"] = df_name
+
+        # TODO: remove these once frontend updated
         resp["col"] = protected_columns_string
         resp["category"] = protected_values_string
         resp["col_names"] = [p["original_name"] for p in self.df_protected_cols[df_name]]
+        # end TODO
 
+        resp["columns"] = {}
+
+        for col in self.df_protected_cols[df_name]:
+            resp["columns"][col["original_name"]] = {"sensitive" : True, "field" : col["protected_value"]}
+        for col in self.df_not_protected_cols[df_name]:
+            resp["columns"][col] = {"sensitive" : False, "field" : None}
         return resp
 
     def update(self, env, kernel_id, cell_id, dfs, ns):
         # pylint: disable=too-many-arguments
+
+        # if df has been reloaded with new columns, then captured
+        # in the check_feasible step
+
+        # so check 1. that the noted dfs are still defined, 2. that
+        # noted defined df still has columns 3. that columns in
+        # noted defined dfs are still of the same value 
+
+        # Also should check that judgments about columns in noted defined
+        # df have not changed. 
+
         new_data = {}
+        new_df_names = list(self.df_protected_cols.keys())
+
         for cell, note_list in self.data.items():
+
             new_notes = []
+
             for note in note_list:
                 if note["type"] == "resemble":
 
                     df_name = note["df"]
-                    
-                    if df_name in dfs:
 
-                        protected_cols = check_for_protected(dfs[df_name].columns)
-                        self.df_protected_cols[df_name] = protected_cols
-                        new_notes.append(self._make_resp_entry(df_name))
+                    if df_name not in dfs:
+                        continue
+                    if df_name in new_df_names:
+                        new_notes.append(note)
+                        continue
+                    # does the df_name still have the same column names/values?
+                    # column names must be the same, but the values may have
+                    # changed. Therefore TODO: change this to do check_values cols
+                    protected_cols = guess_protected(dfs[df_name].columns)
+                    self.df_protected_cols[df_name].extend(protected_cols)
+                    protected_col_names = [col["original_name"] for col in protected_cols]
+                    self.df_not_protected_cols[df_name] = [col for col in dfs[df_name].columns if col not in protected_col_names]
+                
+                    new_notes.append(self._make_resp_entry(df_name))
                 else:
                     new_notes.append(note)
             new_data[cell] = new_notes
-
+        # TODO update protected in database
         env.log.debug("[ProtectedColumnNote] updated responses")
 
         self.data = new_data
@@ -325,6 +358,7 @@ class ProxyColumnNote(ProtectedColumnNote):
         self.data = live_resps
 
 # TODO: inheret from ProxyColumnNote, and check both protected and proxy columns
+
 class MissingDataNote(ProtectedColumnNote):
     """
     A notification that measures whether there exists columns with missing data.
@@ -410,7 +444,7 @@ class MissingDataNote(ProtectedColumnNote):
 
                 # for every sensitive column
                 for sensitive in these_sensitive_cols:
-                    sensitive = sensitive["protected_value"]
+                    sensitive = sensitive["original_name"]
                     # for every column with missing data
                     for missing_col in these_missing_cols:
                         sensitive_frequency = {}
@@ -585,212 +619,6 @@ class OutliersNote(Notification):
             self.sent = False
         self.data[cell_id] = live_notes
 
-
-class EqualizedOddsNote(Notification):
-    """
-    A note that takes models trained in the namespace and tries applying
-    the AIF post-processing correction to the model.
-    
-    Fomat: {"type" : "eq_odds", "model_name" : <name of model>,
-            "acc_orig" : <original training acc>,
-            "acc_corr" : <training accuracy, when correction is applied>,
-            "eq" : <"fpr" or "fnr", the metric being equalized>,
-            "num_changed" : <number of different predictions after correction applied>,
-            "groups" : <the group the metric is equalized w.r.t.>}
-    """
-    def __init__(self, db):
-        super().__init__(db)
-        self.aligned_models = {} # candidates for using correction
-
-        # mapping of model name -> (x,y), used so that when doing update
-        # we don't need to redo the alignment testing
-        self.columns = {}
-
-    def _get_new_models(self, cell_id, env, non_dfs_ns): 
-        """
-        return dictionary of model names in cell that are defined in the namespace
-        and that do not already have a note issued about them
-        """  
-        poss_models = env.get_models()
-        models = {model_name : model_info for model_name, model_info in poss_models.items() if model_name in non_dfs_ns.keys()} 
-
-        if cell_id in self.data:
-            cell_models = [model.get("model_name") for model in self.data.get(cell_id)]
-        else:
-            cell_models = []
-       
-        return {model_name : model_info for model_name, model_info in models.items() if model_name not in cell_models}
-
-
-    def check_feasible(self, cell_id, env, dfs, ns):
-        
-        non_dfs_ns = dill.loads(ns["namespace"])
-
-        models = self._get_new_models(cell_id, env, non_dfs_ns)
-        defined_dfs = dfs
-        
-        models_with_dfs = check_call_dfs(defined_dfs, non_dfs_ns, models)
-        aligned_models = {}
-
-        for model_name in models_with_dfs:
-            match_name, match_cols, match_indexer = search_for_sensitive_cols(models_with_dfs[model_name]["x"], model_name, defined_dfs)
-            if not match_name:
-                continue
-            aligned_models[model_name] = models_with_dfs[model_name]
-            aligned_models[model_name]["match"] = {"cols" : match_cols, 
-                                                   "indexer" : match_indexer,
-                                                   "name" : match_name}
-        if len(aligned_models) > 0:
-            self.aligned_models = aligned_models
-            return True                            
-        return False
-
-    def make_response(self, env, kernel_id, cell_id):
-        # pylint: disable=too-many-locals,too-many-statements
-        super().make_response(env, kernel_id, cell_id)
-        
-        model_name = choice(list(self.aligned_models.keys()))
-        resp = {"type" : "eq_odds", "model_name" : model_name}
-
-
-        X = self.aligned_models[model_name]["x"]
-        y = self.aligned_models[model_name]["y"]
-        model = self.aligned_models[model_name]["model"]
-
-        match_cols = self.aligned_models[model_name]["match"]["cols"]
-        match_indexer = self.aligned_models[model_name]["match"]["indexer"]
-
-        col_names = [col.name for col in match_cols]
-
-        # do the alignment of the data if necessary
-        if match_indexer is not None:
-
-            X = align_index(X, match_indexer["values"], match_indexer["loc"])
-            y = align_index(y, match_indexer["values"], match_indexer["loc"])
-
-            match_cols = [align_index(col, match_indexer["values"], match_indexer["o_loc"]) for col in match_cols]
-
-        match_cols = [bin_col(col) for col in match_cols]
-        # create the properly indexed dataframes
-        if isinstance(X.index, pd.MultiIndex):
-            flat_index = X.index.to_flat_index()
-            arrs = [[idx[i] for idx in flat_index] for i in range(len(flat_index[0]))]
-            X_index = pd.MultiIndex.from_arrays(arrs + match_cols, names=X.index.names + col_names)
-        else: 
-            X_index = pd.MultiIndex.from_arrays([X.index] + match_cols, names= [X.index.name] + col_names)
-        X.index = X_index
-
-        if isinstance(y, (pd.Series, pd.DataFrame)):
-            y.index = X_index
-        else:
-            y = pd.Series({"y" : y}, index=X_index)
-              
-        # get acc_orig on indexed/subsetted df
-        acc_orig = model.score(X, y)
-        orig_preds = model.predict(X)
-
-        # apply correction
-        corrections = []
-
-        env.log.debug("[EqOddsNote] Using input \n{0}".format(X.head()))
-
-        for grp in col_names:
-            for constraint in ["fpr", "fnr"]:
-             
-                pp = CalibratedEqualizedOdds(grp, cost_constraint=constraint)
-                ceo = PostProcessingMeta(estimator=model, postprocessor=pp)
-                ceo.fit(X, y)
-                acc = ceo.score(X, y)
-                preds = ceo.predict(X)
-
-                corrections.append({"grp" : grp, "constraint": constraint, 
-                                    "acc" : acc, "preds" : sum(preds != orig_preds)})
-
-        # get acc_corr
-        # select the group that negatively impacts original accuracy the least
-        # we could also try selecting the change that would affect the smallest number of predictions
-        env.log.debug("[EqOddsNote] possible corrections are {0}".format(corrections)) 
-        inv = max(corrections, key = lambda corr: corr["acc"])
-
-        resp["acc_corr"] = inv["acc"]
-        resp["eq"] = inv["constraint"]
-        resp["num_changed"] = int(inv["preds"])
-        resp["groups"] = inv["grp"]
-        resp["acc_orig"] = acc_orig
-
-        env.log.debug("[EqOddsNote] response is {0}".format(resp))
-
-        if resp["model_name"] not in self.columns:
-            self.columns[resp["model_name"]] = {cell_id : (X,y)}
-        else:
-            self.columns[resp["model_name"]][cell_id] = (X, y)
- 
-        if cell_id in self.data:
-            self.data[cell_id].append(resp)
-        else:
-            self.data[cell_id] = [resp]
-
-    def update(self, env, kernel_id, cell_id, dfs, ns):
-        """
-        Check if model is still defined, if not, remove note
-        If model is still defined, recalculate EqOdds correction for grp
-        """
-        # pylint: disable=too-many-locals,too-many-arguments
-        ns = self.db.recent_ns()
-        non_dfs_ns = dill.loads(ns["namespace"])
-        
-        def check_if_defined(resp):
-
-            if resp["model_name"] not in non_dfs_ns:
-                return False
-
-            X, y = self.columns.get(resp["model_name"]).get(cell_id)
-            model = non_dfs_ns.get(resp["model_name"])
-
-            if X is None or y is None or model is None:
-                return False
-            if not isinstance(model, ClassifierMixin):
-                return False
-            try: 
-                # there's no universal way to test whether the input and 
-                # output shapes match the trained model in sklearn, so this
-                # is easiest
-                model.score(X,y)
-            except ValueError:
-                return False
-            return True
-
-        live_resps = [resp for resp in self.data[cell_id] if check_if_defined(resp)]
-
-        for resp in live_resps:
-
-            X,y = self.columns[resp["model_name"]][cell_id]
-            model = non_dfs_ns[resp["model_name"]]
-            grp = resp["groups"]
-            constraint = resp["eq"]
-
-            acc_orig = model.score(X,y)
-            pred_orig = model.predict(X)
- 
-            pp = CalibratedEqualizedOdds(grp, cost_constraint=constraint)
-            ceo = PostProcessingMeta(estimator=model, postprocessor=pp)
-            ceo.fit(X,y)
-            acc = ceo.score(X,y)
-            preds = ceo.predict(X)
-
-            resp["acc_corr"] = acc
-            resp["acc_orig"] = acc_orig
-            resp["num_changed"] = int(sum(pred_orig != preds))
-
-
-        # remember to clean up non-live elements of self.columns
-        live_names = [resp["model_name"] for resp in live_resps]
-        old_names = [resp["model_name"] for resp in self.data[cell_id] if resp["model_name"]  not in live_names]
-       
-        for old_name in old_names:
-            del self.columns[old_name][cell_id]
-         
-        self.data[cell_id] = live_resps
 
 class ErrorSliceNote(Notification):
     """

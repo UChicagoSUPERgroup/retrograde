@@ -66,8 +66,33 @@ class TestDataFrameVisitor(unittest.TestCase):
         ptr_set = set([snippet_ast.body[1].value])
 
         self.assertEqual(visitor.assign_map["X"], ptr_set)
-        self.assertEqual(visitor.info, {})
+        self.assertEqual(visitor.info, {"df" : {}})
 
+    def test_dropna(self):
+        snippet_1 =\
+        """import pandas as pd\n"""+\
+        """df = pd.read_csv("filename")\n"""
+
+        snippet_2 = """loans = df.dropna()"""
+
+        df_names = set(["df", "loans"])
+        pd_alias = prompter.Aliases("pandas")
+        visitor = prompter.DataFrameVisitor(df_names, pd_alias)
+        visitor.visit(parse(snippet_1))
+        visitor.visit(parse(snippet_2))
+
+        self.assertTrue("loans" in visitor.info, visitor.info)
+
+    def test_train_test_split(self):
+        snippet =\
+        """X_test, X_train, y_test, y_train = train_test_split(X,y,split=0.2)"""
+
+        df_names = set(["X_test", "X_train", "y_test", "y_train", "X", "y"])
+        pd_alias = prompter.Aliases("pandas")
+        visitor = prompter.DataFrameVisitor(df_names, pd_alias)
+        visitor.visit(parse(snippet))
+
+        print(visitor.info)       
 class TestModelVisitor(unittest.TestCase):
 
     def test_simple(self):
@@ -95,7 +120,7 @@ class TestModelVisitor(unittest.TestCase):
         df_visit = prompter.DataFrameVisitor(set(["X", "y"]), pd_alias)
         df_visit.visit(parse(snippet))
         
-        visitor = prompter.ModelFitVisitor(pd_alias, ["lr"], namespace, df_visit.assign_map)
+        visitor = prompter.ModelScoreVisitor(pd_alias, ["lr"], namespace, df_visit.assign_map)
 
         visitor.visit(parse(snippet))
         self.assertEqual(visitor.models, expected, "Actual {0}, expected {1}".format(visitor.models, expected))
@@ -127,7 +152,7 @@ class TestModelVisitor(unittest.TestCase):
         df_visit.visit(parse(snippet_0))
         assign_map = df_visit.assign_map
  
-        visitor = prompter.ModelFitVisitor(pd_alias, ["lr"], namespace, assign_map)
+        visitor = prompter.ModelScoreVisitor(pd_alias, ["lr"], namespace, assign_map)
         visitor.visit(parse(snippet_0))
             
         self.assertEqual(visitor.models, expected_0)
@@ -136,7 +161,7 @@ class TestModelVisitor(unittest.TestCase):
         df_visit.visit(parse(snippet_1))
         assign_map.update(df_visit.assign_map)
 
-        visitor = prompter.ModelFitVisitor(pd_alias, ["lr"], namespace, assign_map)
+        visitor = prompter.ModelScoreVisitor(pd_alias, ["lr"], namespace, assign_map)
         visitor.visit(parse(snippet_1))
         self.assertEqual(visitor.models, expected_1)
 
@@ -168,7 +193,7 @@ class TestModelVisitor(unittest.TestCase):
         df_visit = prompter.DataFrameVisitor(set(["X", "y"]), pd_alias)
         df_visit.visit(parse(snippet))
 
-        visitor = prompter.ModelFitVisitor(pd_alias, ["lr"], namespace, df_visit.assign_map)
+        visitor = prompter.ModelScoreVisitor(pd_alias, ["lr"], namespace, df_visit.assign_map)
         visitor.visit(parse(snippet))
 
         self.assertEqual(visitor.models, expected)
@@ -196,7 +221,7 @@ class TestModelVisitor(unittest.TestCase):
 
         df_visit = prompter.DataFrameVisitor(set(["X", "y"]), prompter.Aliases("pandas"))
         df_visit.visit(parse(snippet_rows))
-        visitor = prompter.ModelFitVisitor(["lr"], namespace, df_visit.assign_map)
+        visitor = prompter.ModelScoreVisitor(["lr"], namespace, df_visit.assign_map)
 
         visitor.visit(parse(snippet_rows))
         
@@ -223,7 +248,7 @@ class TestModelVisitor(unittest.TestCase):
         df_visit = prompter.DataFrameVisitor(set(["test_df"]), prompter.Aliases("pandas"))
         df_visit.visit(parse(snippet_rows_cols))
 
-        visitor = prompter.ModelFitVisitor(["lr"], namespace, df_visit.assign_map)
+        visitor = prompter.ModelScoreVisitor(["lr"], namespace, df_visit.assign_map)
 
         visitor.visit(parse(snippet_rows_cols))
         
@@ -250,7 +275,7 @@ class TestModelVisitor(unittest.TestCase):
         df_visit = prompter.DataFrameVisitor(set(["test_df"]), pd_alias)
         df_visit.visit(parse(snippet_cols))
 
-        visitor = prompter.ModelFitVisitor(pd_alias, ["lr"], namespace, df_visit.assign_map)
+        visitor = prompter.ModelScoreVisitor(pd_alias, ["lr"], namespace, df_visit.assign_map)
 
         visitor.visit(parse(snippet_cols))
         
@@ -277,7 +302,7 @@ class TestModelVisitor(unittest.TestCase):
         df_visit = prompter.DataFrameVisitor(set(["test_df"]), prompter.Aliases("pandas"))
         df_visit.visit(parse(snippet_loc))
 
-        visitor = prompter.ModelFitVisitor(["lr"], namespace, df_visit.assign_map)
+        visitor = prompter.ModelScoreVisitor(["lr"], namespace, df_visit.assign_map)
         visitor.visit(parse(snippet_loc))
         
         self.assertEqual(visitor.models, expected)
@@ -293,7 +318,7 @@ class TestModelVisitor(unittest.TestCase):
         df_visit = prompter.DataFrameVisitor(set(["test_df"]), prompter.Aliases("pandas"))
         df_visit.visit(parse(snippet_loc))
 
-        visitor = prompter.ModelFitVisitor(["lr"], namespace, df_visit.assign_map)
+        visitor = prompter.ModelScoreVisitor(["lr"], namespace, df_visit.assign_map)
         visitor.visit(parse(snippet_iloc))
         
         self.assertEqual(visitor.models, expected)
@@ -327,7 +352,7 @@ class TestModelVisitor(unittest.TestCase):
         df_visit = prompter.DataFrameVisitor(set(["test_df"]), prompter.Aliases("pandas"))
         df_visit.visit(parse(snippet_drop))
 
-        visitor = prompter.ModelFitVisitor(["lr"], namespace, df_visit.assign_map)
+        visitor = prompter.ModelScoreVisitor(["lr"], namespace, df_visit.assign_map)
         visitor.visit(parse(snippet_drop))
 
         self.assertEqual(visitor.models, expected)
@@ -338,7 +363,7 @@ class TestModelVisitor(unittest.TestCase):
         df_visit = prompter.DataFrameVisitor(set(["test_df"]), prompter.Aliases("pandas"))
         df_visit.visit(parse(snippet_dropna))
 
-        visitor = prompter.ModelFitVisitor(["lr"], namespace, df_visit.assign_map)
+        visitor = prompter.ModelScoreVisitor(["lr"], namespace, df_visit.assign_map)
         visitor.visit(parse(snippet_dropna))
         self.assertEqual(visitor.models, expected)
 
@@ -352,7 +377,7 @@ class TestModelVisitor(unittest.TestCase):
 
         expected = {"lr" : {"x_cols" : ["a", "b"], "y_cols" : ["c"]}}
 
-        visitor = prompter.ModelFitVisitor(pd_alias, model_names, namespace, assign_map)
+        visitor = prompter.ModelScoreVisitor(pd_alias, model_names, namespace, assign_map)
         visitor.visit(parse(snippet_loc))
         
         self.assertEqual(visitor.models, expected)
@@ -363,7 +388,7 @@ class TestModelVisitor(unittest.TestCase):
         """lr.fit(test_df[["a", "b"]].to_numpy(), test_df["c"].to_numpy())"""
 
         expected = {"lr" : {"x_cols" : ["a", "b"], "y_cols" : ["c"]}}
-        visitor = prompter.ModelFitVisitor()
+        visitor = prompter.ModelScoreVisitor()
         visitor.visit(parse(snippet_loc))
         
         self.assertEqual(visitor.models, expected)
@@ -375,7 +400,7 @@ class TestModelVisitor(unittest.TestCase):
         """lr.fit(test_df[["a", "b"]], test_df.c)"""
 
         expected = {"lr" : {"x_cols" : ["a", "b"], "y_cols" : ["c"]}}
-        visitor = prompter.ModelFitVisitor()
+        visitor = prompter.ModelScoreVisitor()
         visitor.visit(parse(snippet_loc))
         
         self.assertEqual(visitor.models, expected)

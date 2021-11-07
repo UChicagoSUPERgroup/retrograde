@@ -3,26 +3,16 @@ analysis.py creates a running environment for dynamically tracking
 data relationships between variables
 """
 from queue import Empty
-from ast import NodeVisitor, Call, Name, Attribute, Expr, Str, Num
-from ast import Subscript, List, Index, ExtSlice, NameConstant
-from ast import parse 
+from ast import parse, Name, Attribute, Str
 from sklearn.base import ClassifierMixin
-from ast import Tuple, List
 from pandas import DataFrame
-from random import choice
-#from nbconvert.preprocessers import DeadKernelError
 
 import dill
-import sqlite3
 
 from timeit import default_timer as timer
-from datetime import datetime
-from jupyter_client.manager import start_new_kernel
 
 from .storage import load_dfs
 from .visitors import DataFrameVisitor, ModelScoreVisitor
-
-#from code import InteractiveInterpreter
 
 class AnalysisEnvironment:
     """
@@ -94,6 +84,10 @@ class AnalysisEnvironment:
                         self.entry_points[df_name]["columns"][c] = {}
                         self.entry_points[df_name]["columns"][c]["size"] = len(df_obj[c])
                         self.entry_points[df_name]["columns"][c]["type"] = str(df_obj[c].dtypes)
+        # add data to db
+        for entry_point in self.entry_points.values():
+            self.log.debug("[AnalysisEnv] checking {0}".format(entry_point))
+            self.db.check_add_data(entry_point)   
         # new model fit calls? 
         new_models = model_visitor.models
         self.log.debug("[AnalysisEnv] new models are {0}".format(new_models)) 
