@@ -657,12 +657,16 @@ class EqualizedOddsNote(Notification):
 
     def check_feasible(self, cell_id, env, dfs, ns):
         
-        non_dfs_ns = dill.loads(ns["namespace"])
+        # TODO: this could be a culprit for a bug
+        if "namespace" in ns:
+            non_dfs_ns = dill.loads(ns["namespace"])
+        else:
+            non_dfs_ns = ns
 
         models = self._get_new_models(cell_id, env, non_dfs_ns)
         defined_dfs = dfs
         
-        models_with_dfs = check_call_dfs(defined_dfs, non_dfs_ns, models)
+        models_with_dfs = check_call_dfs(defined_dfs, non_dfs_ns, models, env)
         aligned_models = {}
 
         for model_name in models_with_dfs:
@@ -693,19 +697,21 @@ class EqualizedOddsNote(Notification):
             pass
         for member in group_col.unique():
             # only want to pass in the indices of the group
-            member_indices = df[df[prot_group] == member].index
-            if isinstance(y_true, (pd.Series, np.array)):
-                y_true_member = y_true[member_indices]
+            member_mask = df.loc[df[prot_group] == member, prot_group]
+            if isinstance(y_true, (pd.Series, pd.DataFrame)):
+                # y_true_member = y_true[member_indices]
+                # y_true_member = y_true.where(member_mask).dropna()
+                y_true_member = y_true[member_mask[prot_group]]
             else:
-                # do work 
-                # honestly shouldn't happen but just in case we should throw an error
+                # do **hard** work 
                 pass
 
-            if isinstance(y_pred, (pd.Series, np.array)):
-                y_pred_member = y_pred[member_indices]
+            if isinstance(y_pred, (pd.Series, pd.DataFrame)):
+                # y_pred_member = y_pred[member_indices]
+                y_pred_member = y_pred[member_mask[prot_group]]
+                y_pred_member = y_pred.where(member_mask).dropna()
             else:
-                # do work
-                # honestly shouldn't happen but just in case we should throw an error
+                # do **hard** work 
                 pass
             error_rates_by_member[member] = error_rates(acc_measures(y_true_member, y_pred_member))
         return error_rates_by_member
@@ -754,6 +760,8 @@ class EqualizedOddsNote(Notification):
     def make_response(self, env, kernel_id, cell_id):
         # pylint: disable=too-many-locals,too-many-statements
         super().make_response(env, kernel_id, cell_id)
+
+        env.log.debug("[EqOddsNote] has received a request to make a response")
         
         # Q?: why random choice?
         model_name = choice(list(self.aligned_models.keys()))
@@ -849,6 +857,7 @@ class EqualizedOddsNote(Notification):
         If model is still defined, recalculate EqOdds correction for grp
         """
         # pylint: disable=too-many-locals,too-many-arguments
+        # TODO: this could be a culprit for a bug
         ns = self.db.recent_ns()
         non_dfs_ns = dill.loads(ns["namespace"])
         
