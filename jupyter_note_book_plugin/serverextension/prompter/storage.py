@@ -217,12 +217,15 @@ class DbHandler:
             return max_version + 1
         else:
             # data is new, add data and columns to database
+            if "source" not in entry_point:
+                entry_point["source"] = "unknown"
             self.add_data(entry_point, 1)
             return 1
 
     def find_data(self, data):
         """look up if data entry exists, return if exists, None if not"""
         # note that will *not* compare columns
+        """
         if "source" in data.keys():
             source = data["source"]
             name = data["name"] 
@@ -236,7 +239,7 @@ class DbHandler:
             if data_versions == []: 
                 return None
             return data_versions
-
+        """
         name = data["name"]
         kernel = data["kernel"] 
 
