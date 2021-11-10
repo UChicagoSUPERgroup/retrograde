@@ -1,4 +1,5 @@
 import json
+from os import name
 from random import choice
 
 import math
@@ -13,7 +14,7 @@ from sklearn.base import ClassifierMixin
 from pandas.api.types import is_numeric_dtype
 
 from .storage import load_dfs
-from .string_compare import check_for_protected
+from .string_compare import check_for_protected, guess_protected
 from .sortilege import is_categorical
 from .slice_finder import err_slices
 
@@ -87,7 +88,10 @@ class ProtectedColumnNote(Notification):
         for df_name, cols in poss_cols.items():
             # TODO: when guess_protected integrated, should also call guess protected here
             protected_columns = check_for_protected(cols)
-
+            protected_columns.extend(guess_protected(dfs[df_name]))
+      
+            env.log.debug("[ProtectedColumnNote] protected columsn are {0}".format(protected_columns))
+  
             if protected_columns != []:
 
                 protected_col_names = [c["original_name"] for c in protected_columns]
@@ -187,8 +191,8 @@ class ProtectedColumnNote(Notification):
                     # does the df_name still have the same column names/values?
                     # column names must be the same, but the values may have
                     # changed. Therefore TODO: change this to do check_values cols
-                    protected_cols = check_for_protected(dfs[df_name].columns)
-                    self.df_protected_cols[df_name] = protected_cols
+                    protected_cols = guess_protected(dfs[df_name].columns)
+                    self.df_protected_cols[df_name].extend(protected_cols)
                     protected_col_names = [col["original_name"] for col in protected_cols]
                     self.df_not_protected_cols[df_name] = [col for col in dfs[df_name].columns if col not in protected_col_names]
                 
@@ -479,7 +483,7 @@ class MissingDataNote(ProtectedColumnNote):
 
                 # for every sensitive column
                 for sensitive in these_sensitive_cols:
-                    sensitive = sensitive["protected_value"]
+                    sensitive = sensitive["original_name"]
                     # for every column with missing data
                     for missing_col in these_missing_cols:
                         sensitive_frequency = {}
