@@ -29,6 +29,7 @@ SQL_CMDS = {
   "GET_UNMARKED" : """SELECT col_name, name, version, type, size FROM columns WHERE kernel = ? AND user = ? AND name = ? AND version = ? AND checked = FALSE""",
   "UPDATE_COL_TYPES" : """UPDATE columns SET fields = ?, is_sensitive = ?, user_specified = ?, checked = ? WHERE user = ? AND kernel = ? AND name = ? AND version = ? AND col_name = ?""",
   "GET_MAX_VERSION" : """SELECT name,MAX(version) FROM data WHERE user = ? AND kernel = ? GROUP BY name""",
+  "GET_VERSION_COLS" : """SELECT * FROM columns WHERE kernel = ? AND user = ? AND name = ? AND version = ?""",
   "STORE_RESP" : """INSERT INTO notifications(kernel, user, cell, resp, exec_ct) VALUES (?, ?, ?, ?, ?)""",
   "GET_RESPS" : """SELECT cell, resp FROM notifications WHERE kernel = ? AND user = ?""",
 }
@@ -291,6 +292,22 @@ class DbHandler:
 
         return self._cursor.fetchall()
 
+    def get_recent_cols(self, kernel):
+        """return the columns of the most recent dataframe versions"""
+        self.renew_connection()
+        self._cursor.execute(self.cmds["GET_MAX_VERSION"], (self.user, kernel))
+        
+        max_versions = self._cursor.fetchall()
+        recent_cols = []
+
+        for max_version in max_versions:
+
+            name = max_version["name"]
+            version = max_version["MAX(version)"]
+            self._cursor.execute(self.cmds["GET_VERSION_COLS"], (kernel, self.user, name, version))
+            recent_cols.extend(self._cursor.fetchall())
+
+        return recent_cols        
     def get_unmarked_columns(self, kernel):
         """
         return columns that have not been scanned for whether they are sensitive
@@ -320,7 +337,7 @@ class DbHandler:
         """
         update columns
         
-        input_data is a dictionary mapping df_name -> {col_name : { "sensitive" : "user_designated" : "fields" : }}
+        input_data is a dictionary mapping df_name -> {col_name : { "sensitive" : <boolean>, "user_designated" : <boolean>, "fields" : <string> }}
         """
         self.renew_connection()
         query_tuples = [] 

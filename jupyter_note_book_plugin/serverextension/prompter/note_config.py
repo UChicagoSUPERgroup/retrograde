@@ -4,7 +4,7 @@ from .config import MODE
 if MODE == "EXP_CTS":
     NOTE_RULES = {
         "intro" :[],
-        "tutorial" : [ProtectedColumnNote, OutliersNote],
+        "tutorial" : [ProtectedColumnNote, ProxyColumnNote],
         "null_clean" : [ProxyColumnNote, MissingDataNote],
         "model" : [ErrorSliceNote],
         "end" : []
