@@ -5,6 +5,7 @@ import math
 import operator
 
 import pandas as pd
+from pandas.api.types import is_numeric_dtype, is_unsigned_integer_dtype, is_integer_dtype, is_signed_integer_dtype
 import numpy as np
 import dill
 
@@ -657,7 +658,6 @@ class EqualizedOddsNote(Notification):
 
     def check_feasible(self, cell_id, env, dfs, ns):
         
-        # TODO: this could be a culprit for a bug
         if "namespace" in ns:
             non_dfs_ns = dill.loads(ns["namespace"])
         else:
@@ -671,49 +671,87 @@ class EqualizedOddsNote(Notification):
 
         for model_name in models_with_dfs:
             match_name, match_cols, match_indexer = search_for_sensitive_cols(models_with_dfs[model_name]["x"], model_name, defined_dfs)
+            env.log.debug("[EqOddsNote] model {0} has match {1}, match_cols {2}".format(model_name, match_name, match_cols.head()))
             if not match_name:
                 continue
             aligned_models[model_name] = models_with_dfs[model_name]
             aligned_models[model_name]["match"] = {"cols" : match_cols, 
                                                    "indexer" : match_indexer,
-                                                   "name" : match_name}
+                                                   "name" : match_name,
+                                                   "x_parent": models_with_dfs[model_name]["x_parent"]}
         if len(aligned_models) > 0:
             self.aligned_models = aligned_models
             return True                            
         return False
 
-    def group_based_error_rates(self, prot_group, df, y_true, y_pred):
+    def group_based_error_rates(self, env, prot_group, df, y_true, y_pred):
         """
         Compute precision, recall and f1score for a protected group in the df
 
         Returns: error rates for member in group : Dict{<member_value_from_group>: (precision, recall, f1score, fpr, fnr)}
         """
-        error_rates_by_member = {}  # {member : tuple of precision, recall, f1score}
+        error_rates_by_member = {} 
 
+        env.log.debug("[EqOdds] prot_group: {0}".format(prot_group))
         if prot_group in df.columns:
             group_col = df[prot_group]
-        else:
-            # raise error, group not in df
-            pass
-        for member in group_col.unique():
-            # only want to pass in the indices of the group
-            member_mask = df.loc[df[prot_group] == member, prot_group]
-            if isinstance(y_true, (pd.Series, pd.DataFrame)):
-                # y_true_member = y_true[member_indices]
-                # y_true_member = y_true.where(member_mask).dropna()
-                y_true_member = y_true[member_mask[prot_group]]
-            else:
-                # do **hard** work 
-                pass
+            env.log.debug("[EqOdds] df datatypes: {0}".format(df.dtypes))
 
-            if isinstance(y_pred, (pd.Series, pd.DataFrame)):
-                # y_pred_member = y_pred[member_indices]
-                y_pred_member = y_pred[member_mask[prot_group]]
-                y_pred_member = y_pred.where(member_mask).dropna()
-            else:
-                # do **hard** work 
+            # if binary
+            shape = group_col.unique().shape[0]
+            type = group_col.dtype
+            if shape <= 2:
+                # do binary
+                mask = group_col == 1
+                if not isinstance(y_true, pd.Series):
+                    y_true = pd.Series(y_true)
+                y_true_member = y_true.where(mask).dropna()
+                # do same for preds
+                if not isinstance(y_pred, pd.Series):
+                    y_pred = pd.Series(y_pred)
+                y_pred_member = y_pred.where(mask).dropna()
+
+                # try:
+                error_rates_by_member[prot_group] = error_rates(*acc_measures(y_true_member, y_pred_member))
+                # except ZeroDivisionError as e:
+                #     env.log.error("[EqOdds] Error for binary protected group {0}\nError: {1}\nlen(y_true)={2},len(y_pred)={3}".format(prot_group, e, len(y_true_member), len(y_pred_member)))
+            # elif categorical
+            elif shape > 2 and (is_unsigned_integer_dtype(type) or is_integer_dtype(type) or is_signed_integer_dtype(type)):
+                # do categorical
+                for member in group_col.unique():
+                    # boolean masking
+                    member_mask = group_col == member
+                    if isinstance(y_true, (pd.Series, pd.DataFrame)):
+                        # y_true_member = y_true[member_indices]
+                        y_true_member = y_true.where(member_mask).dropna()
+                        # y_true_member = y_true.loc[member_mask.index]
+                    else:
+                        y_true_series = pd.Series(y_true)
+                        y_true_member = y_true_series.where(member_mask).dropna()
+
+                    # do same for y_pred
+                    if isinstance(y_pred, (pd.Series, pd.DataFrame)):
+                        # y_pred_member = y_pred[member_indices]
+                        y_pred_member = y_pred.where(member_mask).dropna()
+                        # y_pred_member = y_pred[member_mask.index]
+                    else:
+                        y_pred_series = pd.Series(y_pred)
+                        y_pred_member = y_pred_series.where(member_mask).dropna()
+                        
+                    # try:
+                    error_rates_by_member[member] = error_rates(*acc_measures(y_true_member, y_pred_member))
+                    # except ValueError as e:
+                        # env.log.error("[EqOdds] ValueError for member {0} in group {1}\nError: {2}".format(member, prot_group, e))
+            # elif ordered numeric
+            elif shape > 2 and is_numeric_dtype(type):
+                # do numeric (ordered)
+                # TODO: make ranges of numeric values
                 pass
-            error_rates_by_member[member] = error_rates(acc_measures(y_true_member, y_pred_member))
+            else:
+                env.log.error("[EqOdds] Group column is not binary, categorical or numeric. Cannot compute error rates.")
+                return {}
+        else:
+            env.log.error("[EqOdds] prot_group: {0} not in df: {1}".format(prot_group, df.columns))
         return error_rates_by_member
     
     def sort_error_rates(self, error_rates_by_group):
@@ -734,24 +772,23 @@ class EqualizedOddsNote(Notification):
             sorted_error_rates_by_group[group_key] = dict(sorted(group.items(), key=sorting_key, reverse=True))
         return sorted_error_rates_by_group
 
-    def get_sorted_k_highest_error_rates(self, env, col_names, model_name, preds):
+    def get_sorted_k_highest_error_rates(self, env, col_names, model_name, x_parent_df, X, y, preds):
         """
         Method that handles getting all the error rates for the model on groups 
         specififed in `col_names`
         """
         all_error_rates = {} # {group_name : error_rates_by_member}
         for group in col_names: # list of columns identified as protected by search_for_sensitive_cols
-            group_error_rates = self.group_based_error_rates(group, 
-                                            self.aligned_models[model_name]["x_parent"], 
-                                            self.aligned_models[model_name]['y'], 
-                                            preds)
-            # log the error rates
-            for member in group_error_rates:
-                precision, recall, f1score, fpr, fnr = group_error_rates[member]
-                env.log.debug("[EqOddsNote] has computed these error rates for member, {4}, in group:{0}\nPrecision: {1:.4g}\nRecall: {2:.4g}\nF1Score: {3:.4g}\nFalse Positive Rate: {5:.4g}\nFalse Negative Rate: {6:.4g}"\
-                                .format(group, precision, recall, f1score, member, fpr, fnr))
-            # save them
-            all_error_rates[group] = group_error_rates
+            # env.log.debug("[EqOdds] model_name: {0}".format(model_name))
+            group_error_rates = self.group_based_error_rates(env, group, x_parent_df, y, preds)
+            if group_error_rates: 
+                # log the error rates
+                for member in group_error_rates:
+                    precision, recall, f1score, fpr, fnr = group_error_rates[member]
+                    env.log.debug("[EqOddsNote] has computed these error rates for member, {4}, in group:{0}\nPrecision: {1:.4g}\nRecall: {2:.4g}\nF1Score: {3:.4g}\nFalse Positive Rate: {5:.4g}\nFalse Negative Rate: {6:.4g}"\
+                                    .format(group, precision, recall, f1score, member, fpr, fnr))
+                # save them
+                all_error_rates[group] = group_error_rates
         sorted_error_rates = self.sort_error_rates(all_error_rates)
         # sort most important k error_rates (this is relative, no normative judgment here)
         k_highest_rates = {key: val for n, (key, val) in enumerate(sorted_error_rates.items()) if n < self.k}
@@ -773,73 +810,32 @@ class EqualizedOddsNote(Notification):
         model = self.aligned_models[model_name]["model"]
 
         match_cols = self.aligned_models[model_name]["match"]["cols"]
+        df_name = self.aligned_models[model_name]["match"]["name"]
         match_indexer = self.aligned_models[model_name]["match"]["indexer"]
+        x_parent_df = self.aligned_models[model_name]["match"]["x_parent"]
 
         col_names = [col.name for col in match_cols]
         match_cols = [bin_col(col) for col in match_cols]
-        """Old AI Fairness 360 code
-        # do the alignment of the data if necessary
-        if match_indexer is not None:
-
-            X = align_index(X, match_indexer["values"], match_indexer["loc"])
-            y = align_index(y, match_indexer["values"], match_indexer["loc"])
-
-            match_cols = [align_index(col, match_indexer["values"], match_indexer["o_loc"]) for col in match_cols]
-        match_cols = [bin_col(col) for col in match_cols]
-        # create the properly indexed dataframes
-        if isinstance(X.index, pd.MultiIndex):
-            flat_index = X.index.to_flat_index()
-            arrs = [[idx[i] for idx in flat_index] for i in range(len(flat_index[0]))]
-            X_index = pd.MultiIndex.from_arrays(arrs + match_cols, names=X.index.names + col_names)
-        else: 
-            X_index = pd.MultiIndex.from_arrays([X.index] + match_cols, names= [X.index.name] + col_names)
-        X.index = X_index
-
-        if isinstance(y, (pd.Series, pd.DataFrame)):
-            y.index = X_index
-        else:
-            y = pd.Series({"y" : y}, index=X_index)
-        """
         # get acc_orig on indexed/subsetted df
         acc_orig = model.score(X, y)
         orig_preds = model.predict(X)
+        orig_preds = pd.Series(orig_preds, index=X.index)
 
         # Find error rates for protected groups
         if col_names is None: 
             # exit? nothing to do if no groups
-            pass
+            env.log.debug("[EqOddsNote] has no groups to compute error rates for")
+            return
         else:
-            sorted_error_rates, k_highest_rates = self.get_sorted_k_highest_error_rates(env, col_names, model_name, orig_preds)      
-        """Old AI Fairness 360 code
-        # apply correction
-        corrections = []
-
-        env.log.debug("[EqOddsNote] Using input \n{0}".format(X.head()))
-
-        for grp in col_names:
-            for constraint in ["fpr", "fnr"]:
-             
-                pp = CalibratedEqualizedOdds(grp, cost_constraint=constraint)
-                ceo = PostProcessingMeta(estimator=model, postprocessor=pp)
-                ceo.fit(X, y)
-                acc = ceo.score(X, y)
-                preds = ceo.predict(X)
-
-                corrections.append({"grp" : grp, "constraint": constraint, 
-                                    "acc" : acc, "preds" : sum(preds != orig_preds)})
-
-        # get acc_corr
-        # select the group that negatively impacts original accuracy the least
-        # we could also try selecting the change that would affect the smallest number of predictions
-        env.log.debug("[EqOddsNote] possible corrections are {0}".format(corrections)) 
-        inv = max(corrections, key = lambda corr: corr["acc"])
-        """
+            # env.log.debug("[EqOddsNote] df_name: {0}".format(df_name))
+            sorted_error_rates, k_highest_rates = self.get_sorted_k_highest_error_rates(env, col_names, model_name, x_parent_df, X, y, orig_preds)      
         resp["acc_orig"] = acc_orig
         resp["groups"] = col_names
+        # TODO: check if empty?
         resp["error_rates"] = sorted_error_rates
         resp["k_highest_rates"] = k_highest_rates
 
-        env.log.debug("[EqOddsNote] response is {0}".format(resp))
+        env.log.debug("[EqOddsNote] response is {0}".format(json.dumps(resp)))
 
         if resp["model_name"] not in self.columns:
             self.columns[resp["model_name"]] = {cell_id : (X,y)}
@@ -857,7 +853,6 @@ class EqualizedOddsNote(Notification):
         If model is still defined, recalculate EqOdds correction for grp
         """
         # pylint: disable=too-many-locals,too-many-arguments
-        # TODO: this could be a culprit for a bug
         ns = self.db.recent_ns()
         non_dfs_ns = dill.loads(ns["namespace"])
         
@@ -890,28 +885,16 @@ class EqualizedOddsNote(Notification):
             model_name = resp["model_name"]
             model = non_dfs_ns[model_name]
             groups = resp["groups"]
+            x_parent_df = self.aligned_models[model_name]["match"]["x_parent"]
             # error_rates = resp["error_rates"]
             # k_highest_error_rates = resp["k_highest_error_rates"]
             new_preds = model.predict(X)
+            new_preds = pd.Series(new_preds, index=X.index)
             new_acc = model.score(X, y)
-            sorted_error_rates, k_highest_error_rates = self.get_sorted_k_highest_error_rates(env, groups, model_name, new_preds)
+            sorted_error_rates, k_highest_error_rates = self.get_sorted_k_highest_error_rates(env, groups, model_name, x_parent_df, X, y, new_preds)
             resp["acc_orig"] = new_acc
             resp["error_rates"] = sorted_error_rates
             resp["k_highest_error_rates"] = k_highest_error_rates
-            '''constraint = resp["eq"]
-
-            acc_orig = model.score(X,y)
-            pred_orig = model.predict(X)
- 
-            pp = CalibratedEqualizedOdds(grp, cost_constraint=constraint)
-            ceo = PostProcessingMeta(estimator=model, postprocessor=pp)
-            ceo.fit(X,y)
-            acc = ceo.score(X,y)
-            preds = ceo.predict(X)
-
-            resp["acc_corr"] = acc
-            resp["acc_orig"] = acc_orig
-            resp["num_changed"] = int(sum(pred_orig != preds))'''
 
 
         # remember to clean up non-live elements of self.columns
@@ -1048,11 +1031,33 @@ class ErrorSliceNote(Notification):
             
 def error_rates(tp, fp, tn, fn):
     """Returns precision, recall, f1score, false positive rate and false negative rate """
-    precision = tp / (tp+fp)
-    recall = tp / (tp+fn)
-    f1score = 2*(precision*recall) / (precision+recall)
-    fpr = fp / (fp+tn)
-    fnr = fn / (fn+tp)
+    if tp < 0:
+        return -1, -1, -1, -1, -1
+    try:
+        precision = tp / (tp+fp)
+    except ZeroDivisionError:
+        precision = 0
+
+    try:
+        recall = tp / (tp+fn)
+    except ZeroDivisionError:
+        recall = 0
+
+    try:
+        f1score = 2*(precision*recall) / (precision+recall)
+    except ZeroDivisionError:
+        f1score = 0
+
+    try:
+        fpr = fp / (fp+tn)
+    except ZeroDivisionError:
+        fpr = 0
+
+    try:
+        fnr = fn / (fn+tp)
+    except ZeroDivisionError:
+        fnr = 0
+
     return precision, recall, f1score, fpr, fnr
 
 def acc_measures(y_true, y_pred):
@@ -1065,14 +1070,17 @@ def acc_measures(y_true, y_pred):
     fp = 0
     tn = 0
     fn = 0
+    if len(y_true) != len(y_pred):
+        raise ValueError("y_true: {0} and y_pred: {1} must be the same length".format(len(y_true), len(y_pred)))
+        return -1,-1,-1,-1
     for i in range(len(y_true)):
-        if y_true[i] == y_pred[i]:
-            if y_true[i] == 1:
+        if y_true.iloc[i] == y_pred.iloc[i]:
+            if y_true.iloc[i] == 1:
                 tp += 1
             else:
                 tn += 1
         else:
-            if y_true[i] == 1:
+            if y_true.iloc[i] == 1:
                 fn += 1
             else:
                 fp += 1
