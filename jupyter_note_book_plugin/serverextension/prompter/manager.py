@@ -49,8 +49,9 @@ class AnalysisManager:
 
         req_type = ""
         kernel_id = ""
-        if "requestType" in request:
-            req_type = request["requestType"]
+
+        if "type" in request:
+            req_type = request["type"]
         if "kernel" in request:
             kernel_id = request["kernel"]
 
