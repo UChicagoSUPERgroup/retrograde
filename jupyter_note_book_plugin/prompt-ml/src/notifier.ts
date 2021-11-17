@@ -105,9 +105,11 @@ export class Prompter {
         this._makeErrorMessage(list_of_notes, note_count);
         note_count += 1
       } else if (notice_type == "resemble") {
-        this._makeResembleMsg(list_of_notes, note_count)
+        console.log("making resemble msg");
+        this._makeResembleMsg(list_of_notes, note_count, String(kernel_id))
       } else {
         for (var x = 0; x < list_of_notes.length; x++) {
+          console.log("making multiple msgs"); 
           var notice = list_of_notes[x]
           this._appendNote(cell_id, kernel_id, this._routeNotice(notice, note_count));
           note_count += 1
@@ -130,8 +132,8 @@ export class Prompter {
   }
 
   // To check
-  private _makeResembleMsg(notices : any[], note_count : number) {
-    var note = new ProtectedColumnNote(notices);
+  private _makeResembleMsg(notices : any[], note_count : number, kernel_id : string) {
+    var note = new ProtectedColumnNote(notices, kernel_id);
     var message = note.generateFormattedOutput(global_notification_count, note_count);
     this._appendNote(notices[0]["cell_id"], notices[0]["kernel_id"], message);
   }

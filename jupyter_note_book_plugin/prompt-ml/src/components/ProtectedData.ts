@@ -17,6 +17,7 @@ export class ProtectedData {
     explorer: Explorer;
     columns: Column[];
     df: string;
+    kernel_id : string;
     potentialSensitivities: string[] = [
         "gender",
         "sex",
@@ -38,9 +39,11 @@ export class ProtectedData {
     // Constructor
     ////////////////////////////////////////////////////////////
 
-    constructor(notice: any) {
+    constructor(notice: any, kernel_id : string) {
         var columnNames = this._findAllColumnNames(notice);
         this.df = notice["df"];
+        this.kernel_id = kernel_id;
+        console.log("kernel_id ", this.kernel_id)
         this.columns = this._populateColumns(notice);
         this._client = new CodeCellClient()
         this.explorer = new Explorer(columnNames, this.df)
@@ -65,7 +68,7 @@ export class ProtectedData {
         this._client.request(
             "exec", "POST",
             JSON.stringify({
-                "requestType": "columnInformation",
+                "type": "columnInformation",
                 "df": dfName,
                 "col": columnName,
             }),
@@ -89,9 +92,10 @@ export class ProtectedData {
         this._client.request(
             "exec", "POST",
             JSON.stringify({
-                "requestType": "sensitivityModification",
+                "type": "sensitivityModification",
                 "df": dfName,
                 "col": columnName,
+                "kernel" : this.kernel_id,
                 "sensitivity": newSensitivity
             }),
             ServerConnection.makeSettings()).
