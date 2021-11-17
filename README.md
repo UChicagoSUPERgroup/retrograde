@@ -70,6 +70,33 @@ docker run --env JP_PLUGIN_USER="test_user" --env MODE="EXP_CTS" --env DOCKER_HO
 ```
 
 You may need to select an unused port though
+
+## Deployment Instructions
+
+You will need to find a webserver with docker and mysql installed. You may also need to run individually the ```make_db.sql``` and ```make_tables.sql``` scripts in the jupyter_lab_plugin/serverextension/prompter folder.
+
+The mysql database will need to have a user named "prompter_user", open on localhost, with password "user_pw". You will also need to have a user with permissions to create databases and tables in mysql. 
+
+Once these are installed, it is necessary to transfer the docker image built through to the web server.  If you are building the image somewhere else, ie. on your local machine, then you will need to make the image available by pulling it to the web server. You will need to tag the image with a meaningful tag, and then push it to dockerhub. 
+
+```bash
+docker push gsamharrison/plugin-test:tagname
+```
+
+and 
+
+```bash
+docker pull gsamharrison/plugin-test:tagname
+```
+
+Then in notebook-server/, copy over config.yml.tmpl to config.yml, fill out the SQL fields with the information about the connection (do not worry about the Secret Key field), and change the IMAGE field to gsamharrison/plugin-test:tagname. 
+
+Then to run the webserver, run pipenv run python3 wsgi.py. This starts the webserver on port 5000.
+
+To test the server, go to (hostname)>:5000/(USER_ID)/(MODE). (MODE) is either EXP_CTS or EXP_END and USER_ID can be anything you want. It's helpful to make it relatively unique as it will enable us to debug any issues that may arise. 
+	
+
+
 # Helpful examples
 
 [Jupyter lab code formatter](https://github.com/ryantam626/jupyterlab_code_formatter)

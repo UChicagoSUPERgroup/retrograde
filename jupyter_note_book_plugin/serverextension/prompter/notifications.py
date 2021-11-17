@@ -1,4 +1,5 @@
 import json
+from os import name
 from random import choice
 
 import math
@@ -8,19 +9,17 @@ import pandas as pd
 import numpy as np
 import dill
 
-from scipy.stats import zscore, f_oneway, chi2_contingency
+from scipy.stats import zscore, f_oneway, chi2_contingency, spearmanr
 from sklearn.base import ClassifierMixin
-from aif360.sklearn.postprocessing import CalibratedEqualizedOdds, PostProcessingMeta
 from pandas.api.types import is_numeric_dtype
 
 from .storage import load_dfs
-from .string_compare import check_for_protected
+from .string_compare import check_for_protected, guess_protected
 from .sortilege import is_categorical
 from .slice_finder import err_slices
 
 PVAL_CUTOFF = 0.25 # cutoff for thinking that column is a proxy for a sensitive column
 STD_DEV_CUTOFF = 0.1 # cutoff for standard deviation change that triggers difference in OutliersNotes
-
 
 class Notification:
     """Abstract base class for all notifications"""
@@ -89,10 +88,15 @@ class ProtectedColumnNote(Notification):
         for df_name, cols in poss_cols.items():
             # TODO: when guess_protected integrated, should also call guess protected here
             protected_columns = check_for_protected(cols)
-
+            protected_columns.extend(guess_protected(dfs[df_name]))
+      
+            env.log.debug("[ProtectedColumnNote] protected columsn are {0}".format(protected_columns))
+  
             if protected_columns != []:
+
+                protected_col_names = [c["original_name"] for c in protected_columns]
                 self.df_protected_cols[df_name] = protected_columns        
-                self.df_not_protected_cols[df_name] = [c for c in cols if c not in protected_columns]
+                self.df_not_protected_cols[df_name] = [c for c in cols if c not in protected_col_names]
 
         return self.df_protected_cols != {}
 
@@ -123,13 +127,12 @@ class ProtectedColumnNote(Notification):
 
                 if resp["df"] not in input_data:
                     input_data[resp["df"]] = {}
-
+                # TODO: somehow protected columns are not getting marked as sensitive
+                env.log.debug("[ProtectedColumn] resp {0}".format(resp))
                 for col, category in zip(resp["col_names"], resp["category"].split(",")):
-
                     input_data[resp["df"]][col] = {"is_sensitive": True, "user_specified" : False, "fields" : category}
                 for col in self.df_not_protected_cols[df_name]:
                     input_data[df_name][col] = {"is_sensitive" : False, "user_specified" : False, "fields" : None}
-
         self.db.update_marked_columns(kernel_id, input_data)
             
 #            input_data[df_name] = {col_name : {"sensitive", "user_designated", "fields"} 
@@ -188,8 +191,8 @@ class ProtectedColumnNote(Notification):
                     # does the df_name still have the same column names/values?
                     # column names must be the same, but the values may have
                     # changed. Therefore TODO: change this to do check_values cols
-                    protected_cols = check_for_protected(dfs[df_name].columns)
-                    self.df_protected_cols[df_name] = protected_cols
+                    protected_cols = guess_protected(dfs[df_name].columns)
+                    self.df_protected_cols[df_name].extend(protected_cols)
                     protected_col_names = [col["original_name"] for col in protected_cols]
                     self.df_not_protected_cols[df_name] = [col for col in dfs[df_name].columns if col not in protected_col_names]
                 
@@ -218,29 +221,71 @@ class ProxyColumnNote(ProtectedColumnNote):
     def __init__(self, db):
         super().__init__(db)
         self.avail_dfs = {} # df_name -> {df: <df>, sense_cols : [], non_sense_cols: []}
-        
-    def check_feasible(self, cell_id, env, dfs, ns):
-        super().check_feasible(cell_id, env, dfs, ns) # populates self.df_protected_cols
-        # note that we don't care about return value because even if there are no 
-        # new dfs, the columns may have changed
  
+    def check_feasible(self, cell_id, env, dfs, ns):
+
+        # note is feasible if there are columns of most recent
+        # data versions, which are sensitive, and there are columns
+        # in most recent data versions which are not sensitive
+
+        # note that by using DB, we only issue notes when a Protected
+        # note has already been sent.
+  
         self.avail_dfs = {}
 
         # find dfs that have not had notes issued on them already
         noted_dfs = self._noted_dfs("proxy")
+        recent_cols = self.db.get_recent_cols(env._kernel_id)
+        candidates = {}
 
-        for df_name in self.df_protected_cols:
-            if df_name not in noted_dfs:
-                sense_col_names = [c["original_name"] for c in self.df_protected_cols[df_name]]
-                non_sensitive_cols = [c for c in dfs[df_name].columns if c not in sense_col_names]
-                if len(non_sensitive_cols) != 0 and len(sense_col_names) != 0: 
-                    self.avail_dfs[df_name] = {
-                        "df" : dfs[df_name],    
-                        "sens_cols" : sense_col_names,
-                        "non_sense_cols" : non_sensitive_cols
-                    }
+        for col in recent_cols:
+
+            df_name = col["name"]
+            if df_name in noted_dfs or df_name not in dfs:
+                continue
+            if df_name not in candidates:
+                candidates[df_name] = {
+                    "df" : dfs[df_name],
+                    "sens_cols" : [],
+                    "non_sense_cols" : []
+                }
+            if col["checked"] and col["is_sensitive"]:
+                candidates[df_name]["sens_cols"].append(col["col_name"])
+            elif col["checked"]:
+                candidates[df_name]["non_sense_cols"].append(col["col_name"])
+        self.avail_dfs = {k : v for k,v in candidates.items() if v["sens_cols"] != [] and v["non_sense_cols"] != []}
+
+        env.log.debug("[ProxyNote] available dfs {0}".format(self.avail_dfs))
         return len(self.avail_dfs) > 0
 
+    def _test_combo(self, df, sens_col, not_sense_col):
+       
+        sens_col_type = resolve_col_type(df[sens_col])
+        not_sense_col_type = resolve_col_type(df[not_sense_col])
+        
+        if sens_col_type == "unknown" or not_sense_col_type == "unknown":
+            return None
+        if sens_col_type == "categorical" and not_sense_col_type == "numeric":
+            p = self._apply_ANOVA(df, sens_col, not_sense_col)
+            if p < PVAL_CUTOFF:
+                return {"sensitive_col_name" : sens_col, 
+                        "proxy_col_name" : not_sense_col, "p" : p}
+        if sens_col_type == "categorical" and not_sense_col_type == "categorical":
+            p = self._apply_chisq(df, sens_col, not_sense_col)
+            if p < PVAL_CUTOFF:
+                return {"sensitive_col_name" : sens_col,
+                        "proxy_col_name" : not_sense_col, "p" : p}
+        if sens_col_type == "numeric" and not_sense_col_type == "numeric":
+            p = self._apply_spearmen(df, sens_col, not_sense_col)
+            if p < PVAL_CUTOFF:
+                return {"sensitive_col_name" : sens_col,
+                        "proxy_col_name" : not_sense_col, "p" : p} 
+        if sens_col_type == "numeric" and not_sense_col_type == "categorical":
+            p = self._apply_ANOVA(df, not_sense_col, sens_col)
+            if p < PVAL_CUTOFF:
+                return {"sensitive_col_name" : sens_col,
+                        "proxy_col_name" : not_sense_col, "p" : p} 
+        return None
     def make_response(self, env, kernel_id, cell_id):
         # pylint: disable=too-many-locals
         # This just checks to make sure that the note is feasible
@@ -249,51 +294,77 @@ class ProxyColumnNote(ProtectedColumnNote):
         
         resp = {"type" : "proxy"}
         
-        combos = {"categorical" : [], "numeric" : []}
- 
         for df_name, df_obj in self.avail_dfs.items():
 
             df = df_obj["df"]
             sense_cols = df_obj["sens_cols"]
             non_sens_cols = df_obj["non_sense_cols"]
 
-            for col in non_sens_cols:
-                if is_categorical(df[col]):
-                    for sense_col in sense_cols:
-                        combos["categorical"].append((df_name, sense_col, col))
-                elif is_numeric_dtype(df[col]):
-                    for sense_col in sense_cols:
-                        combos["numeric"].append((df_name, sense_col, col))
-                else:
-                    env.log.debug("[ProxyNote] ProxyNote.make_response encountered column {0} of uncertain type {1} in {2}".format(col, df[col].dtypes, df_name))
+            for sens_col in sense_cols:
+                for non_sens_col in non_sens_cols:
+                    result = self._test_combo(df, sens_col, non_sens_col)
+                    if result:
+                        resp = {"type" : "proxy", "df" : df_name}
+                        resp.update(result)
+ 
+                        if cell_id not in self.data:
+                            self.data[cell_id] = []
+                        self.data[cell_id].append(resp)
 
-            results = []
-            # for numeric, apply one way ANOVA to see if sensitive category -> difference in numeric variable
-            for num_combos in combos["numeric"]:
-                env.log.debug("[ProxyNote] make_response : analyzing column {0} as numeric".format(num_combos[2]))
-                results.append({"df" : num_combos[0], 
-                                "sensitive_col_name" : num_combos[1],
-                                "proxy_col_name" : num_combos[2],
-                                "p" : self._apply_ANOVA(df, num_combos[1], num_combos[2])}) 
-            # if proxy candidate is categorical, use chi square test
-            for num_combos in combos["categorical"]:
-                env.log.debug("[ProxyNote] make_response : analyzing column {0} as categorical".format(num_combos[2]))
-                results.append({"df" : num_combos[0], 
-                                "sensitive_col_name" : num_combos[1],
-                                "proxy_col_name" : num_combos[2],
-                                "p" : self._apply_chisq(df, num_combos[1], num_combos[2])})
+    def update(self, env, kernel_id, cell_id, dfs, ns):
+        # pylint: disable=too-many-arguments
+        """
+        Check if dataframe still defined, if proxy col and sensitive col
+        still in dataframe. If so, recompute, if not remove note
+        """
+        
+        live_resps = {}
+        recent_cols = self.db.get_recent_cols(kernel_id)
+        updated_cols = {}
 
-            results.sort(key = lambda x: x["p"]) 
-            env.log.debug("[ProxyNote] ProxyNote.make_response, there are {0} possible combinations, min value {1}, max {2}".format(len(results), results[0], results[-1]))
+        for col in recent_cols:
+            if col["name"] not in updated_cols:
+                updated_cols[col["name"]] = {"sensitive" : [], "not_sensitive" : []}
+            if col["checked"] and col["is_sensitive"]:
+                updated_cols[col["name"]]["sensitive"].append(col["col_name"])
+            elif col["checked"]:
+                updated_cols[col["name"]]["not_sensitive"].append(col["col_name"])
 
-            for result in results:
-                if result["p"] <= PVAL_CUTOFF:
-                    resp = {"type" : "proxy"}
-                    resp.update(result)
-                    if cell_id not in self.data:
-                        self.data[cell_id] = []
-                    self.data[cell_id].append(resp)
-          
+        env.log.debug("[ProxyNote] updating {0}".format(updated_cols))
+        checked_dfs = []
+
+        for cell in self.data:
+
+            live_resps[cell] = []
+
+            for note in self.data[cell]:
+
+                df_name = note["df"]
+                proxy_col = note["proxy_col_name"]
+                sense_col = note["sensitive_col_name"]
+
+                if df_name not in dfs or df_name not in updated_cols:
+                    continue
+                if df_name in checked_dfs:
+                    continue
+                df = dfs[df_name]
+
+                # check if sensitive column is still sensitive
+                # and check if there are other columns that were 
+                # not sensitive, and are sensitive now
+
+                for sens_col in updated_cols[df_name]["sensitive"]:
+                    for non_sens_col in updated_cols[df_name]["not_sensitive"]:
+                        result = self._test_combo(df, sens_col, non_sens_col)                        
+                        if result:
+                            resp = {"type" : "proxy", "df" : df_name}
+                            resp.update(result)
+                            live_resps[cell].append(resp)
+
+                checked_dfs.append(df_name)
+
+        self.data = live_resps
+
     def _apply_ANOVA(self, df, sense_col, num_col):
 
         # pylint: disable=no-self-use
@@ -302,6 +373,10 @@ class ProxyColumnNote(ProtectedColumnNote):
         # of code organization
 
         sense_col_values = df[sense_col].dropna().unique()
+
+        if len(df[num_col].dropna().unique()) < 2: # f test is not defined if values are uniform
+            return 1.0
+
         value_cols = [df[num_col][df[sense_col] == v].dropna() for v in sense_col_values]
  
         result = f_oneway(*value_cols)
@@ -316,42 +391,10 @@ class ProxyColumnNote(ProtectedColumnNote):
 
         return result[1] # returns the p-value 
 
-    def update(self, env, kernel_id, cell_id, dfs, ns):
-        # pylint: disable=too-many-arguments
-        """
-        Check if dataframe still defined, if proxy col and sensitive col
-        still in dataframe. If so, recompute, if not remove note
-        """
-        
-        live_resps = {}
+    def _apply_spearman(df, sens_col, not_sens_col):
 
-        for cell in self.data:
-            live_resps[cell] = []
-            for note in self.data[cell]:
-
-                df_name = note["df"]
-                proxy_col = note["proxy_col_name"]
-                sense_col = note["sensitive_col_name"]
-
-                if df_name not in dfs:
-                    continue
-                df = dfs[df_name]
-                if proxy_col not in df.columns or sense_col not in df.columns:
-                    continue
-                if is_categorical(df[proxy_col]):
-                    p = self._apply_chisq(df, sense_col, proxy_col)
-                elif is_numeric_dtype(df[proxy_col]):
-                    p = self._apply_ANOVA(df, sense_col, proxy_col)
-                else:
-                    continue
-                if p > PVAL_CUTOFF:
-                    continue
-
-                new_note = note
-                new_note["p"] = p 
-                live_resps[cell].append(new_note)
-
-        self.data = live_resps
+        result = spearmanr(df[sens_col], df[not_sens_col], nan_policy="omit")
+        return result[1]
 
 # TODO: inheret from ProxyColumnNote, and check both protected and proxy columns
 
@@ -440,7 +483,7 @@ class MissingDataNote(ProtectedColumnNote):
 
                 # for every sensitive column
                 for sensitive in these_sensitive_cols:
-                    sensitive = sensitive["protected_value"]
+                    sensitive = sensitive["original_name"]
                     # for every column with missing data
                     for missing_col in these_missing_cols:
                         sensitive_frequency = {}
@@ -1012,3 +1055,10 @@ class NewNote(Notification):
         #     self.data[cell_id].append(resp)
         # else:
         #     self.data[cell_id] = [resp]
+def resolve_col_type(column):
+    if is_numeric_dtype(column):
+        return "numeric"
+    elif is_categorical(column):
+        return "categorical"
+    else:
+        return "unknown"

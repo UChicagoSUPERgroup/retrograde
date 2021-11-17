@@ -8,12 +8,13 @@ import json
 import mysql.connector
 import dill
 
-from random import choice
+from random import choice, randrange
 
 from .storage import DbHandler, RemoteDbHandler, load_dfs
 from .analysis import AnalysisEnvironment
 from .config import MODE, remote_config
 from .note_config import NOTE_RULES
+
 
 class AnalysisManager:
     """
@@ -58,7 +59,12 @@ class AnalysisManager:
         if req_type != "execute":
             if req_type == "sensitivityModification":
                 self._nb.log.info("[MANAGER] handling updated sensitivity modification request {0}".format(request))
-                self.db.update_marked_columns(kernel_id, request["designations"]) # Q?: what is the name of the key holding the input data dict? (not in luca's design google doc)
+                col_info = {"is_sensitive" : request["sensitivity"] != "none",
+                            "user_specified" : True,
+                            "fields" : request["sensitivity"]}
+                update_data = {request["df"] : {request["col"] : col_info}}
+                
+                self.db.update_marked_columns(kernel_id, update_data) # Q?: what is the name of the key holding the input data dict? (not in luca's design google doc)
                 return "Updated"
             elif req_type == "columnInformation":
                 self._nb.log.info("[MANAGAER] handling request for column information {0}".format(request))
