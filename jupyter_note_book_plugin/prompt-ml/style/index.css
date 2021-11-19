@@ -13,18 +13,18 @@ textarea {
 }
 
 .jp-PromptArea {
-  border : 3px solid var(--jp-warn-color0);
-  display : flex;
-  flex-direction : row;
+  border: 3px solid var(--jp-warn-color0);
+  display: flex;
+  flex-direction: row;
 }
 
 .jp-PromptArea-spacer {
-  flex : 0.005 15px;
+  flex: 0.005 15px;
 }
 
 .jp-PromptArea-Prompt {
-  flex : 9;
-  flex-direction : column;
+  flex: 9;
+  flex-direction: column;
 }
 
 .prompt-ml-container {
@@ -35,7 +35,8 @@ textarea {
   padding-top: 8px;
 }
 
-#jp-right-stack > .lm-Widget, .prompt-ml-container {
+#jp-right-stack > .lm-Widget,
+.prompt-ml-container {
   min-width: 250px !important;
 }
 
@@ -48,16 +49,20 @@ textarea {
   stroke-width: 2px;
 }
 
-.cls-1, .cls-2, .cls-3 {
+.cls-1,
+.cls-2,
+.cls-3 {
   stroke: #0e0f10;
   stroke-linecap: round;
 }
 
-.cls-1, .cls-2 {
+.cls-1,
+.cls-2 {
   fill-rule: evenodd;
 }
 
-.cls-2, .cls-3 {
+.cls-2,
+.cls-3 {
   fill: #0e0f10;
   stroke-width: 1px;
 }
@@ -73,7 +78,8 @@ textarea {
   fill: none;
 }
 
-.cls-5, .cls-6 {
+.cls-5,
+.cls-6 {
   stroke: #000;
   stroke-width: 25px;
   fill-rule: evenodd;
@@ -86,28 +92,28 @@ textarea {
 /*  Side-column note styling  */
 
 .note {
+  padding: 0px 10px;
+  min-width: 100px;
+  margin: 10px 10px 0;
+  background-color: #f1c56b;
+  border: 2px solid #ffab00;
+  overflow-x: hidden;
   display: grid;
   grid-template-rows: auto auto;
-  border-radius: 35px;
+  border-radius: 15px;
+  min-height: 30px;
+  cursor: pointer;
+  align-content: center;
 }
-
 
 .note h1 {
   font-weight: 600;
-  font-size: 16px;
+  font-size: 12px;
   text-overflow: ellipsis;
   overflow: hidden;
   white-space: nowrap;
   max-width: 100%;
-  text-align: center;
-}
-
-.note {
-  padding: 0px 10px;
-  min-width: 100px;
-  margin: 10px;
-  background-color: #F0B744;
-  overflow-x: hidden;
+  text-align: left;
 }
 
 .note.condensed .essential .dropDown p {
@@ -135,7 +141,8 @@ textarea {
   position: relative;
 }
 
-.note .essential > .dropDown > *, .note .essential > .warning > * {
+.note .essential > .dropDown > *,
+.note .essential > .warning > * {
   position: absolute;
   top: 50%;
   left: 50%;
@@ -165,7 +172,7 @@ textarea {
 
 .note .essential .warning {
   position: relative;
-  grid-column: 3  / 4;
+  grid-column: 3 / 4;
 }
 
 .note .essential svg {
@@ -178,12 +185,29 @@ textarea {
 
 /* Svg to handle note closing */
 
-.prompt-ml-close-svg-path {
-  fill: none;
+.prompt-ml-close-svg-path,
+.dropdown-path {
   stroke: #000;
   stroke-linecap: round;
   stroke-width: 25px;
   fill-rule: evenodd;
+}
+
+.prompt-ml-close-svg-path {
+  fill: none;
+}
+
+.dropdown-svg {
+  width: 10px;
+  height: 10px;
+}
+
+.dropdown-path {
+  fill: #000;
+}
+
+.close {
+  transform: scale(0.75);
 }
 
 .close svg {
@@ -192,7 +216,8 @@ textarea {
   max-height: 60%;
 }
 
-svg.expanded, svg.condensed {
+svg.expanded,
+svg.condensed {
   width: 100%;
   min-width: 20px;
 }
@@ -219,7 +244,7 @@ svg.expanded, svg.condensed {
   padding: 5px;
   margin: 10px 0 0 0;
   border-radius: 35px;
-  background-color: #F1A204;
+  background-color: #f1a204;
   border: 1px solid black;
   text-align: center;
   font-size: 17px;
@@ -241,13 +266,9 @@ svg.expanded, svg.condensed {
 /* ================================================================================================ */
 /* Needs refinement */
 
-
-.promptMl.protectedColumns .intro p {
-  padding: 15px;
-}
-
 .promptMl.protectedColumns fieldset {
-border: none;
+  border: none;
+  padding: 10px 0;
   color: white;
 }
 
@@ -266,21 +287,25 @@ border: none;
 }
 
 .promptMl.protectedColumns details summary.sensitive {
-  background-color: #cc6864;
+  background-color: #ffe5e3;
 }
 
 .promptMl.protectedColumns details summary.nonsensitive {
-  background-color: #72bb79;
+  background-color: #dcf9df;
 }
 
 .promptMl.protectedColumns details summary {
   color: black;
-  padding: 1rem;
+  padding: 8px 10px;
   position: relative;
-  padding-right: 3rem;
   cursor: pointer;
   list-style: none;
-  border-radius: 25px;
+  border-radius: 8px;
+
+  display: flex;
+  justify-content: space-between;
+  flex-direction: row;
+  align-items: center;
 }
 
 .promptMl.protectedColumns details[open] {
@@ -310,11 +335,8 @@ border: none;
 }
 
 .promptMl.protectedColumns details > div {
-  background-color: #BBB;
-  padding-top: 25px;
-  padding-left: 0.5em;
-  padding-right: 0.5em;
-  padding-bottom: 0.5em;
+  background-color: rgb(213, 213, 213);
+  padding: 25px 17px 10px;
   margin-top: -25px;
   color: black;
   border-radius: 8px;
@@ -340,14 +362,13 @@ border: none;
 }
 
 .promptMl.protectedColumns details > div span:hover {
-  background-color: #DDD;
+  background-color: #ddd;
 }
 
 .promptMl.protectedColumns details > div span {
   display: block;
-  padding: 1rem;
+  padding: 5px 0;
   border-radius: 8px;
-  margin-top: 0.25rem;
 }
 
 .promptMl.protectedColumns details:after {
@@ -371,7 +392,7 @@ border: none;
   grid-template-rows: auto auto auto;
   grid-auto-rows: auto;
   padding: 15px;
-  font-family: Arial, Helvetica, sans-serif
+  font-family: Arial, Helvetica, sans-serif;
 }
 
 .promptMl.protectedColumns .intro {
@@ -380,50 +401,23 @@ border: none;
 }
 
 .promptMl.protectedColumns .shadowDefault {
-  background-color: #DDD;
   padding: 15px;
-  border-radius: 35px;
-  box-shadow: rgb(0 0 0 / 7%) 0px 1px 2px,
-              rgb(0 0 0 / 7%) 0px 2px 4px,
-              rgb(0 0 0 / 7%) 0px 4px 8px,
-              rgb(0 0 0 / 7%) 0px 8px 16px,
-              rgb(0 0 0 / 7%) 0px 16px 32px,
-              rgb(0 0 0 / 7%) 0px 32px 64px;
-}
-
-.promptMl.protectedColumns .df .shadow {
-  box-shadow: rgb(0 0 0 / 7%) 0px 1px 2px,
-              rgb(0 0 0 / 7%) 0px 2px 4px,
-              rgb(0 0 0 / 7%) 0px 4px 8px,
-              rgb(0 0 0 / 7%) 0px 8px 16px,
-              rgb(0 0 0 / 7%) 0px 16px 32px,
-              rgb(0 0 0 / 7%) 0px 32px 64px;
+  border: solid #efefef 1px;
+  border-radius: 5px;
 }
 
 .promptMl.protectedColumns .explorer .shadow {
-  background-color: #DDD;
-  box-shadow: rgb(0 0 0 / 7%) 0px 1px 2px,
-              rgb(0 0 0 / 7%) 0px 2px 4px,
-              rgb(0 0 0 / 7%) 0px 4px 8px,
-              rgb(0 0 0 / 7%) 0px 8px 16px,
-              rgb(0 0 0 / 7%) 0px 16px 32px,
-              rgb(0 0 0 / 7%) 0px 32px 64px;
+  background-color: #ddd;
 }
-
 
 .promptMl.protectedColumns .intro {
   display: grid;
   grid-column: 1fr fit-content;
-  grid-gap: 10px;
 }
 
 .promptMl.protectedColumns .intro p {
   grid-column: 1 / 2;
   margin: 0;
-}
-
-.promptMl.protectedColumns .intro * {
-  margin: 10px;
 }
 
 .promptMl.protectedColumns .sources a {
@@ -446,12 +440,9 @@ border: none;
   margin: 5px inherit;
   padding: 15px;
   border-radius: 35px;
-  box-shadow: rgb(0 0 0 / 7%) 0px 1px 2px,
-              rgb(0 0 0 / 7%) 0px 2px 4px,
-              rgb(0 0 0 / 7%) 0px 4px 8px,
-              rgb(0 0 0 / 7%) 0px 8px 16px,
-              rgb(0 0 0 / 7%) 0px 16px 32px,
-              rgb(0 0 0 / 7%) 0px 32px 64px;
+  box-shadow: rgb(0 0 0 / 7%) 0px 1px 2px, rgb(0 0 0 / 7%) 0px 2px 4px,
+    rgb(0 0 0 / 7%) 0px 4px 8px, rgb(0 0 0 / 7%) 0px 8px 16px,
+    rgb(0 0 0 / 7%) 0px 16px 32px, rgb(0 0 0 / 7%) 0px 32px 64px;
 }
 
 .promptMl.protectedColumns .dfs {
@@ -468,25 +459,33 @@ border: none;
 .promptMl.protectedColumns .df > h1 {
   grid-column: 1 / 3;
   grid-row: 1 / 2;
-  margin: 10px;
 }
 
 .promptMl.sensitivity h3 {
-  float:left;
+  float: left;
+}
+
+.dfColumn {
+  display: flex;
+  justify-content: space-between;
+  align-content: center;
+}
+
+.caretDown {
+  transform: rotate(180deg);
+}
+
+.dfColumn fieldset {
+  flex-grow: 1;
 }
 
 .promptMl.protectedColumns h2 {
   margin: 0;
-  text-align: center;
   font-size: 20px;
 }
 
 .promptMl.protectedColumns h1 {
   font-size: 24px;
-}
-
-.promptMl .textAlignCenter {
-  text-align: center;
 }
 
 .promptMl.protectedColumns .explorer h2 {
