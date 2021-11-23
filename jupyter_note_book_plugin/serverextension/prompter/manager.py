@@ -69,6 +69,7 @@ class AnalysisManager:
             elif req_type == "columnInformation":
                 self._nb.log.info("[MANAGAER] handling request for column information {0}".format(request))
                 result = self.handle_col_info(kernel_id, request)
+                self._nb.log.debug("[MANAGER] returning result {0}".format(result))
                 return result
             self._nb.log.info("[MANAGER] received non-execution request {0}".format(request))
             return
@@ -115,7 +116,16 @@ class AnalysisManager:
         result = self.db.provide_col_info(kernel_id, request)
         if "error" in result:
             self._nb.log.warning("[MANAGER] Unable to provide columnInformation.\nRequest: {0}\nError: {1}".format(request, result))
-        return result
+
+        formatted_result = {"col_name" : result["col_name"],
+                            "sensitivity" : result["sensitivity"]}
+        
+        formatted_result["valueCounts"] = {}
+        
+        for value, count in result["valueCounts"].to_dict().items():          
+            formatted_result["valueCounts"][str(value)] = str(count)
+
+        return formatted_result
 
     def send_notifications(self, kernel_id, cell_id, exec_ct):
 

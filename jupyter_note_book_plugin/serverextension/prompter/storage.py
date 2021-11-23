@@ -9,6 +9,8 @@ import sqlite3
 import os
 import dill
 
+from pandas.api.types import is_numeric_dtype
+
 from mysql.connector import connect
 from mysql.connector.errors import IntegrityError
 
@@ -407,23 +409,32 @@ class DbHandler:
 
         request is a dictionary with {“requestType”: “columnInformation”, “df”: <String dataframe name>, “col”: <String column name>}
 
-        Returns: {“valueCounts”: <Series results of .valueCounts()>, “sensitivity”: <String explaining sensitivity>}
+        Returns: {“valueCounts”: <Series results of .valueCounts()>, 
+                  “sensitivity”: <String explaining sensitivity>, 
+                  "col_name": name of queried column}
         """
         self.renew_connection()
         query_tuples = []
 
         # TODO: add some error handling
-        curr_ns = self.db.recent_ns()
+        curr_ns = self.recent_ns()
         dfs = load_dfs(curr_ns)
+
         # find col in question
         df_name = request["df"] 
         col_name = request["col"]
+
         df_callable = dfs[df_name]
         col = df_callable[col_name]
-        col_val_counts = col.value_counts()
+
+        if is_numeric_dtype(col):
+            col_val_counts = col.value_counts(bins=5)
+        else:
+            col_val_counts = col.value_counts()[:5]
 
         self._cursor.execute(self.cmds["GET_MAX_VERSION"], (self.user, kernel_id))
         version_dict = {} 
+
         # find max versions of all dfs
         for resp in self._cursor.fetchall():
             key = (self.user, kernel_id, resp["name"])
@@ -435,13 +446,14 @@ class DbHandler:
 
         version = version_dict[(self.user, kernel_id, df_name)]
         query_params = (self.user, kernel_id, df_name, version, col_name)
-        self._cursor.executemany(self.cmds["GET_FIELDS"], query_params)
-        results = self._cursor.fetchone()
+        self._cursor.execute(self.cmds["GET_FIELDS"], query_params)
+        results = self._cursor.fetchall()
 
         if not results:
             return {"error": f"no record found in the table for {self.user}, {df_name}, {col_name}, {kernel_id}, version{version}"}
         sensitivity_field = results[0]
-        return {"valueCounts": col_val_counts, "sensitivity": sensitivity_field} # how to get note text here?
+
+        return {"valueCounts": col_val_counts, "col_name" : col_name, "sensitivity": sensitivity_field} # how to get note text here?
 
 class RemoteDbHandler(DbHandler):
     """when we want the database to be remote"""
