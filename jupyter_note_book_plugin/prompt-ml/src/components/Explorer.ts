@@ -48,7 +48,9 @@ export class Explorer {
           <h3>Classification</h3>
           <p class="classification">Please select a column to begin..</p>
           <h3>Value Distributions</h3>
-          <p class="values">Please select a column to begin.</p>
+          <div class="value-container">
+            <p class="values">Please select a column to begin.</p>
+          </div>
         </div>`);
       var htmlElem = elem[1] as HTMLDivElement;
       htmlElem.onclick = (event) => {this._explorerChanged(this, event)};
@@ -78,7 +80,7 @@ export class Explorer {
     onChange(f : Function) {
       this._onClickEvent = f;
     }
-  
+ 
     ////////////////////////////////////////////////////////////
     // Abstractions
     // Tries to make note generation more intuitive and consistent across
