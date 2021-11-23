@@ -17,6 +17,7 @@ export class ProtectedData {
     explorer: Explorer;
     columns: Column[];
     df: string;
+    kernel_id : string;
     potentialSensitivities: string[] = [
         "gender",
         "sex",
@@ -38,9 +39,11 @@ export class ProtectedData {
     // Constructor
     ////////////////////////////////////////////////////////////
 
-    constructor(notice: any) {
+    constructor(notice: any, kernel_id : string) {
         var columnNames = this._findAllColumnNames(notice);
         this.df = notice["df"];
+        this.kernel_id = kernel_id;
+        console.log("kernel_id ", this.kernel_id)
         this.columns = this._populateColumns(notice);
         this._client = new CodeCellClient()
         this.explorer = new Explorer(columnNames, this.df)
@@ -65,19 +68,36 @@ export class ProtectedData {
         this._client.request(
             "exec", "POST",
             JSON.stringify({
-                "requestType": "columnInformation",
+                "type": "columnInformation",
+                "kernel" : this.kernel_id, 
                 "df": dfName,
                 "col": columnName,
             }),
             ServerConnection.makeSettings()).
             then(res => {
+
                 var res = JSON.parse(res);
-                explorer.find(".classification").text(res["sensitivity"])
-                explorer.find(".values").text(res["valueCounts"])
+                explorer.find(".classification").text(res["sensitivity"]["fields"])
+ 
+                explorer.find(".value-container").html(this._columnInfoElement(res));
                 explorer.find("details").prop("open", false);
             })
     }
+    _columnInfoElement(res : any) {
 
+      var vc_str : string = ""; 
+
+      for (const value in res["valueCounts"]) {
+        const count = res["valueCounts"][value];
+        vc_str += "<p class=values>";
+        vc_str += value;
+        vc_str += " : ";
+        vc_str += count;
+        vc_str += "</p>"; 
+       } 
+    
+      return vc_str
+    }
     _onColumnChange(columnName: string, dfName: string, newSensitivity: string, columnIndex: number, elem: ProtectedData): void {
         elem.columns[columnIndex] = new Column(columnName, ((newSensitivity != "none") ? true : false), newSensitivity, dfName, elem.potentialSensitivities, columnIndex)
         elem.columns[columnIndex].onChange((c: string, d: string, n: string, cI: number) => { elem._onColumnChange(c, d, n, cI, elem) }) // To do: add this to the constructor instead of
@@ -89,9 +109,10 @@ export class ProtectedData {
         this._client.request(
             "exec", "POST",
             JSON.stringify({
-                "requestType": "sensitivityModification",
+                "type": "sensitivityModification",
                 "df": dfName,
                 "col": columnName,
+                "kernel" : this.kernel_id,
                 "sensitivity": newSensitivity
             }),
             ServerConnection.makeSettings()).

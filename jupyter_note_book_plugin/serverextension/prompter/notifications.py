@@ -276,7 +276,7 @@ class ProxyColumnNote(ProtectedColumnNote):
                 return {"sensitive_col_name" : sens_col,
                         "proxy_col_name" : not_sense_col, "p" : p}
         if sens_col_type == "numeric" and not_sense_col_type == "numeric":
-            p = self._apply_spearmen(df, sens_col, not_sense_col)
+            p = self._apply_spearman(df, sens_col, not_sense_col)
             if p < PVAL_CUTOFF:
                 return {"sensitive_col_name" : sens_col,
                         "proxy_col_name" : not_sense_col, "p" : p} 
@@ -391,7 +391,7 @@ class ProxyColumnNote(ProtectedColumnNote):
 
         return result[1] # returns the p-value 
 
-    def _apply_spearman(df, sens_col, not_sens_col):
+    def _apply_spearman(self, df, sens_col, not_sens_col):
 
         result = spearmanr(df[sens_col], df[not_sens_col], nan_policy="omit")
         return result[1]

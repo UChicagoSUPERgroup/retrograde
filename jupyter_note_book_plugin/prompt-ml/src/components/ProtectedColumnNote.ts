@@ -19,12 +19,13 @@ export class ProtectedColumnNote extends PopupNotification {
     // Constructor
     ////////////////////////////////////////////////////////////
 
-    constructor(notices : any[]) {
+    constructor(notices : any[], kernel_id : string) {
         super("protected", true, "Protected Columns Note")
         this._data = []
         this._dfs = []
+        console.log(notices)
         for(var x = 0; x < notices.length; x++) {
-            this._data.push(new ProtectedData(notices[x]))
+            this._data.push(new ProtectedData(notices[x], kernel_id))
             this._dfs.push(notices[x]["df"])
         }
         super.addRawHtmlElement(this._generateBaseNote(this._dfs));
