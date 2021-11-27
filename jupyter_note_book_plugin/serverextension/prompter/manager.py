@@ -48,33 +48,29 @@ class AnalysisManager:
         """
         self._nb.log.debug("[MANAGER] received {0}".format(request))
 
-        if("requestType" in request):
-            if request["requestType"] == "sensitivityModification":
-                ######################################
-                # One way to intercept the request
-                #
-                # This prob isn't the best way, I was just
-                # using it for testing. Feel free to replace!
-                print("Sensitivity request received")
-                print(request["df"])
-                print(request["col"])
-                print(request["sensitivity"])
-                return "Updated"
-            elif request["requestType"] == "columnInformation":
-                print("Column information request received")
-                print(request["df"])
-                print(request["col"])
-                return '{"valueCounts":["random","' + str(randrange(0, 10)) + '"],"sensitivity":"some reason ' + str(randrange(0, 10)) + '"}'
+        req_type = ""
+        kernel_id = ""
 
-        req_type = request["type"]
-        kernel_id = request["kernel"]
-
+        if "type" in request:
+            req_type = request["type"]
+        if "kernel" in request:
+            kernel_id = request["kernel"]
 
         if req_type != "execute":
-            if req_type == "update_cols":
-                self._nb.log.info("[MANAGER] handling updated user designations request {0}".format(request))
-                self.db.update_marked_columns(kernel_id, request["designations"])
-                return
+            if req_type == "sensitivityModification":
+                self._nb.log.info("[MANAGER] handling updated sensitivity modification request {0}".format(request))
+                col_info = {"is_sensitive" : request["sensitivity"] != "none",
+                            "user_specified" : True,
+                            "fields" : request["sensitivity"]}
+                update_data = {request["df"] : {request["col"] : col_info}}
+                
+                self.db.update_marked_columns(kernel_id, update_data) # Q?: what is the name of the key holding the input data dict? (not in luca's design google doc)
+                return "Updated"
+            elif req_type == "columnInformation":
+                self._nb.log.info("[MANAGAER] handling request for column information {0}".format(request))
+                result = self.handle_col_info(kernel_id, request)
+                self._nb.log.debug("[MANAGER] returning result {0}".format(result))
+                return result
             self._nb.log.info("[MANAGER] received non-execution request {0}".format(request))
             return
 
@@ -115,30 +111,43 @@ class AnalysisManager:
 
         return response
 
-    def handle_update(self, request):
-        """Routes a request of type 'update_cols' to DbHandler.update_marked_columns()"""
-        pass
+    def handle_col_info(self, kernel_id, request):
+        """Routes a request of type 'columnInformation' to DbHandler.provide_col_info()"""
+        result = self.db.provide_col_info(kernel_id, request)
+        if "error" in result:
+            self._nb.log.warning("[MANAGER] Unable to provide columnInformation.\nRequest: {0}\nError: {1}".format(request, result))
+
+        formatted_result = {"col_name" : result["col_name"],
+                            "sensitivity" : result["sensitivity"]}
+        
+        formatted_result["valueCounts"] = {}
+        
+        for value, count in result["valueCounts"].to_dict().items():          
+            formatted_result["valueCounts"][str(value)] = str(count)
+
+        return formatted_result
 
     def send_notifications(self, kernel_id, cell_id, exec_ct):
 
         resp = {}
-        resp["info"] = {}
-        resp["info"]["cell"] = cell_id
-        resp["info"][cell_id] = {}
         resp["kernel_id"] = kernel_id
+
+        """
+        main note response format
+        {"kernel_id" : kernel_id, 
+         <note_type> : [notes]}
+        """
 
         for notes in self.notes.values():
             for note in notes:
-                for cell in note.data:
-                    if cell not in resp["info"]:
-                        resp["info"][cell] = {}
-                    for note_data in note.data[cell]:
-                        if note_data["type"] not in resp["info"][cell]:
-                            resp["info"][cell][note_data["type"]] = []
-                        resp["info"][cell][note_data["type"]].append(note_data)
-                    for response in note.data[cell]:
-                        self.db.store_response(kernel_id, cell_id, exec_ct, response)
-        resp["type"] = "multiple"
+                for note_data in note.data.values():
+                    self._nb.log.debug("[send_notifications] note data {0}".format(note_data))
+                    for note_entry in note_data:
+                        
+                        if note_entry["type"] not in resp:
+                            resp[note_entry["type"]] = []
+                        resp[note_entry["type"]].append(note_entry)
+                        self.db.store_response(kernel_id, cell_id, exec_ct, note_entry)
 
         return resp 
 

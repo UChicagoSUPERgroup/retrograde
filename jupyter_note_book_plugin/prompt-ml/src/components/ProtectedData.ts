@@ -15,6 +15,7 @@ export class ProtectedData {
   explorer: Explorer;
   columns: Column[];
   df: string;
+  kernel_id : string;
   potentialSensitivities: string[] = [
     "gender",
     "sex",
@@ -36,9 +37,10 @@ export class ProtectedData {
   // Constructor
   ////////////////////////////////////////////////////////////
 
-  constructor(notice: any) {
+  constructor(notice: any, kernel_id : string) {
     var columnNames = this._findAllColumnNames(notice);
     this.df = notice["df"];
+    this.kernel_id = kernel_id;
     this.columns = this._populateColumns(notice);
     this._client = new CodeCellClient();
     this.explorer = new Explorer(columnNames, this.df);
@@ -69,16 +71,17 @@ export class ProtectedData {
         "exec",
         "POST",
         JSON.stringify({
-          requestType: "columnInformation",
+          type : "columnInformation",
           df: dfName,
+          kernel : this.kernel_id,
           col: columnName,
         }),
         ServerConnection.makeSettings()
       )
       .then((res) => {
         var res = JSON.parse(res);
-        explorer.find(".classification").text(res["sensitivity"]);
-        explorer.find(".values").text(res["valueCounts"]);
+        explorer.find(".classification").text(res["sensitivity"]["fields"]);
+        explorer.find(".value-containers").html(this._columnInfoElement(res));
         explorer.find("details").prop("open", false);
       });
   }
@@ -115,9 +118,10 @@ export class ProtectedData {
         "exec",
         "POST",
         JSON.stringify({
-          requestType: "sensitivityModification",
+          type : "sensitivityModification",
           df: dfName,
           col: columnName,
+          kernel : this.kernel_id,
           sensitivity: newSensitivity,
         }),
         ServerConnection.makeSettings()
@@ -183,4 +187,21 @@ export class ProtectedData {
   public exportExplorer(): HTMLDivElement {
     return this.explorer.export();
   }
+
+    _columnInfoElement(res : any) {
+
+      var vc_str : string = ""; 
+
+      for (const value in res["valueCounts"]) {
+        const count = res["valueCounts"][value];
+        vc_str += "<p class=values>";
+        vc_str += value;
+        vc_str += " : ";
+        vc_str += count;
+        vc_str += "</p>"; 
+       } 
+    
+      return vc_str
+    }
+
 }
