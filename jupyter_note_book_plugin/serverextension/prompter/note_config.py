@@ -1,4 +1,4 @@
-from .notifications import ProtectedColumnNote, OutliersNote, MissingDataNote, ProxyColumnNote, ErrorSliceNote
+from .notifications import ProtectedColumnNote, MissingDataNote, ProxyColumnNote, ErrorSliceNote
 from .config import MODE
 
 if MODE == "EXP_CTS":
@@ -15,7 +15,7 @@ if MODE == "EXP_END":
         "tutorial" : [],
         "null_clean" : [],
         "model" : [],
-        "end" : [ProtectedColumnNote, ProxyColumnNote, MissingDataNote, OutliersNote]
+        "end" : [ProtectedColumnNote, ProxyColumnNote, MissingDataNote]
     }
 
 SLICE_K = 2 # number of error slices to show users for each FPR/FNR
