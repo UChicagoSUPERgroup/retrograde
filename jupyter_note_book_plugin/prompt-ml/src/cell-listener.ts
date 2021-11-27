@@ -107,7 +107,6 @@ export class Listener {
 	    then(value => { 
               console.log("received: ",value);
               let obj = JSON.parse(value);
-              console.log("[prompt-ml] received", obj);
               this._infoSignal.emit(obj); });
         }
       })

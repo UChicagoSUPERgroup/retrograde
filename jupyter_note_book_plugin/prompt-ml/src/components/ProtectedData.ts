@@ -81,7 +81,7 @@ export class ProtectedData {
       .then((res) => {
         var res = JSON.parse(res);
         explorer.find(".classification").text(res["sensitivity"]["fields"]);
-        explorer.find(".value-containers").html(this._columnInfoElement(res));
+        explorer.find(".value-container").html(this._columnInfoElement(res));
         explorer.find("details").prop("open", false);
       });
   }
