@@ -33,12 +33,12 @@ export class Prompter {
       });
   }
 
-  private _appendNote(cell_id : string, kernel_id : string, note : any) {
+  private _appendNote(note : any) {
     console.log(note);
-    this._appendMsg(cell_id, kernel_id, (note[0] as HTMLDivElement).outerHTML, note[1]);
+    this._appendMsg((note[0] as HTMLDivElement).outerHTML, note[1]);
   }
 
-  private _appendMsg(cell_id: string, kernel_id: string, msg: string, handedPayload: any) {
+  private _appendMsg(msg: string, handedPayload: any) {
     var newNote = $.parseHTML(msg)
     $(".prompt-ml-container").prepend(newNote)
     $(newNote).on("mouseup", function () {
@@ -75,29 +75,14 @@ export class Prompter {
     }
   }
 
-  // Route function for notifications that are added individually
-  private _routeNotice(notice: any, note_count: number) {
-    if (notice["type"] == "outliers") {
-      return this._makeOutliersMsg(notice["col_name"], notice["value"], notice["std_dev"], notice["df_name"], note_count);
-    } else if (notice["type"] == "eq_odds") {
-      return this._makeEqOddsMsg(notice, note_count);
-    } else if (notice["type"] == "proxy") {
-      return this._makeProxyMsg(notice, note_count);
-    } else if (notice["type"] == "missing") {
-      return this._makeMissingMsg(notice, note_count);
-    } else {
-      console.log("No notes generated for notice type " + notice["type"], notice)
-    }
-  }
-
   // Main notification handling function
   private _onInfo(info_object: any) {
-    var cell_id = info_object["info"]["cell"]
+
     var kernel_id = info_object["kernel_id"]
-    var notices = info_object["info"][cell_id]
     var note_count: number = 0
-    for (const notice_type in notices) {
-      var list_of_notes = notices[notice_type]
+    console.log("_onInfo");
+    for (const notice_type in info_object) {
+      var list_of_notes = info_object[notice_type]
       if (notice_type == "proxy") {
         this._handleProxies(list_of_notes, note_count)
         note_count += 1
@@ -107,13 +92,11 @@ export class Prompter {
       } else if (notice_type == "resemble") {
         console.log("making resemble msg");
         this._makeResembleMsg(list_of_notes, note_count, String(kernel_id))
+      } else if (notice_type == "missing") {
+        console.log("making missing data message");
+        this._handleMissing(list_of_notes, note_count);
       } else {
-        for (var x = 0; x < list_of_notes.length; x++) {
-          console.log("making multiple msgs"); 
-          var notice = list_of_notes[x]
-          this._appendNote(cell_id, kernel_id, this._routeNotice(notice, note_count));
-          note_count += 1
-        }
+        console.log("Note type not recognized "+notice_type);
       }
     }
   }
@@ -128,34 +111,23 @@ export class Prompter {
       d[p["df"]]["p_vals"].push(p["p"]);
     }
     var message = this._makeProxyMsg(d, note_count);
-    this._appendNote(proxies[0]["cell_id"], proxies[0]["kernel_id"], message);
+    this._appendNote(message);
+  }
+
+  private _handleMissing(missing_notes: { [key: string]: { [key: string]: any } }, note_count: number){
+    var note = this._makeMissingMsg(missing_notes, note_count)
+    var message = note.generateFormattedOutput(global_notification_count, note_count);
+    this._appendNote(message);
   }
 
   // To check
   private _makeResembleMsg(notices : any[], note_count : number, kernel_id : string) {
     var note = new ProtectedColumnNote(notices, kernel_id);
     var message = note.generateFormattedOutput(global_notification_count, note_count);
-    this._appendNote(notices[0]["cell_id"], notices[0]["kernel_id"], message);
+    this._appendNote(message);
   }
 
-  // To check
-  private _makeOutliersMsg(col_name: string, value: number, std_dev: number, df_name: string, note_count: number) {
-    var note = new PopupNotification("outliers", false, "Outliers");
-    note.addHeader("Outliers Note");
-    note.addParagraph(`The column <b>${col_name}</b> in data frame <b>${df_name}</b> contains values greater than ${value}.`);
-    note.addParagraph(`${value} is ${std_dev.toString().slice(0, 5)} standard deviations above the average for that column.`);
-    return note.generateFormattedOutput(global_notification_count, note_count);
-  }
 
-  // To check
-  private _makeEqOddsMsg(notice: any, note_count: number) {
-    var note = new PopupNotification("equalized", false, "Equalized Odds");
-    note.addHeader("Equalized Odds Note");
-    note.addParagraph(`${notice["model_name"]} acheived a training accuracy of ${notice["acc_corr"].toString().slice(0, 5)} (Original: ${notice["acc_orig"].toString().slice(0, 5)})`);
-    note.addParagraph(`This correction changed ${notice["num_changed"]} predictions.`);
-    note.addParagraph(`This correlation was a <a href="https://aif360.readthedocs.io/en/v0.2.3/modules/postprocessing.html">equalized odds post-processing</a> correction. It used the majority group in ${notice["grp"]} as those beloning to the priviledged group.`);
-    return note.generateFormattedOutput(global_notification_count, note_count);
-  }
   private _makeProxyMsg(d: any, note_count: number) {
     var note = new PopupNotification("proxy", false, "Proxy Columns");
     note.addHeader("Proxy Columns Note");
@@ -223,7 +195,7 @@ export class Prompter {
       }
       note.addList(ul);
     }
-    return note.generateFormattedOutput(global_notification_count, note_count);
+    return note
   }
 
   private _makeErrorMessage(notices: { [key: string]: any }[], note_count: number) {
@@ -293,7 +265,7 @@ export class Prompter {
     }
     // Adding static content; creating response object
     var message = note.generateFormattedOutput(global_notification_count, note_count);
-    this._appendNote(notices[0]["cell_id"], notices[0]["kernel_id"], message);
+    this._appendNote(message);
   }
 
   // Takes in a list of slice objects with metric / positive value / negative value information
