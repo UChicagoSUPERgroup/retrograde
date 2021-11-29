@@ -84,8 +84,9 @@ class ProtectedColumnNote(Notification):
         poss_cols = self.db.get_unmarked_columns(env._kernel_id)
 
         for df_name, cols in poss_cols.items():
+
             protected_columns = check_for_protected(cols)
-            protected_columns.extend(guess_protected(dfs[df_name]))
+            protected_columns.extend(guess_protected(dfs[df_name][cols]))
       
             env.log.debug("[ProtectedColumnNote] protected columns are {0}".format(protected_columns))
   
@@ -168,21 +169,23 @@ class ProtectedColumnNote(Notification):
                 new_data[df_name] = note_list
                 continue
 
-            protected_cols = guess_protected(dfs[df_name].columns)
-            self.df_protected_cols[df_name].extend(protected_cols)
+            protected_cols = guess_protected(dfs[df_name])
+            self.df_protected_cols[df_name] = protected_cols
             protected_col_names = [col["original_name"] for col in protected_cols]
             self.df_not_protected_cols[df_name] = [col for col in dfs[df_name].columns if col not in protected_col_names]
 
-            new_data[df_name] = [self._make_resp_entry(df_name)]
+            env.log.debug("[ProtectedColumnNote] protected columns {0}".format(self.df_protected_cols[df_name]))
+            env.log.debug("[ProtectedColumnNote] not protected columns {0}".format(self.df_not_protected_cols[df_name]))
 
+            new_data[df_name] = [self._make_resp_entry(df_name)]
+            # TODO: for some reason, on this call, the not_protected columns are not being sent
             update_data[df_name] = {}
 
-            for col_name, col_info in new_data[df_name]:                
+            for col_name, col_info in new_data[df_name][0]["columns"].items():
                 update_data[df_name][col_name] = {"is_sensitive": col_info["sensitive"],
                                                   "user_specified" : False, "fields" : col_info["field"]}
 
         self.db.update_marked_columns(kernel_id, update_data)
-        env.log.debug("[ProtectedColumnNote] updated responses")
 
         self.data = new_data
 
