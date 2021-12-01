@@ -130,23 +130,24 @@ class AnalysisManager:
     def send_notifications(self, kernel_id, cell_id, exec_ct):
 
         resp = {}
-        resp["info"] = {}
-        resp["info"]["cell"] = cell_id
-        resp["info"][cell_id] = {}
         resp["kernel_id"] = kernel_id
+
+        """
+        main note response format
+        {"kernel_id" : kernel_id, 
+         <note_type> : [notes]}
+        """
 
         for notes in self.notes.values():
             for note in notes:
-                for cell in note.data:
-                    if cell not in resp["info"]:
-                        resp["info"][cell] = {}
-                    for note_data in note.data[cell]:
-                        if note_data["type"] not in resp["info"][cell]:
-                            resp["info"][cell][note_data["type"]] = []
-                        resp["info"][cell][note_data["type"]].append(note_data)
-                    for response in note.data[cell]:
-                        self.db.store_response(kernel_id, cell_id, exec_ct, response)
-        resp["type"] = "multiple"
+                for note_data in note.data.values():
+                    self._nb.log.debug("[send_notifications] note data {0}".format(note_data))
+                    for note_entry in note_data:
+                        
+                        if note_entry["type"] not in resp:
+                            resp[note_entry["type"]] = []
+                        resp[note_entry["type"]].append(note_entry)
+                        self.db.store_response(kernel_id, cell_id, exec_ct, note_entry)
 
         return resp 
 
