@@ -6,83 +6,47 @@ from context import prompter
 
 from sklearn.linear_model import LinearRegression
 
+df_snippets = {
+    "read_csv" :\
+    """new_df = pd.read_csv("source.csv", header=[1,2])""",
+    "old_df_method" :\
+    """new_df = df.drop([col_1, col_2], axis=1)""",
+    "df_slice_assign":\
+    """new_df[[col_1, col_2]] = df[[col_2, col_3]]""",
+    "df_slice_assign_loc" :\
+    """new_df.loc[row_select, col_select] = df""",  
+    "df_multiple_assign_rhs":\
+    """new_df = df.join(other_df)""",
+    "df_mystery_func":\
+    """new_df = mystery_func(df, other_df)""" 
+}
+
 class TestDataFrameVisitor(unittest.TestCase):
 
-    def test_newdata_slicing_chaining(self):
-        """
-        test x = read_csv()[d]...[y], or x = read_csv().select()
-        """
+    def setUp(self):
 
-        slicing_cell = """from pandas import read_fwf\ndf = read_fwf(filename)[0:6,5:10]"""
-        chaining_cell = """import pandas as pd\n"""+\
-            """df = pd.read_csv(filename).between_time("2016-05-01","2020-01-01")"""
+        new_df = pd.DataFrame({"a" : [1,2,3]}, index=["a", "b", "c"])
+        df = pd.DataFrame({"b" : ["a", "b", "c"]})
+        other_df = pd.DataFrame({"c" : [None]}, index=pd.date_range("1973-01-01", "1973-03-24", freq="w"))
 
-        df_names = set(["df"])
-        pd_alias = prompter.Aliases("pandas")
-        visitor = prompter.DataFrameVisitor(df_names, pd_alias)
+        self.new_dfs = {"new_df" : new_df}
+        self.df_names = {"new_df", "df", "other_df"}
 
-        visitor.visit(parse(slicing_cell))
-        self.assertEqual(visitor.info, {"df" : {"source" : "filename", "format" : "fwf"}})
+    def test_read_csv(self):
 
-        visitor = prompter.DataFrameVisitor(df_names, pd_alias)
-        visitor.visit(parse(chaining_cell))
+        expected = {"new_df" : {"columns" : {"a" : {"size" : 3, "type" : str(int)}},
+                                "ancestors" : ["source.csv"]}}
 
-        self.assertEqual(visitor.info, {"df" : {"source" : "filename", "format" : "csv"}})
-
-    def test_transfer(self):
-
-        snippet=\
-        """import pandas as pd\n"""+\
-        """pd.read_csv("filename")\n"""+\
-        """df = pd.read_csv("filename1")\n"""+\
-        """X = df[["a", "b"]].to_numpy()\n"""+\
-        """y = do_stuff(df)"""
-
-        df_names = set(["df", "y"])
-        pd_alias = prompter.Aliases("pandas")
-        visitor = prompter.DataFrameVisitor(df_names, pd_alias)
-
-        snippet_ast = parse(snippet)
-
-        visitor.visit(snippet_ast)
-
-        self.assertEqual(visitor.info, {"df" : {"source" : "filename1", "format" : "csv"}})
-        
-        ptr_set = set([snippet_ast.body[3].value])
-        self.assertEqual(visitor.assign_map["X"], ptr_set)
-
-    def test_magic_func(self):
-        snippet=\
-        """df = make_df(filename)\n"""+\
-        """X = do_tfm(df, trgt)"""
-        df_names = set(["df", "y"])
-        pd_alias = prompter.Aliases("pandas")
-        visitor = prompter.DataFrameVisitor(df_names, pd_alias)
-
-        snippet_ast = parse(snippet)
-
-        visitor.visit(snippet_ast)
-
-        ptr_set = set([snippet_ast.body[1].value])
-
-        self.assertEqual(visitor.assign_map["X"], ptr_set)
-        self.assertEqual(visitor.info, {"df" : {}})
-
-    def test_dropna(self):
-        snippet_1 =\
-        """import pandas as pd\n"""+\
-        """df = pd.read_csv("filename")\n"""
-
-        snippet_2 = """loans = df.dropna()"""
-
-        df_names = set(["df", "loans"])
-        pd_alias = prompter.Aliases("pandas")
-        visitor = prompter.DataFrameVisitor(df_names, pd_alias)
-        visitor.visit(parse(snippet_1))
-        visitor.visit(parse(snippet_2))
-
-        self.assertTrue("loans" in visitor.info, visitor.info)
-
+        alias = prompter.Aliases("pandas")
+        df_visit = prompter.DataFrameVisitor(self.df_names, alias, self.new_dfs)
+        df_visit.visit(parse(df_snippets["read_csv"]))
+       
+        self.assertEqual(df_visit.info, expected)
+ 
+    def test_old_df(self):
+        pass
+    def test_slice_assing(self):
+        pass
 class TestModelVisitor(unittest.TestCase):
 
     def test_simple(self):

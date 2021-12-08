@@ -38,27 +38,31 @@ class DataFrameVisitor(BaseImportVisitor):
     effort basis
     """
     # TODO: visitor needs to tag when a known df object is assigned to as well
-    def __init__(self, df_names, pd_alias):
+    def __init__(self, df_names, new_dfs, pd_alias):
 
         super().__init__(pd_alias)
+
         self.df_names = df_names
+        self.new_dfs = new_dfs
 
         self.assign_map = {}  # the mapping of LHS -> RHS
-        self.info = {} # information about the data
-
-        self.context = {"info" : [], "df_names" : [], "non_df_names" : []}
+        self.info = {} # map of new_df_name -> {ancestor_df_or_filename,}
+        self._mode = "RHS"
+        self.context = {"lhs_dfs" : [], "rhs_dfs" : [], "non_df_refs" : []}
          
     def visit_Call(self, node):
         self.generic_visit(node)
         if is_newdata_call(node, self.alias):
             info = get_newdata_info(node, self.alias)
-            self.context["info"].append(info)
+            self.context["df_refs"].append(info["source"])
 
     def visit_Name(self, node):
         if node.id in self.df_names:
-            self.context["df_names"].append(node.id)
+            self.context["df_refs"].append(node.id)
+            if self._mode == "LHS" and node.id in self.new_dfs:
+                self.context["new_df_refs"].append(node.id)
         else:
-            self.context["non_df_names"].append(node.id)
+            self.context["non_df_refs"].append(node.id)
 
     def route_child(self, node):
         # since calling generic_visit(node) skips node this includes node 
@@ -75,19 +79,30 @@ class DataFrameVisitor(BaseImportVisitor):
             self.generic_visit(node)
 
     def visit_Assign(self, node):
+
+        self._mode = "RHS"
         self.route_child(node.value)
+        # does RHS reference dfs or is there a read_csv call?
+        # does LHS reference new_dfs?
+        # if RHS and LHS, for each element in LHS add RHS references
+        # if RHS but no LHS, do nothing
+        # if LHS but no RHS, do nothing
 
-        rhs_has_df = self.context["df_names"] != []
-        rhs_df_names = self.context["df_names"]
-        rhs_non_dfs = self.context["non_df_names"]
+        rhs_has_df = self.context["df_refs"] != []
+        rhs_df_names = self.context["df_refs"]
+        rhs_non_dfs = self.context["non_df_refs"]
 
-        self.context["df_names"] = []
-        self.context["non_df_names"] = []
+        self.context["df_refs"] = []
+        self.context["non_df_refs"] = []
+        self.context["new_df_refs"] = []
+
+        self._mode = "LHS"
 
         for tgt in node.targets: 
             self.route_child(tgt)
-        lhs_has_df = self.context["df_names"] != []
-        lhs_names = self.context["df_names"]
+        
+        lhs_has_df = self.context["new_df_refs"] != []
+        lhs_names = self.context["new_df_refs"]
 
         if lhs_has_df and not rhs_has_df:
             # match info to name 
