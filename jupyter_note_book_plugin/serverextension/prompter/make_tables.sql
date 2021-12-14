@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS data(
     version INT NOT NULL, 
     source VARCHAR(255), 
     name VARCHAR(160) NOT NULL, 
+    exec_ct INT,
     PRIMARY KEY(user, kernel, name, version));
 
 -- PEP says variables should be no more than 80 characters, but there's no actual limitation.

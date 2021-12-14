@@ -23,7 +23,7 @@ SQL_CMDS = {
   "INSERT_VERSIONS" : """INSERT INTO versions(user, kernel, id, version, time, contents, exec_ct) VALUES (?,?,?,?,?,?,?);""",
   "DATA_VERSIONS" : """SELECT kernel, source, name, version, user FROM data WHERE source = ? AND name = ? AND user = ? AND kernel = ? ORDER BY version""",
   "DATA_VERSIONS_NO_SOURCE" : """SELECT kernel, source, name, version, user FROM data WHERE name = ? AND user = ? AND kernel = ? ORDER BY version""",
-  "ADD_DATA" : """INSERT INTO data(kernel, cell, version, source, name, user) VALUES (?, ?, ?, ?, ?, ?)""",
+  "ADD_DATA" : """INSERT INTO data(kernel, cell, version, source, name, user, exec_ct) VALUES (?, ?, ?, ?, ?, ?)""",
   "ADD_COLS" : """INSERT INTO columns(user, kernel, name, version, col_name, type, size) VALUES (?, ?, ?, ?, ?, ?, ?)""",
   "GET_VERSIONS" : """SELECT contents, version FROM versions WHERE kernel = ? AND id = ? AND user = ? ORDER BY version DESC LIMIT 1""",
   "GET_COLS" : """SELECT * FROM columns WHERE user = ? AND col_name = ?""",
@@ -35,6 +35,7 @@ SQL_CMDS = {
   "GET_VERSION_COLS" : """SELECT * FROM columns WHERE kernel = ? AND user = ? AND name = ? AND version = ?""",
   "STORE_RESP" : """INSERT INTO notifications(kernel, user, cell, resp, exec_ct) VALUES (?, ?, ?, ?, ?)""",
   "GET_RESPS" : """SELECT cell, resp FROM notifications WHERE kernel = ? AND user = ?""",
+  "GET_DATA_VERSION": "SELECT * from data WHERE exec_ct = ? AND name = ?", # is this right?
 }
 
 LOCAL_SQL_CMDS = { # cmds that will always get executed locally
@@ -229,6 +230,7 @@ class DbHandler:
     def find_data(self, data):
         """look up if data entry exists, return if exists, None if not"""
         # note that will *not* compare columns
+        # TODO: should I update exec_ct here?
         if "source" in data.keys():
             source = data["source"]
             name = data["name"] 
@@ -254,6 +256,19 @@ class DbHandler:
             return None
         return data_versions
 
+    def get_dataframe_version(self, name, version):
+        """Find data but with df name and version"""
+        # find
+        self.renew_connection()
+        self._cursor.execute(self.cmds["GET_DATA_VERSIONS"], (name, version))
+
+        query = self._cursor.fetchall()
+
+        if len(query) == 0:
+            return None
+        else:
+            return query[0]
+
     def add_data(self, data, version):
         """add data to data entry table
         data format is 
@@ -275,7 +290,8 @@ class DbHandler:
 
         self.renew_connection()
 
-        self._cursor.execute(self.cmds["ADD_DATA"], (kernel, cell, version, source, name, self.user))
+        # initialize count to exec_ct 0
+        self._cursor.execute(self.cmds["ADD_DATA"], (kernel, cell, version, source, name, self.user, 0))
 
         cols = [(self.user,
                  kernel,
