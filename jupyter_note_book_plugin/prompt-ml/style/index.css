@@ -503,3 +503,14 @@ svg.condensed {
   font-weight: 400;
   margin: 5px;
 }
+
+.proxy-columns-table table {
+  border-collapse: collapse;
+}
+
+.proxy-columns-table td,
+th {
+  border: 1px solid #999;
+  padding: 8px;
+  text-align: left;
+}
