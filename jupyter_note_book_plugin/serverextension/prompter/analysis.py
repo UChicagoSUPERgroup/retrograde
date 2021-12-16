@@ -87,7 +87,7 @@ class AnalysisEnvironment:
         # add data to db
         for entry_point in self.entry_points.values():
             self.log.debug("[AnalysisEnv] checking {0}".format(entry_point))
-            self.db.check_add_data(entry_point)   
+            self.db.check_add_data(entry_point, exec_ct)   
         # new model fit calls? 
         new_models = model_visitor.models
         self.log.debug("[AnalysisEnv] new models are {0}".format(new_models)) 

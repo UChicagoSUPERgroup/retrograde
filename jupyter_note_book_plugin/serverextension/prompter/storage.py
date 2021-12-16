@@ -23,7 +23,7 @@ SQL_CMDS = {
   "INSERT_VERSIONS" : """INSERT INTO versions(user, kernel, id, version, time, contents, exec_ct) VALUES (?,?,?,?,?,?,?);""",
   "DATA_VERSIONS" : """SELECT kernel, source, name, version, user FROM data WHERE source = ? AND name = ? AND user = ? AND kernel = ? ORDER BY version""",
   "DATA_VERSIONS_NO_SOURCE" : """SELECT kernel, source, name, version, user FROM data WHERE name = ? AND user = ? AND kernel = ? ORDER BY version""",
-  "ADD_DATA" : """INSERT INTO data(kernel, cell, version, source, name, user, exec_ct) VALUES (?, ?, ?, ?, ?, ?)""",
+  "ADD_DATA" : """INSERT INTO data(kernel, cell, version, source, name, user, exec_ct) VALUES (?, ?, ?, ?, ?, ?, ?)""",
   "ADD_COLS" : """INSERT INTO columns(user, kernel, name, version, col_name, type, size) VALUES (?, ?, ?, ?, ?, ?, ?)""",
   "GET_VERSIONS" : """SELECT contents, version FROM versions WHERE kernel = ? AND id = ? AND user = ? ORDER BY version DESC LIMIT 1""",
   "GET_COLS" : """SELECT * FROM columns WHERE user = ? AND col_name = ?""",
@@ -35,7 +35,7 @@ SQL_CMDS = {
   "GET_VERSION_COLS" : """SELECT * FROM columns WHERE kernel = ? AND user = ? AND name = ? AND version = ?""",
   "STORE_RESP" : """INSERT INTO notifications(kernel, user, cell, resp, exec_ct) VALUES (?, ?, ?, ?, ?)""",
   "GET_RESPS" : """SELECT cell, resp FROM notifications WHERE kernel = ? AND user = ?""",
-  "GET_DATA_VERSION": "SELECT * from data WHERE exec_ct = ? AND name = ?", # is this right?
+  "GET_DATA_VERSION": "SELECT * from data WHERE exec_ct = ? AND name = ?", # NOTE: unused, probably wrong
 }
 
 LOCAL_SQL_CMDS = { # cmds that will always get executed locally
@@ -184,7 +184,7 @@ class DbHandler:
             return results[0]        
         raise sqlite3.IntegrityError("Multiple namespaces in range")  
 
-    def check_add_data(self, entry_point):
+    def check_add_data(self, entry_point, exec_ct):
         """
         check if entry_point data is updated, compare columns as well,
         then update
@@ -218,19 +218,18 @@ class DbHandler:
                 max_data_version = [v for v in data_versions if v["version"] == max_version][0]
                 entry_point["source"] = max_data_version["source"] 
 
-            self.add_data(entry_point, max_version+1) 
+            self.add_data(entry_point, max_version+1, exec_ct) 
             return max_version + 1
         else:
             # data is new, add data and columns to database
             if "source" not in entry_point:
                 entry_point["source"] = "unknown"
-            self.add_data(entry_point, 1)
+            self.add_data(entry_point, 1, exec_ct)
             return 1
 
     def find_data(self, data):
         """look up if data entry exists, return if exists, None if not"""
         # note that will *not* compare columns
-        # TODO: should I update exec_ct here?
         if "source" in data.keys():
             source = data["source"]
             name = data["name"] 
@@ -256,20 +255,39 @@ class DbHandler:
             return None
         return data_versions
 
-    def get_dataframe_version(self, name, version):
-        """Find data but with df name and version"""
-        # find
-        self.renew_connection()
-        self._cursor.execute(self.cmds["GET_DATA_VERSIONS"], (name, version))
-
-        query = self._cursor.fetchall()
-
-        if len(query) == 0:
+    def get_dataframe_version(self, data, version):
+        """Tries to find a pandas dataframe object corresponding to the data and version"""
+        # find if data is in database to begin with
+        data_versions = self.find_data(data)
+        if data_versions is None:
             return None
         else:
-            return query[0]
+            # loop through all matches to find the version we're looking for
+            # in data table, 0: user, 1: kernel, 2: id, 3: version, 4: source, 5: name, 6: exec_ct
+            for match in data_versions:
+                # 3 should be version
+                if match[3] == version:
+                    exec_ct = match[6]
+                    # query local database
+                    self.renew_connection()
+                    self._cursor.execute(self.cmds["LINK_CELL"], (exec_ct,))
+                    # list of all 
+                    namespaces = self._cursor.fetchall()
+                    if len(namespaces) < 1:
+                        return None # there were no namespaces with this exec_ct
+                    else:
+                        # NOTE: is it okay to just get the first possible match?
+                        namespace = namespaces[0]
+                        df_name = data["name"]
+                        dfs = load_dfs(namespace)
+                        if df_name in dfs:
+                            return dfs[df_name]
+                        else:
+                            return None
+            # if we're here, no such version exists
+            return None
 
-    def add_data(self, data, version):
+    def add_data(self, data, version, exec_ct):
         """add data to data entry table
         data format is 
             {"kernel" : kernel_id, 
@@ -290,8 +308,9 @@ class DbHandler:
 
         self.renew_connection()
 
-        # initialize count to exec_ct 0
-        self._cursor.execute(self.cmds["ADD_DATA"], (kernel, cell, version, source, name, self.user, 0))
+        # manager.py calls cell_exec() with exec_ct. cell_exec() calls check_add_data() and passes it down
+        # check_add_data() passes exec_ct to add_data which finally adds it to the database
+        self._cursor.execute(self.cmds["ADD_DATA"], (kernel, cell, version, source, name, self.user, exec_ct))
 
         cols = [(self.user,
                  kernel,
