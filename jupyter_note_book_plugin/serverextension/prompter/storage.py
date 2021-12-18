@@ -42,7 +42,7 @@ LOCAL_SQL_CMDS = { # cmds that will always get executed locally
   "MAKE_NS_TABLE" : """CREATE TABLE namespaces(msg_id TEXT PRIMARY KEY, exec_num INT, code TEXT, time TIMESTAMP, namespace BLOB)""",
   "RECOVER_NS" : """SELECT namespace FROM namespaces WHERE msg_id = ?""",
   "RECENT_NS" : """SELECT * FROM namespaces ORDER BY time DESC LIMIT 1""",
-  "LINK_CELL" : """SELECT * FROM namespaces WHERE exec_num = ?""",
+  "LINK_CELL" : """SELECT * FROM namespaces WHERE exec_num = ? ORDER BY time""",
 }
 
 class DbHandler:
@@ -263,11 +263,9 @@ class DbHandler:
             return None
         else:
             # loop through all matches to find the version we're looking for
-            # in data table, 0: user, 1: kernel, 2: id, 3: version, 4: source, 5: name, 6: exec_ct
             for match in data_versions:
-                # 3 should be version
-                if match[3] == version:
-                    exec_ct = match[6]
+                if match["version"] == version:
+                    exec_ct = match["exec_ct"]
                     # query local database
                     self.renew_connection()
                     self._cursor.execute(self.cmds["LINK_CELL"], (exec_ct,))
@@ -276,7 +274,8 @@ class DbHandler:
                     if len(namespaces) < 1:
                         return None # there were no namespaces with this exec_ct
                     else:
-                        # NOTE: is it okay to just get the first possible match?
+                        # NOTE: gets the earliest timestamped matching namespace
+                        # TODO: select by kernel id instead?
                         namespace = namespaces[0]
                         df_name = data["name"]
                         dfs = load_dfs(namespace)
