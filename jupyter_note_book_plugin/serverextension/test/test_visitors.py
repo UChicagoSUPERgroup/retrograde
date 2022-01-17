@@ -18,7 +18,10 @@ df_snippets = {
     "df_multiple_assign_rhs":\
     """new_df = df.join(other_df)""",
     "df_mystery_func":\
-    """new_df = mystery_func(df, other_df)""" 
+    """new_df = mystery_func(df, other_df)""",
+    "df_overwrite":\
+    """new_df[col_1] = df[col_2]\n"""+\
+    """new_df[col_1] = other_df[col_3]"""
 }
 
 class TestDataFrameVisitor(unittest.TestCase):
@@ -34,19 +37,66 @@ class TestDataFrameVisitor(unittest.TestCase):
 
     def test_read_csv(self):
 
-        expected = {"new_df" : {"columns" : {"a" : {"size" : 3, "type" : str(int)}},
-                                "ancestors" : ["source.csv"]}}
+        expected = {"new_df" : {"source.csv"}}
 
         alias = prompter.Aliases("pandas")
-        df_visit = prompter.DataFrameVisitor(self.df_names, alias, self.new_dfs)
+        df_visit = prompter.DataFrameVisitor(self.df_names, self.new_dfs, alias)
         df_visit.visit(parse(df_snippets["read_csv"]))
-       
         self.assertEqual(df_visit.info, expected)
  
     def test_old_df(self):
-        pass
-    def test_slice_assing(self):
-        pass
+
+        expected = {"new_df" : {"df"}}
+
+        alias = prompter.Aliases("pandas")
+        df_visit = prompter.DataFrameVisitor(self.df_names, self.new_dfs, alias)
+        df_visit.visit(parse(df_snippets["old_df_method"]))
+        self.assertEqual(df_visit.info, expected)
+
+    def test_slice_assign(self):
+
+        expected = {"new_df" : {"df"}}
+
+        alias = prompter.Aliases("pandas")
+        df_visit = prompter.DataFrameVisitor(self.df_names, self.new_dfs, alias)
+        df_visit.visit(parse(df_snippets["df_slice_assign"]))
+        self.assertEqual(df_visit.info, expected)
+
+    def test_slice_assign_loc(self):
+        expected = {"new_df" : {"df"}}
+
+        alias = prompter.Aliases("pandas")
+        df_visit = prompter.DataFrameVisitor(self.df_names, self.new_dfs, alias)
+        df_visit.visit(parse(df_snippets["df_slice_assign_loc"]))
+        self.assertEqual(df_visit.info, expected)
+
+    def test_multiple_assign_rhs(self):
+        
+        expected = {"new_df" : {"df", "other_df"}}
+
+        alias = prompter.Aliases("pandas")
+        df_visit = prompter.DataFrameVisitor(self.df_names, self.new_dfs, alias)
+        df_visit.visit(parse(df_snippets["df_multiple_assign_rhs"]))
+        self.assertEqual(df_visit.info, expected)
+
+    def test_mystery_func(self):
+
+        expected = {"new_df" : {"df", "other_df"}}
+
+        alias = prompter.Aliases("pandas")
+        df_visit = prompter.DataFrameVisitor(self.df_names, self.new_dfs, alias)
+        df_visit.visit(parse(df_snippets["df_mystery_func"]))
+        self.assertEqual(df_visit.info, expected)
+
+    def test_overwrite(self):
+
+        expected = {"new_df" : {"df", "other_df"}}
+
+        alias = prompter.Aliases("pandas")
+        df_visit = prompter.DataFrameVisitor(self.df_names, self.new_dfs, alias)
+        df_visit.visit(parse(df_snippets["df_overwrite"]))
+        self.assertEqual(df_visit.info, expected)
+
 class TestModelVisitor(unittest.TestCase):
 
     def test_simple(self):
@@ -71,7 +121,7 @@ class TestModelVisitor(unittest.TestCase):
 
         pd_alias = prompter.Aliases("pandas")
 
-        df_visit = prompter.DataFrameVisitor(set(["X", "y"]), pd_alias)
+        df_visit = prompter.DataFrameVisitor(set(["X", "y"]), set(), pd_alias)
         df_visit.visit(parse(snippet))
         
         visitor = prompter.ModelScoreVisitor(pd_alias, ["lr"], namespace, df_visit.assign_map)
@@ -83,7 +133,9 @@ class TestModelVisitor(unittest.TestCase):
 
         snippet_0=\
         """lr = LinearRegression()\n"""
-        snippet_1="""lr.fit(X, y)"""
+        snippet_1=\
+        """lr.fit(X, y)\n"""+\
+        """lr.score(X,y)\n"""
 
         test_df = pd.DataFrame(
                     {
@@ -102,7 +154,7 @@ class TestModelVisitor(unittest.TestCase):
 
         pd_alias = prompter.Aliases("pandas")
 
-        df_visit = prompter.DataFrameVisitor(set(["X", "y"]), pd_alias)
+        df_visit = prompter.DataFrameVisitor(set(["X", "y"]), set(), pd_alias)
         df_visit.visit(parse(snippet_0))
         assign_map = df_visit.assign_map
  
@@ -111,19 +163,21 @@ class TestModelVisitor(unittest.TestCase):
             
         self.assertEqual(visitor.models, expected_0)
         
-        df_visit = prompter.DataFrameVisitor(set(["X", "y"]),pd_alias) 
+        df_visit = prompter.DataFrameVisitor(set(["X", "y"]),set(), pd_alias) 
         df_visit.visit(parse(snippet_1))
         assign_map.update(df_visit.assign_map)
 
         visitor = prompter.ModelScoreVisitor(pd_alias, ["lr"], namespace, assign_map)
         visitor.visit(parse(snippet_1))
+
         self.assertEqual(visitor.models, expected_1)
 
     def test_call_chain(self):
 
         snippet=\
         """X_train = X.dropna().to_numpy()\n"""+\
-        """lr = LinearRegression().fit(X_train, y)"""
+        """lr = LinearRegression().fit(X_train, y)\n"""+\
+        """lr.score(X, y)"""
 
         test_df = pd.DataFrame(
                     {
@@ -144,7 +198,7 @@ class TestModelVisitor(unittest.TestCase):
         
         pd_alias = prompter.Aliases("pandas")
 
-        df_visit = prompter.DataFrameVisitor(set(["X", "y"]), pd_alias)
+        df_visit = prompter.DataFrameVisitor(set(["X", "y"]), set(), pd_alias)
         df_visit.visit(parse(snippet))
 
         visitor = prompter.ModelScoreVisitor(pd_alias, ["lr"], namespace, df_visit.assign_map)
@@ -157,7 +211,8 @@ class TestModelVisitor(unittest.TestCase):
         snippet_rows=\
         """X = test_df[["a", "b"]]\n"""+\
         """y = test_df["c"]\n"""+\
-        """lr = LinearRegression().fit(X[:3], y[:3])\n"""
+        """lr = LinearRegression().fit(X[:3], y[:3])\n"""+\
+        """lr.score(X[3:], y[:3])"""
 
         test_df = pd.DataFrame(
                     {
@@ -171,11 +226,13 @@ class TestModelVisitor(unittest.TestCase):
             "y" : test_df["c"],
             "lr": LinearRegression().fit(test_df[["a", "b"]][:3], test_df["c"][:3])} 
        
-        expected = {"lr" : {"x" : ["a", "b"], "y" : ["c"]}}
+        expected = {"lr" : {"x" : ["a", "b"], "y" : ["c"], "y_df" : "y", "x_df" : "X"}}
 
-        df_visit = prompter.DataFrameVisitor(set(["X", "y"]), prompter.Aliases("pandas"))
+        pd_alias = prompter.Aliases("pandas")
+
+        df_visit = prompter.DataFrameVisitor(set(["X", "y"]), set(), pd_alias)
         df_visit.visit(parse(snippet_rows))
-        visitor = prompter.ModelScoreVisitor(["lr"], namespace, df_visit.assign_map)
+        visitor = prompter.ModelScoreVisitor(pd_alias, ["lr"], namespace, df_visit.assign_map)
 
         visitor.visit(parse(snippet_rows))
         
@@ -184,7 +241,8 @@ class TestModelVisitor(unittest.TestCase):
     def test_index_rows_cols(self):
  
         snippet_rows_cols=\
-        """lr = LinearRegression().fit(test_df[["a", "b"]][:3], test_df["c"][:3])"""
+        """lr = LinearRegression().fit(test_df[["a", "b"]][:3], test_df["c"][:3])\n"""+\
+        """lr.score(test_df[["a", "b"]][3:], test_df["c"][3:])"""
 
         test_df = pd.DataFrame(
                     {
@@ -197,12 +255,14 @@ class TestModelVisitor(unittest.TestCase):
             "test_df" : test_df,
             "lr": LinearRegression().fit(test_df[["a", "b"]][:3], test_df["c"][:3])} 
        
-        expected = {"lr" : {"x" : ["a", "b"], "y" : ["c"]}}
+        expected = {"lr" : {"x" : ["a", "b"], "y" : ["c"], "x_df" : "test_df", "y_df" : "test_df"}}
 
-        df_visit = prompter.DataFrameVisitor(set(["test_df"]), prompter.Aliases("pandas"))
+        pd_alias = prompter.Aliases("pandas")
+
+        df_visit = prompter.DataFrameVisitor(set(["test_df"]), set(), pd_alias)
         df_visit.visit(parse(snippet_rows_cols))
 
-        visitor = prompter.ModelScoreVisitor(["lr"], namespace, df_visit.assign_map)
+        visitor = prompter.ModelScoreVisitor(pd_alias, ["lr"], namespace, df_visit.assign_map)
 
         visitor.visit(parse(snippet_rows_cols))
         
@@ -323,14 +383,17 @@ class TestModelVisitor(unittest.TestCase):
 
     def test_bool_index(self):
         """testing boolean indexing/selection"""
-
+        # not updated 
         snippet_var =\
         """lr = LinearRegression()\n"""+\
         """var = [True for _ in range(len(test_df))]\n"""+\
-        """lr.fit(test_df[["a", "b"], var], test_df[test_df.columns.isin(["c"]), var])"""
+        """lr.fit(test_df[["a", "b"], var], test_df[test_df.columns.isin(["c"]), var])\n"""+\
+        """lr.score(test_df[["a", "b"], var], test_df[test_df.columns.isin(["c"]), var])"""
 
         expected = {"lr" : {"x_cols" : ["a", "b"], "y_cols" : ["c"]}}
-
+        alias = prompter.Aliases("pandas")
+        df_visit = prompter.DataFrameVisitor(set(["test_df"]), pd_alias)
+        
         visitor = prompter.ModelScoreVisitor(pd_alias, model_names, namespace, assign_map)
         visitor.visit(parse(snippet_loc))
         
