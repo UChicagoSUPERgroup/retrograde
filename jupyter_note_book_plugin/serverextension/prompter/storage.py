@@ -23,7 +23,7 @@ SQL_CMDS = {
   "INSERT_VERSIONS" : """INSERT INTO versions(user, kernel, id, version, time, contents, exec_ct) VALUES (?,?,?,?,?,?,?);""",
   "DATA_VERSIONS" : """SELECT kernel, source, name, version, user FROM data WHERE source = ? AND name = ? AND user = ? AND kernel = ? ORDER BY version""",
   "DATA_VERSIONS_NO_SOURCE" : """SELECT kernel, source, name, version, user FROM data WHERE name = ? AND user = ? AND kernel = ? ORDER BY version""",
-  "ADD_DATA" : """INSERT INTO data(kernel, cell, version, source, name, user) VALUES (?, ?, ?, ?, ?, ?)""",
+  "ADD_DATA" : """INSERT INTO data(kernel, cell, version, source, name, user, exec_ct) VALUES (?, ?, ?, ?, ?, ?, ?)""",
   "ADD_COLS" : """INSERT INTO columns(user, kernel, name, version, col_name, type, size) VALUES (?, ?, ?, ?, ?, ?, ?)""",
   "GET_VERSIONS" : """SELECT contents, version FROM versions WHERE kernel = ? AND id = ? AND user = ? ORDER BY version DESC LIMIT 1""",
   "GET_COLS" : """SELECT * FROM columns WHERE user = ? AND col_name = ?""",
@@ -35,13 +35,14 @@ SQL_CMDS = {
   "GET_VERSION_COLS" : """SELECT * FROM columns WHERE kernel = ? AND user = ? AND name = ? AND version = ?""",
   "STORE_RESP" : """INSERT INTO notifications(kernel, user, cell, resp, exec_ct) VALUES (?, ?, ?, ?, ?)""",
   "GET_RESPS" : """SELECT cell, resp FROM notifications WHERE kernel = ? AND user = ?""",
+  "GET_DATA_VERSION": "SELECT * from data WHERE exec_ct = ? AND name = ?", # NOTE: unused, probably wrong
 }
 
 LOCAL_SQL_CMDS = { # cmds that will always get executed locally
   "MAKE_NS_TABLE" : """CREATE TABLE namespaces(msg_id TEXT PRIMARY KEY, exec_num INT, code TEXT, time TIMESTAMP, namespace BLOB)""",
   "RECOVER_NS" : """SELECT namespace FROM namespaces WHERE msg_id = ?""",
   "RECENT_NS" : """SELECT * FROM namespaces ORDER BY time DESC LIMIT 1""",
-  "LINK_CELL" : """SELECT * FROM namespaces WHERE exec_num = ?""",
+  "LINK_CELL" : """SELECT * FROM namespaces WHERE exec_num = ? ORDER BY time""",
 }
 
 class DbHandler:
@@ -182,9 +183,12 @@ class DbHandler:
         if len(results) == 1:
             return results[0]        
         raise sqlite3.IntegrityError("Multiple namespaces in range")  
+
     def is_new_data(self, entry_point, data_versions=None):
         if data_versions is None:
             data_versions = self.find_data(entry_point)
+            if data_versions is None:
+                return None
         for version in data_versions:
             entry_matched = True
             columns = self.get_columns(entry_point["kernel"], entry_point["name"], version["version"])
@@ -201,6 +205,7 @@ class DbHandler:
             if entry_matched:
                 return version["version"]
         return None
+
     def check_add_data(self, entry_point):
         """
         check if entry_point data is updated, compare columns as well,
@@ -212,9 +217,22 @@ class DbHandler:
 
         if data_versions:
             # if column name, type and size do not match any version
-            version = self.is_new_data(entry_point, data_versions=data_versions)
-            if version is not None:
-                return version 
+            for version in data_versions:
+                entry_matched = True
+                columns = self.get_columns(entry_point["kernel"], entry_point["name"], version["version"])
+                names = [col["col_name"] for col in columns]
+                
+                if len(names) == len(entry_point["columns"]) and set(names).issubset(set(entry_point["columns"])):
+                    for col in columns:
+                        if entry_point["columns"][col["col_name"]]["type"] != col["type"]:
+                            entry_matched = False
+                        if entry_point["columns"][col["col_name"]]["size"] != col["size"]:
+                            entry_matched = False
+                else:
+                    entry_matched = False
+                if entry_matched:
+                    return version["version"]
+
             max_version = max([v["version"] for v in data_versions])
 
             if "source" not in entry_point:
@@ -230,7 +248,6 @@ class DbHandler:
                 entry_point["source"] = "unknown"
             self.add_data(entry_point, 1)
             return 1
-
     def find_data(self, data):
         """look up if data entry exists, return if exists, None if not"""
         # note that will *not* compare columns
@@ -260,7 +277,38 @@ class DbHandler:
             return None
         return data_versions
 
-    def add_data(self, data, version):
+    def get_dataframe_version(self, data, version):
+        """Tries to find a pandas dataframe object corresponding to the data and version"""
+        # find if data is in database to begin with
+        data_versions = self.find_data(data)
+        if data_versions is None:
+            return None
+        else:
+            # loop through all matches to find the version we're looking for
+            for match in data_versions:
+                if match["version"] == version:
+                    exec_ct = match["exec_ct"]
+                    # query local database
+                    self.renew_connection()
+                    self._cursor.execute(self.cmds["LINK_CELL"], (exec_ct,))
+                    # list of all 
+                    namespaces = self._cursor.fetchall()
+                    if len(namespaces) < 1:
+                        return None # there were no namespaces with this exec_ct
+                    else:
+                        # NOTE: gets the earliest timestamped matching namespace
+                        # TODO: select by kernel id instead?
+                        namespace = namespaces[0]
+                        df_name = data["name"]
+                        dfs = load_dfs(namespace)
+                        if df_name in dfs:
+                            return dfs[df_name]
+                        else:
+                            return None
+            # if we're here, no such version exists
+            return None
+
+    def add_data(self, data, version, exec_ct):
         """add data to data entry table
         data format is 
             {"kernel" : kernel_id, 
@@ -281,7 +329,9 @@ class DbHandler:
 
         self.renew_connection()
 
-        self._cursor.execute(self.cmds["ADD_DATA"], (kernel, cell, version, source, name, self.user))
+        # manager.py calls cell_exec() with exec_ct. cell_exec() calls check_add_data() and passes it down
+        # check_add_data() passes exec_ct to add_data which finally adds it to the database
+        self._cursor.execute(self.cmds["ADD_DATA"], (kernel, cell, version, source, name, self.user, exec_ct))
 
         cols = [(self.user,
                  kernel,

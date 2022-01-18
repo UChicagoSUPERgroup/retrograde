@@ -58,7 +58,7 @@ class AnalysisEnvironment:
         model_names = [k for k,v in full_ns.items() if isinstance(v, ClassifierMixin)]
     
         # new data check
-        new_data = self._get_new_data(ns_dfs)
+        new_data = self._get_new_data(ns_dfs, cell_id)
 
         # parse relationships
         df_visitor = DataFrameVisitor(ns_dfs.keys(), new_data, self.pandas_alias)
@@ -91,7 +91,7 @@ class AnalysisEnvironment:
         # add data to db
         for entry_point in self.entry_points.values():
             self.log.debug("[AnalysisEnv] checking {0}".format(entry_point))
-            self.db.check_add_data(entry_point)   
+            self.db.check_add_data(entry_point, exec_ct)   
         # new model fit calls? 
         new_models = model_visitor.models
         self.log.debug("[AnalysisEnv] new models are {0}".format(new_models)) 
