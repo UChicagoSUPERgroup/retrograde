@@ -8,7 +8,7 @@ from pandas.api.types import is_numeric_dtype
 
 PROTECTED_MATCH_THRESHOLD = 90
 PROTECTED_PROXY_MATCH_THRESHOLD = 80
-NATIONALITY_THRESHOLD = 30
+NATIONALITY_THRESHOLD = 50 # nationality threshold of 30 was too weak
 COLUMN_PATTERN_THRESHOLD = 0.8
 PATH_PROTECTED_JSON = './protected_columns.json'
 PATH_PROTECTED_JSON_FULL = 'evaluation_task/build/protected_columns.json'
@@ -141,10 +141,16 @@ def get_age(dataframe, colname, v, PROTECTED_MATCH_THRESHOLD, log_sample=False):
             use_df = use_df.sample(n=sizelog2)
         n = len(use_df.index)
 
-    count = 0
-    count = use_df[colname].astype(float).apply(float.is_integer).sum()
-    level_match = float(count) / n
-    return level_match
+    ints = use_df[colname].astype(float).apply(float.is_integer).sum()
+    # if the column is numeric and all the numbers are integers
+    if is_numeric_dtype(use_df[colname]) and ints == n:
+        # count the number of elements greater than 1 and less than 125
+        count = use_df[(use_df[colname] >= 1) & (use_df[colname] <= 125)].sum()
+        level_match = float(count) / n
+        return level_match
+    else:
+        # otherwise return a value that will fail any threshold, 0
+        return 0
  
 def _get_protected():
     '''read in the protected values corpus'''
