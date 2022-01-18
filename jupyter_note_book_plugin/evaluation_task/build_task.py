@@ -17,7 +17,7 @@ SECTION_START_KEYS = {
     'end_start' : 'end'
 }
 
-FILES_TO_COPY = ['loan_data.csv', 'protected_columns.json']
+FILES_TO_COPY = ['loan_data.csv', 'protected_columns.json', "nationalities.txt"]
 
 current_section = SECTION_START_KEYS['intro_start']
 
@@ -33,6 +33,11 @@ for cell in data['cells']:
         current_section = SECTION_START_KEYS[cell['metadata']["new_section"]]
     cell['metadata']['section'] = current_section
 
+data["metadata"] = {
+    "kernelspec" : {
+    "display_name" : "prompter",
+    "language" : "",
+    "name" : "prompt_kernel"}}
 if not os.path.exists(BUILD_DIR_NAME):
     os.makedirs(BUILD_DIR_NAME)
 

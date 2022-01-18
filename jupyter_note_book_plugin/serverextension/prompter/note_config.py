@@ -1,4 +1,4 @@
-from .notifications import ProtectedColumnNote, OutliersNote, EqualizedOddsNote, ProxyColumnNote, ErrorSliceNote
+from .notifications import ProtectedColumnNote, MissingDataNote, ProxyColumnNote, ErrorSliceNote, EqualizedOddsNote
 from .config import MODE
 
 if MODE == "EXP_CTS":

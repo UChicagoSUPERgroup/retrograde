@@ -97,6 +97,16 @@ class TestDataFrameVisitor(unittest.TestCase):
         df_visit.visit(parse(df_snippets["df_overwrite"]))
         self.assertEqual(df_visit.info, expected)
 
+    def test_train_test_split(self):
+        snippet =\
+        """X_test, X_train, y_test, y_train = train_test_split(X,y,split=0.2)"""
+
+        df_names = set(["X_test", "X_train", "y_test", "y_train", "X", "y"])
+        pd_alias = prompter.Aliases("pandas")
+        visitor = prompter.DataFrameVisitor(df_names, pd_alias)
+        visitor.visit(parse(snippet))
+
+        print(visitor.info)       
 class TestModelVisitor(unittest.TestCase):
 
     def test_simple(self):
