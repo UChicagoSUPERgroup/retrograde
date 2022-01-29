@@ -206,7 +206,7 @@ class DbHandler:
                 return version["version"]
         return None
 
-    def check_add_data(self, entry_point):
+    def check_add_data(self, entry_point, exec_ct):
         """
         check if entry_point data is updated, compare columns as well,
         then update
@@ -240,13 +240,13 @@ class DbHandler:
                 max_data_version = [v for v in data_versions if v["version"] == max_version][0]
                 entry_point["source"] = max_data_version["source"] 
 
-            self.add_data(entry_point, max_version+1) 
+            self.add_data(entry_point, max_version+1, exec_ct) 
             return max_version + 1
         else:
             # data is new, add data and columns to database
             if "source" not in entry_point:
                 entry_point["source"] = "unknown"
-            self.add_data(entry_point, 1)
+            self.add_data(entry_point, 1, exec_ct)
             return 1
     def find_data(self, data):
         """look up if data entry exists, return if exists, None if not"""

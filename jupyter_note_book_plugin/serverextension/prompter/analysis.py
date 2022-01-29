@@ -32,11 +32,12 @@ class AnalysisEnvironment:
         self._kernel_id = kernel_id
         
         self._nbapp = nbapp
-        self.client = None
         self.models = {}
 
         self.ptr_set = {}
         self.log = self._nbapp.log
+
+        self.ancestors = {} # map of (df_name, version) -> {(input_df_name, version), ...,}
 
     def cell_exec(self, code, notebook, cell_id, exec_ct):
         """
@@ -75,7 +76,7 @@ class AnalysisEnvironment:
 
         for df_name in df_visitor.info:
 
-            self.entry_points[df_name] = df_visitor.info[df_name]
+            self.entry_points[df_name] = {"ancestors" : df_visitor.info[df_name]}
             self.entry_points[df_name]["cell"] = cell_id
             self.entry_points[df_name]["name"] = df_name
             self.entry_points[df_name]["kernel"] = self._kernel_id
@@ -90,8 +91,26 @@ class AnalysisEnvironment:
                         self.entry_points[df_name]["columns"][c]["type"] = str(df_obj[c].dtypes)
         # add data to db
         for entry_point in self.entry_points.values():
+
             self.log.debug("[AnalysisEnv] checking {0}".format(entry_point))
-            self.db.check_add_data(entry_point, exec_ct)   
+            pt_version = self.db.check_add_data(entry_point, exec_ct)   
+            child = (entry_point["name"], pt_version)
+
+            if child not in self.ancestors:
+                self.ancestors[child] = set()
+
+            # get the most recent version of each. ancestor
+            # this could be made more efficient by looking up all ancestors
+            # once and then using a lookup, but unless this ends up being a 
+            # big time-sink, additional complexity probably not worth it. 
+            for ancestor in entry_point["ancestors"]:
+                anc_versions = self.db.find_data({"name" : ancestor, "kernel" : self._kernel_id})
+                if anc_versions is None:
+                    anc_max_version = 1
+                else:
+                    anc_max_version = max([anc["version"] for anc in anc_versions])
+                self.ancestors[child].add((ancestor, anc_max_version))
+
         # new model fit calls? 
         new_models = model_visitor.models
         self.log.debug("[AnalysisEnv] new models are {0}".format(new_models)) 
