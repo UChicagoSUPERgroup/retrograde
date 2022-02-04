@@ -6,6 +6,8 @@ These are the classes that handle detecting when a notification may be
 sent, what its response is composed of, and updating response contents
 when relevant
 """
+import json
+from random import choice
 
 import math
 import operator
@@ -13,8 +15,10 @@ import operator
 import pandas as pd
 from pandas.api.types import is_numeric_dtype, is_unsigned_integer_dtype, is_integer_dtype, is_signed_integer_dtype
 import numpy as np
+import dill
 
 from scipy.stats import f_oneway, chi2_contingency, spearmanr
+from sklearn.base import ClassifierMixin
 from pandas.api.types import is_numeric_dtype
 
 from .string_compare import check_for_protected, guess_protected
@@ -544,7 +548,7 @@ class EqualizedOddsNote(Notification):
     def __init__(self, db):
         super().__init__(db)
         self.aligned_models = {} # candidates for using correction
-        self.aligned_ancestors = [] # aligned ancestor dfs
+        # self.aligned_ancestors = [] # aligned ancestor dfs
         # mapping of model name -> (x,y), used so that when doing update
         # we don't need to redo the alignment testing
         self.columns = {}
@@ -581,25 +585,76 @@ class EqualizedOddsNote(Notification):
 
         for model_name in models_with_dfs:
             match_name, match_cols, match_indexer = search_for_sensitive_cols(models_with_dfs[model_name]["x"], model_name, defined_dfs)
-            env.log.debug("[EqOddsNote] model {0} has match {1}, match_cols {2}".format(model_name, match_name, match_cols.head()))
             if not match_name:
                 continue
+            env.log.debug("[EqOddsNote] model {0} has match {1}, additional info: {2}".format(model_name, match_name, models_with_dfs[model_name]))
             aligned_models[model_name] = models_with_dfs[model_name]
+            df_name = models_with_dfs[model_name]["x_name"]
             aligned_models[model_name]["match"] = {"cols" : match_cols, 
                                                    "indexer" : match_indexer,
                                                    "name" : match_name,
-                                                   "x_parent": models_with_dfs[model_name]["x_parent"]}
-            # Q? overwriting this var each time is ok? maybe move the func call to make_response/update
-            self.aligned_ancestors = self.align_ancestor_data(env, aligned_models[model_name]["x"])
+                                                   "x_ancestor" : None}
+            # self.aligned_ancestors = self.align_ancestor_data(env, aligned_models[model_name]["x"])
         if len(aligned_models) > 0:
             self.aligned_models = aligned_models
             return True                            
         return False
 
-    def align_ancestor_data(self, env, df):
+    def get_ancestor_data(self, env, curr_df_name, kernel_id):
         """
+        Gets the ancestor's dataframe object with correct version
+        """
+        # ancestor_df_name = ancestor_df_dict["name"] # *check if* this or just the .keys()[0] 
+        # ancestor_df_version = ancestor_df_dict["version"] 
+        # curr_df_version = -1
+        # for df_tup in ancestor_df_dict.keys():
+        #     df_name, df_version = df_tup
+        #     if df_name == curr_df_name and df_version > curr_df_version:
+        #         curr_df_version = df_version
+        # ancestor_list = ancestor_df_dict.sort(key=lambda a: a[1], reverse=True) # highest version at front
+        # ancestor_df_name, ancestor_df_version = ancestor_list[0]
+        # old ^
+
+        # env.log.debug("[EqOdds] Ancestors found for {0}".format(env.ancestors.keys()))
+
+        ancestor_df_version = -1
+        for a_name, a_version in env.ancestors.keys():
+            if a_name == curr_df_name and a_version > ancestor_df_version:
+                ancestor_df_name = a_name
+                ancestor_df_version = a_version
+        # ancestor_df_name, ancestor_df_version = env.ancestors[curr_df_name]
+        # first param of below is expecting dict
+        # of { "name" : df_name,
+        #      "kernel" : kernel_id
+        #    }
+        data = {
+            "name" : ancestor_df_name,
+            "kernel" : kernel_id
+        }
+
+        ###### error handling
+        try:
+            ancestor_df = self.db.get_dataframe_version(data, ancestor_df_version) # load the dataframe
+        except KeyError as e:
+            ancestor_df = None
+
+        if not ancestor_df and not isinstance(ancestor_df, pd.DataFrame):
+            env.log.error("[EqOdds] get_dataframe_version did not find an ancestor_df.")
+            env.log.debug("[EqOdds] data {0} and data version {1}".format(data, ancestor_df_version))
+
+            return None
+        ###### error handling
+        return ancestor_df
+    def get_ancestor_prot_info(ancestor_df):
+        prot_cols = check_for_protected(ancestor_df.columns)
+        prot_cols = [ancestor_df[p["original_name"]] for p in prot_cols]
+        prot_col_names = [col.name for col in prot_cols]
+        return prot_col_names, prot_cols
+    """
+    def align_ancestor_data(self, env, df): # can remove all of this 
+        \"""
         Align ancestor data to the current dataframe.
-        """
+        \"""
         # get the ancestor data
         ancestors = env.get_ancestors(df) # returns list of [(ancestor_df_name, ancestor_version)]
         
@@ -610,11 +665,14 @@ class EqualizedOddsNote(Notification):
             ancestor_version = a[1]
 
             # find the appropriate namespace based on ancestor_version
+            # TODO: Replace with get_df_version
             ancestor_ns = self.db.link_cell_to_ns(ancestor_version, None, cell_time=-99999) # TODO: find where cell_time is or use a different function
+
 
             if ancestor_ns:
                 ancestor_df = ancestor_ns[ancestor_df_name]
                 ancestor_dfs[a] = ancestor_df
+                # TODO: separate this search for protected ancestors to another step
                 protected_ancestors.append((search_for_sensitive_cols(ancestor_df, ancestor_df_name, ancestor_ns)), ancestor_version)
                 # we want protected ancestors to have (df name, exec_ct)
             
@@ -627,7 +685,7 @@ class EqualizedOddsNote(Notification):
                 matched_vals = p_a_cols.loc[matched["values"]]
                 return matched, matched_vals
         return None
-
+    """
     def group_based_error_rates(self, env, prot_group, df, y_true, y_pred):
         """
         Compute precision, recall and f1score for a protected group in the df
@@ -753,43 +811,53 @@ class EqualizedOddsNote(Notification):
         y = self.aligned_models[model_name]["y"]
         model = self.aligned_models[model_name]["model"]
 
-        match_cols = self.aligned_models[model_name]["match"]["cols"]
-        df_name = self.aligned_models[model_name]["match"]["name"]
-        match_indexer = self.aligned_models[model_name]["match"]["indexer"]
+        # match_cols = self.aligned_models[model_name]["match"]["cols"]
+        # match_indexer = self.aligned_models[model_name]["match"]["indexer"]
         # x_parent_df = self.aligned_models[model_name]["match"]["x_parent"] 
-        if self.aligned_ancestors:
-            x_parent_df = self.aligned_ancestors[1] # TODO: make sure this is the parent we're looking for
-            env.log.debug("[EqOddsNote] has found an ancestor df", x_parent_df.columns, x_parent_df.shape)
+        curr_df_name = self.aligned_models[model_name]["x_name"]
+        # get ancestor df here 
+        self.aligned_models[model_name]["match"]["x_ancestor"] = self.get_ancestor_data(env, curr_df_name, kernel_id)
+        if self.aligned_models[model_name]["match"]["x_ancestor"]:
+            x_ancestor = self.aligned_models[model_name]["match"]["x_ancestor"]
+            env.log.debug("[EqOddsNote] has found an ancestor of type:", 
+                            type(self.aligned_models[model_name]["match"]["x_ancestor"]))
+            env.log.debug("[EqOddsNote] has found an ancestor df", 
+                            x_ancestor.columns, x_ancestor.shape)
         else:
-            env.log.error("[EqOddsNote] aligned ancestors not found")
+            env.log.error("[EqOddsNote] ancestors not found")
             return
-        col_names = [col.name for col in match_cols]
-        match_cols = [bin_col(col) for col in match_cols]
+
+        prot_col_names, prot_cols = self.get_ancestor_prot_info(x_ancestor)
+        # or
+        # prot_col_names, prot_cols, _ = search_for_sensitive_cols   
+
+        # col_names = [col.name for col in match_cols]
+        # match_cols = [bin_col(col) for col in match_cols]
         # get acc_orig on indexed/subsetted df
         acc_orig = model.score(X, y)
         orig_preds = model.predict(X)
         orig_preds = pd.Series(orig_preds, index=X.index)
 
         # Find error rates for protected groups
-        if col_names is None: 
+        if prot_cols is None: 
             # exit? nothing to do if no groups
             env.log.debug("[EqOddsNote] has no groups to compute error rates for")
             return
         else:
             # env.log.debug("[EqOddsNote] df_name: {0}".format(df_name))
             sorted_error_rates, k_highest_rates = self.get_sorted_k_highest_error_rates(env, 
-                                                                                        col_names, 
+                                                                                        prot_col_names, 
                                                                                         model_name, 
-                                                                                        x_parent_df, 
+                                                                                        x_ancestor, 
                                                                                         X, y, 
                                                                                         orig_preds)      
         resp["acc_orig"] = acc_orig
-        resp["groups"] = col_names
+        resp["groups"] = prot_col_names
         # TODO: check if empty?
         resp["error_rates"] = sorted_error_rates
         resp["k_highest_rates"] = k_highest_rates
 
-        env.log.debug("[EqOddsNote] response is {0}".format(json.dumps(resp)))
+        env.log.debug("[EqOddsNote] response is \n{0}".format(resp))
 
         if resp["model_name"] not in self.columns:
             self.columns[resp["model_name"]] = {cell_id : (X,y)}
@@ -838,14 +906,23 @@ class EqualizedOddsNote(Notification):
             X,y = self.columns[resp["model_name"]][cell_id]
             model_name = resp["model_name"]
             model = non_dfs_ns[model_name]
-            groups = resp["groups"]
-            x_parent_df = self.aligned_models[model_name]["match"]["x_parent"]
+            # groups = resp["groups"]
+            curr_df_name = self.aligned_models[model_name]["x_name"]
+            # get ancestor df here 
+            self.aligned_models[model_name]["match"]["x_ancestor"] = self.get_ancestor_data(env, curr_df_name, kernel_id)
+            x_ancestor = self.aligned_models[model_name]["match"]["x_ancestor"]
+            groups, _ = self.get_ancestor_prot_info(x_ancestor)
             # error_rates = resp["error_rates"]
             # k_highest_error_rates = resp["k_highest_error_rates"]
             new_preds = model.predict(X)
             new_preds = pd.Series(new_preds, index=X.index)
             new_acc = model.score(X, y)
-            sorted_error_rates, k_highest_error_rates = self.get_sorted_k_highest_error_rates(env, groups, model_name, x_parent_df, X, y, new_preds)
+            sorted_error_rates, k_highest_error_rates = self.get_sorted_k_highest_error_rates(env, 
+                                                                                              groups, 
+                                                                                              model_name, 
+                                                                                              x_ancestor, 
+                                                                                              X, y, 
+                                                                                              new_preds)
             resp["acc_orig"] = new_acc
             resp["error_rates"] = sorted_error_rates
             resp["k_highest_error_rates"] = k_highest_error_rates
@@ -1171,6 +1248,7 @@ def check_call_dfs(dfs, non_dfs_ns, models, env):
                 labels_df = labels_obj
             defined_models[model_name] = {
                 "x" : feature_df,
+                "x_name" : features_df_name,
                 "y" : labels_df,
                 "model" : non_dfs_ns[model_name],
                 "model_name" : model_name,
