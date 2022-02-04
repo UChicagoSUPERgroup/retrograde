@@ -6,7 +6,7 @@ if MODE == "EXP_CTS":
         "intro" :[],
         "tutorial" : [ProxyColumnNote],
         "null_clean" : [ProtectedColumnNote],
-        "model" : [ErrorSliceNote, EqualizedOddsNote],
+        "model" : [EqualizedOddsNote, ErrorSliceNote],
         "end" : []
     }
 if MODE == "EXP_END":
