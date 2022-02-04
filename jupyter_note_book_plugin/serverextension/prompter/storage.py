@@ -22,7 +22,7 @@ SQL_CMDS = {
   "UPDATE_CELLS" : """UPDATE cells SET contents = ?, num_exec = num_exec + 1, last_exec = ?, kernel = ?, metadata = ? WHERE id = ? AND user = ?;""",
   "INSERT_VERSIONS" : """INSERT INTO versions(user, kernel, id, version, time, contents, exec_ct) VALUES (?,?,?,?,?,?,?);""",
   "DATA_VERSIONS" : """SELECT kernel, source, name, version, user FROM data WHERE source = ? AND name = ? AND user = ? AND kernel = ? ORDER BY version""",
-  "DATA_VERSIONS_NO_SOURCE" : """SELECT kernel, source, name, version, user FROM data WHERE name = ? AND user = ? AND kernel = ? ORDER BY version""",
+  "DATA_VERSIONS_NO_SOURCE" : """SELECT kernel, source, name, version, user, exec_ct FROM data WHERE name = ? AND user = ? AND kernel = ? ORDER BY version""",
   "ADD_DATA" : """INSERT INTO data(kernel, cell, version, source, name, user, exec_ct) VALUES (?, ?, ?, ?, ?, ?, ?)""",
   "ADD_COLS" : """INSERT INTO columns(user, kernel, name, version, col_name, type, size) VALUES (?, ?, ?, ?, ?, ?, ?)""",
   "GET_VERSIONS" : """SELECT contents, version FROM versions WHERE kernel = ? AND id = ? AND user = ? ORDER BY version DESC LIMIT 1""",
