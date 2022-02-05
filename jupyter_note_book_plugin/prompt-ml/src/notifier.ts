@@ -1,111 +1,127 @@
+import { JupyterFrontEnd } from "@jupyterlab/application";
 
-import {
-  JupyterFrontEnd
-} from "@jupyterlab/application"
+import { INotebookTracker, NotebookPanel } from "@jupyterlab/notebook";
 
-import {
-  INotebookTracker,
-  NotebookPanel,
-} from "@jupyterlab/notebook";
-
-import {
-  Listener,
-} from "./cell-listener";
+import { Listener } from "./cell-listener";
 
 import { PopupNotification } from "./components/PopupNotification";
 import { ProtectedColumnNote } from "./components/ProtectedColumnNote";
 
+import $ = require("jquery");
 
-
-import $ = require('jquery');
-
-// Global used to construct unique ID's 
+// Global used to construct unique ID's
 // This is increased by 1 everytime that a group of notifications is received by the frontend
 // Allows us to have a unique ID for every notification so that repeat notes will open the same widget
-var global_notification_count: number = 0
+var global_notification_count: number = 0;
+
+interface ProxyColumnRelationships {
+  predictive: string[];
+  correlated: string[];
+}
 
 export class Prompter {
   // This generates prompts for notebook cells on notification of new data or a new model
-  constructor(listener: Listener, tracker: INotebookTracker, app: JupyterFrontEnd, factory: NotebookPanel.IContentFactory) {
-    listener.infoSignal.connect(
-      (sender: Listener, output: any) => {
-        this._onInfo(output)
-      });
+  constructor(
+    listener: Listener,
+    tracker: INotebookTracker,
+    app: JupyterFrontEnd,
+    factory: NotebookPanel.IContentFactory
+  ) {
+    listener.infoSignal.connect((sender: Listener, output: any) => {
+      this._onInfo(output);
+    });
   }
 
-  private _appendNote(note : any) {
+  private _appendNote(note: any) {
     console.log(note);
     this._appendMsg((note[0] as HTMLDivElement).outerHTML, note[1]);
   }
 
   private _appendMsg(msg: string, handedPayload: any) {
-    var newNote = $.parseHTML(msg)
-    $(".prompt-ml-container").prepend(newNote)
+    var newNote = $.parseHTML(msg);
+    $(".prompt-ml-container").prepend(newNote);
     $(newNote).on("mouseup", function () {
       if (handedPayload == {}) {
         var payload: object = {
-          "title": "Default Page",
-          "htmlContent": $.parseHTML("<h1>This note failed to generate.</h1>"),
+          title: "Default Page",
+          htmlContent: $.parseHTML("<h1>This note failed to generate.</h1>"),
+        };
+      } else {
+        payload = handedPayload;
+      }
+      $(".prompt-ml-container").trigger("prompt-ml:note-added", {
+        payload: payload,
+      });
+    });
+    $(newNote)
+      .find(".close")
+      .on("mouseup", function (e) {
+        e.stopPropagation();
+        var parentNote = $(this).parent().parent().parent();
+        if (!$(parentNote).hasClass("wasClosed")) {
+          $(this)
+            .parent()
+            .parent()
+            .css("background-color", "#A3A3A3")
+            .find(".more h2")
+            .css("background-color", "#939393");
+          $(".prompt-ml-container").append($(parentNote));
+          $(parentNote).addClass("wasClosed");
+        } else {
+          $(this)
+            .parent()
+            .parent()
+            .css("background-color", "#F0B744")
+            .find(".more h2")
+            .css("background-color", "#F1A204");
+          $(".prompt-ml-container").prepend($(parentNote));
+          $(parentNote).removeClass("wasClosed");
         }
-      } else {
-        payload = handedPayload
-      }
-      $(".prompt-ml-container").trigger("prompt-ml:note-added", { "payload": payload })
-    })
-    $(newNote).find(".close").on("mouseup", function (e) {
-      e.stopPropagation()
-      var parentNote = $(this).parent().parent().parent()
-      if (!($(parentNote).hasClass("wasClosed"))) {
-        $(this).parent().parent().css("background-color", "#A3A3A3").find(".more h2").css("background-color", "#939393")
-        $(".prompt-ml-container").append($(parentNote))
-        $(parentNote).addClass("wasClosed")
-      } else {
-        $(this).parent().parent().css("background-color", "#F0B744").find(".more h2").css("background-color", "#F1A204")
-        $(".prompt-ml-container").prepend($(parentNote))
-        $(parentNote).removeClass("wasClosed")
-      }
-    })
-    var divs = $(".prompt-ml-container > div")
+      });
+    var divs = $(".prompt-ml-container > div");
     for (var x = 0; x < divs.length; x++) {
-      var targetDiv = divs[x]
-      if ($(newNote).is($(targetDiv))) continue
+      var targetDiv = divs[x];
+      if ($(newNote).is($(targetDiv))) continue;
       if ($(targetDiv).text() == $(newNote).text()) {
-        $(targetDiv).remove()
+        $(targetDiv).remove();
       }
     }
   }
 
   // Main notification handling function
   private _onInfo(info_object: any) {
-
-    var kernel_id = info_object["kernel_id"]
-    var note_count: number = 0
+    var kernel_id = info_object["kernel_id"];
+    var note_count: number = 0;
     console.log("_onInfo");
     for (const notice_type in info_object) {
-      var list_of_notes = info_object[notice_type]
+      var list_of_notes = info_object[notice_type];
       if (notice_type == "proxy") {
-        this._handleProxies(list_of_notes, note_count)
-        note_count += 1
+        this._handleProxies(list_of_notes, note_count);
+        note_count += 1;
       } else if (notice_type == "error") {
         this._makeErrorMessage(list_of_notes, note_count);
-        note_count += 1
+        note_count += 1;
       } else if (notice_type == "resemble") {
         console.log("making resemble msg");
-        this._makeResembleMsg(list_of_notes, note_count, String(kernel_id))
+        this._makeResembleMsg(list_of_notes, note_count, String(kernel_id));
       } else if (notice_type == "missing") {
         console.log("making missing data message");
         this._handleMissing(list_of_notes, note_count);
       } else {
-        console.log("Note type not recognized "+notice_type);
+        console.log("Note type not recognized " + notice_type);
       }
     }
   }
 
-  private _handleProxies(proxies: { [key: string]: any }[], note_count: number) {
+  private _handleProxies(
+    proxies: { [key: string]: any }[],
+    note_count: number
+  ) {
     var d: { [key: string]: { [key: string]: string[] } } = {};
     for (var x = 0; x < proxies.length; x++) {
       var p: any = proxies[x];
-      if (!(p["df"] in d)) d[p["df"]] = { "proxy_col_name": [], "sensitive_col_name": [], "p_vals": [] };
+      if (!(p["df"] in d))
+        d[p["df"]] = { proxy_col_name: [], sensitive_col_name: [], p_vals: [] };
       d[p["df"]]["proxy_col_name"].push(p["proxy_col_name"]);
       d[p["df"]]["sensitive_col_name"].push(p["sensitive_col_name"]);
       d[p["df"]]["p_vals"].push(p["p"]);
@@ -114,46 +130,116 @@ export class Prompter {
     this._appendNote(message);
   }
 
-  private _handleMissing(missing_notes: { [key: string]: { [key: string]: any } }, note_count: number){
-    var note = this._makeMissingMsg(missing_notes, note_count)
-    var message = note.generateFormattedOutput(global_notification_count, note_count);
+  private _handleMissing(
+    missing_notes: { [key: string]: { [key: string]: any } },
+    note_count: number
+  ) {
+    var note = this._makeMissingMsg(missing_notes, note_count);
+    var message = note.generateFormattedOutput(
+      global_notification_count,
+      note_count
+    );
     this._appendNote(message);
   }
 
   // To check
-  private _makeResembleMsg(notices : any[], note_count : number, kernel_id : string) {
+  private _makeResembleMsg(
+    notices: any[],
+    note_count: number,
+    kernel_id: string
+  ) {
     var note = new ProtectedColumnNote(notices, kernel_id);
-    var message = note.generateFormattedOutput(global_notification_count, note_count);
+    var message = note.generateFormattedOutput(
+      global_notification_count,
+      note_count
+    );
     this._appendNote(message);
   }
 
-
   private _makeProxyMsg(d: any, note_count: number) {
     var note = new PopupNotification("proxy", false, "Proxy Columns");
-    note.addHeader("Proxy Columns Note");
-    note.addList([
-      "Certain variables in this notebook may encode or have strong correlations with sensitive variables. In some cases, the use of these correlated variables may produce outcomes that are biased. This bias may be undesirable, unethical and in some cases illegal. <a style=\"color: blue; text-decoration; underline\" target=\"_blank\" href=\"PLACEHOLDER\">(Read More)</a>",
-      "This plugin has detected the presence of certain columns in this notebook that may be correlated with sensitive variables. In some instances, this correlation was detected by computing the correlation between the sensitive column and the candidate proxy column.",
-      [
-        "A column may also be correlated with a sensitive variable that is not contained in the data. This plugin also notes when a column may encode data that is known to correlate with a sensitive variable that is not present in the dataset."
-      ],
-      "The correlations found or suggested here may or may not be meaningful. There also may be situation-specific correlations that are not detected by this plugin."
-    ])
+    note.addHeader("Proxy Columns");
+
+    const description = $.parseHTML(
+      "<div>" +
+        '<p>Certain variables in this notebook may encode or have strong correlations with sensitive variables. In some cases, the use of these correlated variables may produce outcomes that are biased. This bias may be undesirable, unethical and in some cases illegal. <a style="color: blue; text-decoration; underline" target="_blank" href="PLACEHOLDER">(Read More)</a></p>' +
+        "<br /><p>This plugin has detected the presence of certain columns in this notebook that may be correlated with sensitive variables. In some instances, this correlation was detected by computing the correlation between the sensitive column and the candidate proxy column.</p>" +
+        "<br /><p>A column may also be correlated with a sensitive variable that is not contained in the data. This plugin also notes when a column may encode data that is known to correlate with a sensitive variable that is not present in the dataset.</p>" +
+        "<br /><p>The correlations found or suggested here may or may not be meaningful. There also may be situation-specific correlations that are not detected by this plugin.</p>" +
+        "</div>"
+    );
+    const descriptionHtmlElement = description[0] as any as HTMLElement;
+    note.addRawHtmlElement(descriptionHtmlElement);
+
     for (let df_name in d) {
       note.addHeader(`Within <strong>${df_name}</strong>`);
       var df = d[df_name];
-      let ul: string[] = [];
-      for (var x = 0; x < df["proxy_col_name"].length; x++) {
-        ul.push(`Column <strong>${df["proxy_col_name"][x]}</strong> ${(df["p_vals"][x] < 0.001) ? "is strongly correlated with" : "may be predictive of"} <strong>${df["sensitive_col_name"][x]}</strong>.`) // Rounds to the third decimal place
-      };
-      note.addList(ul);
+      const columnNames = df["proxy_col_name"];
+      const tableRows: { [columnName: string]: ProxyColumnRelationships } = {};
+      columnNames.forEach((columnName: string, idx: number) => {
+        if (tableRows[columnName] === undefined) {
+          tableRows[columnName] = {
+            predictive: [],
+            correlated: [],
+          };
+        }
+        if (df["p_vals"][idx] < 0.001) {
+          tableRows[columnName].correlated.push(df["sensitive_col_name"][idx]);
+        } else {
+          tableRows[columnName].predictive.push(df["sensitive_col_name"][idx]);
+        }
+      });
+      const tableHeader = `
+        <thead>
+          <tr>
+            <th>Column name</th>
+            <th>Predictive of (maybe)</th>
+            <th>Strongly correlated with</th>
+          </tr>
+        </thead>
+      `;
+      const tableEntries = Object.entries(tableRows).map(
+        ([columnName, relationships]) => {
+          const predictiveFeatures =
+            relationships.predictive.length > 0
+              ? relationships.predictive.join(" ")
+              : " ";
+          const correlatedFeatures =
+            relationships.correlated.length > 0
+              ? relationships.correlated.join(" ")
+              : " ";
+          return `
+          <tbody>
+              <tr>
+                  <td>${columnName}</td>
+                  <td>${predictiveFeatures}</td>
+                  <td>${correlatedFeatures}</td>
+              </tr>
+          </tbody>
+          `;
+        }
+      );
+
+      const fullTable = $.parseHTML(
+        `<div class="proxy-columns-table"><table>${tableHeader}${tableEntries}</table></div>`
+      );
+      const fullTableHtmlElement = fullTable[0] as any as HTMLElement;
+      note.addRawHtmlElement(fullTableHtmlElement);
     }
+
     return note.generateFormattedOutput(global_notification_count, note_count);
   }
 
-  private _makeMissingMsg(notice: { [key: string]: { [key: string]: any } }, note_count: number) {
-    var note : PopupNotification = new PopupNotification("missing", false, "Missing Data")
-    note.addHeader("Missing Data Note")
+  private _makeMissingMsg(
+    notice: { [key: string]: { [key: string]: any } },
+    note_count: number
+  ) {
+    var note: PopupNotification = new PopupNotification(
+      "missing",
+      false,
+      "Missing Data"
+    );
+    note.addHeader("Missing Data");
     note.addParagraph(`here are a number of reasons why data may be missing. In some instances, 
     it may be due to biased collection practices. It may also be missing due to random 
     error <a href=\"placeholder\"(Read More)</a>`);
@@ -164,43 +250,51 @@ export class Prompter {
     for (var df_name in notice["dfs"]) {
       // Small-view df container
       note.addSubheader(`<h3>Within ${df_name}</h3>`);
-      var df = notice["dfs"][df_name]
-      var ul = []
+      var df = notice["dfs"][df_name];
+      var ul = [];
       // Expanded-view df container
       // Iterating over every column
       for (const col_name_index in df["missing_columns"]) {
         // Extract information for the small-view content
-        var col_name = df["missing_columns"][col_name_index]
-        var col_count = df[col_name]["number_missing"]
-        var total_length = df[col_name]["total_length"]
+        var col_name = df["missing_columns"][col_name_index];
+        var col_count = df[col_name]["number_missing"];
+        var total_length = df[col_name]["total_length"];
         // Extract the mode (for expanded view)
-        var modes = []
+        var modes = [];
         for (const key in df[col_name]) {
-          if (key == "total_length" || key == "number_missing") continue
-          else modes.push([key, df[col_name][key]["largest_percent"]])
+          if (key == "total_length" || key == "number_missing") continue;
+          else modes.push([key, df[col_name][key]["largest_percent"]]);
         }
-        modes = modes.sort((a: [string, number][][], b: [string, number][][]) => {
-          if (a[1] === b[1]) {
-            return 0;
+        modes = modes.sort(
+          (a: [string, number][][], b: [string, number][][]) => {
+            if (a[1] === b[1]) {
+              return 0;
+            } else {
+              return a[1] > b[1] ? -1 : 1;
+            }
           }
-          else {
-            return (a[1] > b[1]) ? -1 : 1;
-          }
-        })
-        var cor_col = modes[0][0]
-        var percent = df[col_name][cor_col]["largest_percent"]
-        var cor_mode = df[col_name][cor_col]["largest_missing_value"]
-        ul.push(`Column <strong>${col_name}</strong> is missing <strong>${col_count}</strong>/<strong>${total_length}</strong> entries`)
-        ul.push([`This occurs most frequently (${percent}%) when ${cor_col} is ${cor_mode}`])
+        );
+        var cor_col = modes[0][0];
+        var percent = df[col_name][cor_col]["largest_percent"];
+        var cor_mode = df[col_name][cor_col]["largest_missing_value"];
+        ul.push(
+          `Column <strong>${col_name}</strong> is missing <strong>${col_count}</strong>/<strong>${total_length}</strong> entries`
+        );
+        ul.push([
+          `This occurs most frequently (${percent}%) when ${cor_col} is ${cor_mode}`,
+        ]);
       }
       note.addList(ul);
     }
-    return note
+    return note;
   }
 
-  private _makeErrorMessage(notices: { [key: string]: any }[], note_count: number) {
-    var note = new PopupNotification("errors", false, "Errors Note");
-    note.addHeader("Errors Note");
+  private _makeErrorMessage(
+    notices: { [key: string]: any }[],
+    note_count: number
+  ) {
+    var note = new PopupNotification("errors", false, "Errors");
+    note.addHeader("Errors");
     // Consolidating the notes sent to the frontend into a usable dictionary
     // The received data is a list of individual objects, with formats such as
     // {
@@ -217,7 +311,7 @@ export class Prompter {
     //    }
     // }
     // However, the final list of sorted first by models and then by metrics. Therefore,
-    // we want a format more similar to 
+    // we want a format more similar to
     // {
     //   "lr": {
     //      "fpr": [
@@ -233,43 +327,53 @@ export class Prompter {
     // }
     var models: { [key: string]: any } = {};
     for (var x = 0; x < notices.length; x++) {
-      var notice = notices[x]
-      if (!(notice["model_name"] in models)) models[notice["model_name"]] = {
-        "fpr": [],
-        "fnr": []
-      };
+      var notice = notices[x];
+      if (!(notice["model_name"] in models))
+        models[notice["model_name"]] = {
+          fpr: [],
+          fnr: [],
+        };
       models[notice["model_name"]][notice["metric_name"]].push({
-        "slice": notice["slice"],
-        "count": notice["n"],
-        "metric_in": notice["metric_in"],
-        "metric_out": notice["metric_out"],
-        "pos_value": notice["pos_value"],
-        "neg_value": notice["neg_value"],
+        slice: notice["slice"],
+        count: notice["n"],
+        metric_in: notice["metric_in"],
+        metric_out: notice["metric_out"],
+        pos_value: notice["pos_value"],
+        neg_value: notice["neg_value"],
       });
     }
     // Generating the dynamic content
     for (var model_name in models) {
       var model_notes = models[model_name];
       if (model_notes["fpr"].length == 0 || model_notes["fnr"].length == 0)
-        continue
-      console.log("DEBUG1:", model_notes)
-      var fprString = this._makeErrorNoteLists(model_notes["fpr"], `Assuming ${model_notes["fpr"][0]["pos_value"]} given the true value of ${model_notes["fpr"][0]["neg_value"]}`);
-      var fnrString = this._makeErrorNoteLists(model_notes["fnr"], `Assuming ${model_notes["fnr"][0]["neg_value"]} given the true value of ${model_notes["fnr"][0]["neg_value"]}`);
+        continue;
+      console.log("DEBUG1:", model_notes);
+      var fprString = this._makeErrorNoteLists(
+        model_notes["fpr"],
+        `Assuming ${model_notes["fpr"][0]["pos_value"]} given the true value of ${model_notes["fpr"][0]["neg_value"]}`
+      );
+      var fnrString = this._makeErrorNoteLists(
+        model_notes["fnr"],
+        `Assuming ${model_notes["fnr"][0]["neg_value"]} given the true value of ${model_notes["fnr"][0]["neg_value"]}`
+      );
       note.addList([
         `In the model ${model_name}, there was an unusually high probability of:`,
-        [
-          fprString,
-          fnrString
-        ]
-      ])
+        [fprString, fnrString],
+      ]);
     }
     // Adding static content; creating response object
-    var message = note.generateFormattedOutput(global_notification_count, note_count);
+    var message = note.generateFormattedOutput(
+      global_notification_count,
+      note_count
+    );
     this._appendNote(message);
   }
 
   // Takes in a list of slice objects with metric / positive value / negative value information
-  private _makeErrorNoteLists(segments: { [key: string]: any }[], metricName: string) {
+  private _makeErrorNoteLists(
+    segments: { [key: string]: any }[],
+    metricName: string
+  ) {
     // Creating an HTML string that visually represents the object created at the beginning
     // of _makeErrorMessages. The data that is passed in is the list of objects (accessible
     // through the "fnr" / "fpr" of the models object)
@@ -282,10 +386,15 @@ export class Prompter {
         sliceString += `${segments[x]["slice"][y][0]}: ${segments[x]["slice"][y][1]}`;
         if (y != segments[x]["slice"].length - 1) sliceString += ", ";
       }
-      returnArray[1].push(sliceString)
-      returnArray[1].push([`Slice size was ${segments[x]["count"]}. The outside metric is ${Math.floor(segments[x]["metric_out"] * 100) / 100}. The inside metric is ${Math.floor(100 * segments[x]["metric_in"]) / 100}.`]);
+      returnArray[1].push(sliceString);
+      returnArray[1].push([
+        `Slice size was ${segments[x]["count"]}. The outside metric is ${
+          Math.floor(segments[x]["metric_out"] * 100) / 100
+        }. The inside metric is ${
+          Math.floor(100 * segments[x]["metric_in"]) / 100
+        }.`,
+      ]);
     }
     return returnArray;
   }
-
 }

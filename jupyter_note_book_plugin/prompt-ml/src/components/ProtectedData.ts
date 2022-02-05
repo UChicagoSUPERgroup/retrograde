@@ -15,11 +15,11 @@ export class ProtectedData {
   explorer: Explorer;
   columns: Column[];
   df: string;
-  kernel_id : string;
+  kernel_id: string;
   potentialSensitivities: string[] = [
+    "none",
     "gender",
     "sex",
-    "none",
     "pregnancy",
     "race",
     "color",
@@ -37,7 +37,7 @@ export class ProtectedData {
   // Constructor
   ////////////////////////////////////////////////////////////
 
-  constructor(notice: any, kernel_id : string) {
+  constructor(notice: any, kernel_id: string) {
     var columnNames = this._findAllColumnNames(notice);
     this.df = notice["df"];
     this.kernel_id = kernel_id;
@@ -71,9 +71,9 @@ export class ProtectedData {
         "exec",
         "POST",
         JSON.stringify({
-          type : "columnInformation",
+          type: "columnInformation",
           df: dfName,
-          kernel : this.kernel_id,
+          kernel: this.kernel_id,
           col: columnName,
         }),
         ServerConnection.makeSettings()
@@ -118,10 +118,10 @@ export class ProtectedData {
         "exec",
         "POST",
         JSON.stringify({
-          type : "sensitivityModification",
+          type: "sensitivityModification",
           df: dfName,
           col: columnName,
-          kernel : this.kernel_id,
+          kernel: this.kernel_id,
           sensitivity: newSensitivity,
         }),
         ServerConnection.makeSettings()
@@ -188,20 +188,18 @@ export class ProtectedData {
     return this.explorer.export();
   }
 
-    _columnInfoElement(res : any) {
+  _columnInfoElement(res: any) {
+    var vc_str: string = "";
 
-      var vc_str : string = ""; 
-
-      for (const value in res["valueCounts"]) {
-        const count = res["valueCounts"][value];
-        vc_str += "<p class=values>";
-        vc_str += value;
-        vc_str += " : ";
-        vc_str += count;
-        vc_str += "</p>"; 
-       } 
-    
-      return vc_str
+    for (const value in res["valueCounts"]) {
+      const count = res["valueCounts"][value];
+      vc_str += "<p class=values>";
+      vc_str += value;
+      vc_str += " : ";
+      vc_str += count;
+      vc_str += "</p>";
     }
 
+    return vc_str;
+  }
 }
