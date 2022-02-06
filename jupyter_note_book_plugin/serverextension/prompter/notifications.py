@@ -378,54 +378,55 @@ class ProxyColumnNote(ProtectedColumnNote):
 class MissingDataNote(ProtectedColumnNote):
     """
     A notification that measures whether there exists columns with missing data.
+    Feasible when there are defined dataframes that have both sensitive columns and columns
+    with *explicitly* missing values (ie filler values like -99 or "NaN" or string typed will
+    not be detected)
 
-    Note that this requires that sensitive/protected columns actually be present in the
-    dataframe. 
-
-    data format is - 
-    {
-        "type" : "missing",
-        "dfs" : {
-            "<df_name1>" : {
-                "missing_columns" : <list of all columns with missing data>,
-                "<missing_col1>" : {
-                    "<sensitive_col1>" : {
-                        "largest_missing_value" : <the value of the sensitive column most likely to be 
-                                                    missing when the missing column has missing data>,
-                        "largest_percent"       : <floor(100 * (largest_missing_value / total missing data))>
-                    }
-                    "<sensitive_col2>" : {...}
-                    "<sensitive_col3>" : {...}
-                    ...
-                }
-            }
-            "<df_name2>" : {...}
-            "<df_name3>" : {...}
-            ...
-        }
+    {"type" : "missing",
+     "df" : df_name,
+     "missing_columns" : {
+        missing_col_name : { 
+            "number_missing" : number of missing entries in column,
+            "total_length" : length of column,
+            "sens_cols" : {
+                sens_col_name : {"largest_missing_value" : value of column in sens_col with largest number of missing instances in missing_col,
+                                 "largest_percent" : percent of values composed by largest missing value,
+                                }...}
     }
     """
 
     def __init__(self, db):
         super().__init__(db)
+
+        # cache of columns to be checked
         self.missing_col_lists = {}
         self.missing_sent = 0
 
-    # basically, if it was feasible to send a protected note and we have
-    # missing data, we should be good to send a missing data note if
-    # either condition is not met, don't bother
     def check_feasible(self, cell_id, env, dfs, ns):
         """check feasibility of sending a missing data note"""
         if not super().check_feasible(cell_id, env, dfs, ns):
             return False
-        else:
-            for df_name, df in dfs.items():
-                ret = False
-                if df.isnull().values.any():
-                    ret = True
-                    # store a pointer to the dataframe, as well as the columns with missing data
-                    self.missing_col_lists[df_name] = (df, df.columns[df.isna().any()].tolist())
-            return ret
+
+        recent_cols = self.db.get_recent_cols(env._kernel_id)
+        df_names = {} 
+
+        for col in recent_cols:
+
+            df_name = col["name"]
+            if df_name not in df_names:
+                df_names[df_name] = []
+            df_names[df_name].append(col)
+
+        for df_name in df_names:
+            if df_name not in dfs:
+                continue
+
+            has_missing = dfs[df_name].isna().any().any()
+            has_sensitive = any([col["is_sensitive"] for col in df_names[df_name]])
+
+            if has_missing and has_sensitive: 
+                self.missing_col_lists[df_name] = (dfs[df_name], df_names[df_name])
+        return self.missing_col_lists != {}
          
    
     # some sort of internal variable
@@ -435,80 +436,61 @@ class MissingDataNote(ProtectedColumnNote):
 
     # the main missing data check loop that takes in an arbitrary list of
     # dataframe names to check
-    def _formulate_df_report_missing(self, df_list):
-        df_report = {}
-
-        df_report['type'] = 'missing'
-        df_report['dfs'] = {}
-
+    def _formulate_df_report_missing(self):
+        dfs = []
         # loop through all dataframes with protected data
-        for df_name in df_list:
-            # if this dataframe also has missing data
-            if df_name in self.missing_col_lists.keys():
-                # get some pointers to useful stuff for code readability
-                this_df_ptr = self.missing_col_lists[df_name][0]
-                these_missing_cols = self.missing_col_lists[df_name][1]
-                these_sensitive_cols = self.df_protected_cols[df_name]
+        for df_name in self.missing_col_lists:
+            # get some pointers to useful stuff for code readability
+            df = self.missing_col_lists[df_name][0]
+            cols = self.missing_col_lists[df_name][1]
 
-                # initialize this dataframe entry in the dfs dictionary
-                df_report['dfs'][df_name] = {}
-                df_report['dfs'][df_name]['missing_columns'] = these_missing_cols.copy()
+            missing_cols = df.columns[df.isna().any()]
+            sense_cols = [col for col in cols if col["is_sensitive"]]
+           
+            df_report = {"type" : "missing", "df" : df_name, "missing_columns" : {}}
+ 
+            for missing_col in missing_cols:
 
-                # initialize every missing column dictionary
-                for missing_col in these_missing_cols:
-                    df_report['dfs'][df_name][missing_col] = {}
+                is_na_col = df[missing_col].isna()
 
-                # for every sensitive column
-                for sensitive in these_sensitive_cols:
-                    sensitive = sensitive["original_name"]
-                    # for every column with missing data
-                    for missing_col in these_missing_cols:
-                        sensitive_frequency = {}
-                        if(missing_col == sensitive): continue # prevents the same column from being compared
-                        for i in range(len(this_df_ptr[missing_col])):
-                            try:
-                                numeric_number = float(this_df_ptr[missing_col][i])
-                                if math.isnan(numeric_number):
-                                    key = str(this_df_ptr[sensitive][i])
-                                    if this_df_ptr[sensitive][i] in sensitive_frequency:
-                                        sensitive_frequency[this_df_ptr[sensitive][i]] += 1
-                                    else:
-                                        sensitive_frequency[this_df_ptr[sensitive][i]] = 1
-                            except ValueError:
-                                pass
-                        # largest missing value
-                        lmv = max(sensitive_frequency.items(), key=operator.itemgetter(1))[0]
-                        lmv = str(lmv) # security cast
-                        # largest percent
-                        lp  = math.floor(100.0 * (sensitive_frequency[lmv] / this_df_ptr[missing_col].isna().sum()))
-                        
-                        if not str(lp).isnumeric():
-                            lp = 'NaN'
+                df_report["missing_columns"][missing_col] = {
+                    "number_missing" : int(is_na_col.sum()),
+                    "total_length" : len(is_na_col)}
 
-                        df_report['dfs'][df_name][missing_col][sensitive] = {}
-                        df_report['dfs'][df_name][missing_col][sensitive]['largest_missing_value'] = lmv
-                        df_report['dfs'][df_name][missing_col][sensitive]['largest_percent']       = lp
-                for missing_col in these_missing_cols:
-                    df_report['dfs'][df_name][missing_col]['number_missing'] = int(this_df_ptr[missing_col].isna().sum())
-                    df_report['dfs'][df_name][missing_col]['total_length'] = len(this_df_ptr[missing_col])
-                        
-        return df_report
+                sens_col_dict = {}
+
+                for sens_col in sense_cols:
+                    if sens_col == missing_col:
+                        continue
+                    sens_col_name = sens_col["col_name"]
+                    missing_counts = df[sens_col_name][is_na_col].value_counts()
+                     
+                    # largest missing value
+                    lmv = str(missing_counts.idxmax())
+
+                    # largest percent
+                    lp  = math.floor(100.0 * (missing_counts[missing_counts.idxmax()]/missing_counts.sum()))
+                    
+                    sens_col_dict[sens_col_name] = {"largest_missing_value" : lmv, "largest_percent" : lp}
+   
+                df_report["missing_columns"]["sens_col"] = sens_col_dict
+            dfs.append(df_report)
+ 
+        return dfs
 
     # self.df_protected_cols should already be populated from a previous
     # check_feasible call (?)
     def make_response(self, env, kernel_id, cell_id):
         """form and store the response to send to the frontend"""
-        super().make_response(env, kernel_id, cell_id)
+#        super().make_response(env, kernel_id, cell_id)
 
-        df_report = self._formulate_df_report_missing(self.df_protected_cols.keys())
-
+        df_reports = self._formulate_df_report_missing()
         # export the result to a cell
-        for df_name in df_report["dfs"]:
-            self.data[df_name] = df_report["dfs"][df_name] 
-            self.data[df_name]["type"] = "missing"
+        for df_report in df_reports:
+            self.data[df_report["df"]] = [df_report]
+        #    self.data[df_name]["type"] = "missing"
         # counter
         self.missing_sent += 1
-
 
     # loop through all the missing data notes
     def update(self, env, kernel_id, cell_id, dfs, ns):
@@ -524,7 +506,7 @@ class MissingDataNote(ProtectedColumnNote):
                 # issued notes
                 new_data[df_name] = report
                 self.missing_sent += 1
-        env.log.debug("[MissingDataNote] updated responses")
+#        env.log.debug("[MissingDataNote] updated responses")
         self.data = new_data
 
 class ErrorSliceNote(Notification):
