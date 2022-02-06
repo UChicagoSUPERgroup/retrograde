@@ -436,7 +436,7 @@ class MissingDataNote(ProtectedColumnNote):
 
     # the main missing data check loop that takes in an arbitrary list of
     # dataframe names to check
-    def _formulate_df_report_missing(self):
+    def _formulate_df_report_missing(self, env):
         dfs = []
         # loop through all dataframes with protected data
         for df_name in self.missing_col_lists:
@@ -469,11 +469,12 @@ class MissingDataNote(ProtectedColumnNote):
                     lmv = str(missing_counts.idxmax())
 
                     # largest percent
+                    env.log.debug("[MissingDataNote] missing counts {0}".format(missing_counts))
                     lp  = math.floor(100.0 * (missing_counts[missing_counts.idxmax()]/missing_counts.sum()))
                     
                     sens_col_dict[sens_col_name] = {"largest_missing_value" : lmv, "largest_percent" : lp}
    
-                df_report["missing_columns"]["sens_col"] = sens_col_dict
+                df_report["missing_columns"][missing_col]["sens_col"] = sens_col_dict
             dfs.append(df_report)
  
         return dfs
@@ -484,7 +485,7 @@ class MissingDataNote(ProtectedColumnNote):
         """form and store the response to send to the frontend"""
 #        super().make_response(env, kernel_id, cell_id)
 
-        df_reports = self._formulate_df_report_missing()
+        df_reports = self._formulate_df_report_missing(env)
         # export the result to a cell
         for df_report in df_reports:
             self.data[df_report["df"]] = [df_report]
