@@ -36,7 +36,7 @@ export class PopupNotification {
     var returnString = "";
     if (!top) returnString += "<ul>";
     for (var i in content) {
-      if (typeof content[i] === "string")
+      if (typeof content[i] == "string" || typeof content[i] == "number" || typeof content[i] == "boolean")
         returnString += "<li>" + content[i] + "</li>";
       else returnString += this._stringifyContent(content[i], false);
     }
