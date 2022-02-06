@@ -638,14 +638,14 @@ class EqualizedOddsNote(Notification):
         except KeyError as e:
             ancestor_df = None
 
-        if not ancestor_df and not isinstance(ancestor_df, pd.DataFrame):
+        if not isinstance(ancestor_df, pd.DataFrame):
             env.log.error("[EqOdds] get_dataframe_version did not find an ancestor_df.")
             env.log.debug("[EqOdds] data {0} and data version {1}".format(data, ancestor_df_version))
 
             return None
         ###### error handling
         return ancestor_df
-    def get_ancestor_prot_info(ancestor_df):
+    def get_ancestor_prot_info(self, ancestor_df):
         prot_cols = check_for_protected(ancestor_df.columns)
         prot_cols = [ancestor_df[p["original_name"]] for p in prot_cols]
         prot_col_names = [col.name for col in prot_cols]
@@ -817,7 +817,7 @@ class EqualizedOddsNote(Notification):
         curr_df_name = self.aligned_models[model_name]["x_name"]
         # get ancestor df here 
         self.aligned_models[model_name]["match"]["x_ancestor"] = self.get_ancestor_data(env, curr_df_name, kernel_id)
-        if self.aligned_models[model_name]["match"]["x_ancestor"]:
+        if isinstance(self.aligned_models[model_name]["match"]["x_ancestor"], pd.DataFrame):
             x_ancestor = self.aligned_models[model_name]["match"]["x_ancestor"]
             env.log.debug("[EqOddsNote] has found an ancestor of type:", 
                             type(self.aligned_models[model_name]["match"]["x_ancestor"]))
@@ -827,9 +827,6 @@ class EqualizedOddsNote(Notification):
             env.log.error("[EqOddsNote] ancestors not found")
             return
 
-        prot_col_names, prot_cols = self.get_ancestor_prot_info(x_ancestor)
-        # or
-        # prot_col_names, prot_cols, _ = search_for_sensitive_cols   
 
         # col_names = [col.name for col in match_cols]
         # match_cols = [bin_col(col) for col in match_cols]
@@ -838,6 +835,9 @@ class EqualizedOddsNote(Notification):
         orig_preds = model.predict(X)
         orig_preds = pd.Series(orig_preds, index=X.index)
 
+        prot_col_names, prot_cols = self.get_ancestor_prot_info(x_ancestor)
+        # or
+        # prot_col_names, prot_cols, _ = search_for_sensitive_cols(x_ancestor, df_name_to_match, df_ns)   
         # Find error rates for protected groups
         if prot_cols is None: 
             # exit? nothing to do if no groups
@@ -1235,8 +1235,12 @@ def check_call_dfs(dfs, non_dfs_ns, models, env):
 
         if (features_df_name in dfs.keys()) and\
            ((labels_df_name in dfs.keys()) or labels_df_name in non_dfs_ns.keys()):
-
-            feature_df = get_cols(dfs[features_df_name], features_col_names)
+            env.log.debug("[check_call_df] feature head")
+            dfs[features_df_name].head()
+            # see: https://stackoverflow.com/questions/14984119/python-pandas-remove-duplicate-columns
+            features_df = dfs[features_df_name]
+            features_df = features_df.loc[:,~features_df.columns.duplicated()]
+            feature_df = get_cols(features_df, features_col_names)
 
             labels_obj = dfs.get(labels_df_name)
 

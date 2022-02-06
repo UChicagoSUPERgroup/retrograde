@@ -172,8 +172,9 @@ class DbHandler:
         delta = timedelta(seconds=3) 
 
         #self.renew_connection()
-        curs.execute(self.cmds["LINK_CELL"], (exec_ct,))
-        results = curs.fetchall()
+        # curs.execute(self.cmds["LINK_CELL"], (exec_ct,))
+        self._local_cursor.execute(self.cmds["LINK_CELL"], (exec_ct,))
+        results = self._local_cursor.fetchall()
        
         results = [r for r in results if r["time"] > (cell_time - delta)]  
         results = [r for r in results if r["time"] < (cell_time + delta)]
@@ -290,9 +291,11 @@ class DbHandler:
                     exec_ct = match["exec_ct"]
                     # query local database
                     self.renew_connection()
-                    self._cursor.execute(self.cmds["LINK_CELL"], (exec_ct,))
+                    # self._cursor.execute(self.cmds["LINK_CELL"], (exec_ct,))
+                    # print("link cell:", self.cmds["LINK_CELL"])
+                    self._local_cursor.execute(self.cmds["LINK_CELL"], (exec_ct,))
                     # list of all 
-                    namespaces = self._cursor.fetchall()
+                    namespaces = self._local_cursor.fetchall()
                     if len(namespaces) < 1:
                         return None # there were no namespaces with this exec_ct
                     else:
@@ -526,7 +529,7 @@ class RemoteDbHandler(DbHandler):
     def _init_local_db(self, dbname=DB_NAME, dirname=DB_DIR):
         db_path_resolved = os.path.expanduser(dirname)
 
-#        print("creating local database at {0}".format(db_path_resolved+dbname))
+        # print("creating local database at {0}".format(db_path_resolved+dbname))
 
         if os.path.isdir(db_path_resolved) and os.path.isfile(db_path_resolved+dbname): 
             self._local_conn = sqlite3.connect(db_path_resolved+dbname, 
