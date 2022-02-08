@@ -36,6 +36,7 @@ SQL_CMDS = {
   "STORE_RESP" : """INSERT INTO notifications(kernel, user, cell, resp, exec_ct) VALUES (?, ?, ?, ?, ?)""",
   "GET_RESPS" : """SELECT cell, resp FROM notifications WHERE kernel = ? AND user = ?""",
   "GET_DATA_VERSION": "SELECT * from data WHERE exec_ct = ? AND name = ?", # NOTE: unused, probably wrong
+  "LINK_CELL" : """"""
 }
 
 LOCAL_SQL_CMDS = { # cmds that will always get executed locally
@@ -277,8 +278,12 @@ class DbHandler:
             return None
         return data_versions
 
-    def get_dataframe_version(self, data, version):
+    def get_dataframe_version(self, data, version, cursor=None):
         """Tries to find a pandas dataframe object corresponding to the data and version"""
+        # set the cursor
+        if cursor is None:
+            cursor = self._cursor
+
         # find if data is in database to begin with
         data_versions = self.find_data(data)
         if data_versions is None:
@@ -290,9 +295,9 @@ class DbHandler:
                     exec_ct = match["exec_ct"]
                     # query local database
                     self.renew_connection()
-                    self._cursor.execute(self.cmds["LINK_CELL"], (exec_ct,))
+                    cursor.execute(self.cmds["LINK_CELL"], (exec_ct,))
                     # list of all 
-                    namespaces = self._cursor.fetchall()
+                    namespaces = cursor.fetchall()
                     if len(namespaces) < 1:
                         return None # there were no namespaces with this exec_ct
                     else:
@@ -548,6 +553,8 @@ class RemoteDbHandler(DbHandler):
         return super().recent_ns(curs=self._local_cursor)
     def link_cell_to_ns(self, exec_ct, contents, cell_time,curs=None):
         return super().link_cell_to_ns(exec_ct, contents, cell_time, curs=self._local_cursor)
+    def get_dataframe_version(self, data, version, cursor=None):
+        return super().get_dataframe_version(data, version, cursor)
 
     def renew_connection(self):
 
