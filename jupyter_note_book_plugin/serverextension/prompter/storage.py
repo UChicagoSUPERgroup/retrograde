@@ -554,8 +554,8 @@ class RemoteDbHandler(DbHandler):
         return super().recent_ns(curs=self._local_cursor)
     def link_cell_to_ns(self, exec_ct, contents, cell_time,curs=None):
         return super().link_cell_to_ns(exec_ct, contents, cell_time, curs=self._local_cursor)
-    def get_dataframe_version(self, data, version, cursor=None):
-        return super().get_dataframe_version(data, version, cursor)
+    def get_dataframe_version(self, data, version, curs=None):
+        return super().get_dataframe_version(data, version, cursor=self._local_cursor)
 
     def renew_connection(self):
 
