@@ -95,10 +95,50 @@ export class Prompter {
       } else if (notice_type == "missing") {
         console.log("making missing data message");
         this._handleMissing(list_of_notes, note_count);
+      } else if (notice_type == "eq_odds") {
+        this._makeEqOdds(list_of_notes, note_count)
       } else {
         console.log("Note type not recognized "+notice_type);
       }
+    }      
+  }
+
+
+  private _makeEqOdds(eqOdds: { [key: string]: any }[], note_count: number) {
+    var note = new PopupNotification("eqOdds", false, "Model Report Note");
+    note.addHeader("Model Report Note")
+    for(var x = 0; x < eqOdds.length; x++) {
+      var model : { [key: string] : any} = eqOdds[x];
+      note.addSubheader("Model " + model["model_name"])
+      var sensitivityLists : any[] = []
+      for(var group in model["error_rates"]) {
+        // var toAppend : any[] = [ group ]
+        sensitivityLists.push(group)
+        for(var correspondingGroup in model["error_rates"][group]) {
+          var precision = model["error_rates"][group][correspondingGroup][0],
+          recall = model["error_rates"][group][correspondingGroup][1],
+          f1score = model["error_rates"][group][correspondingGroup][2],
+          fpr = model["error_rates"][group][correspondingGroup][3],
+          fnr = model["error_rates"][group][correspondingGroup][4]
+          var nextAppend : any[] = [correspondingGroup, [
+            "Precision: " + precision, 
+            "Recall: " + recall, 
+            "F1 Score: " + f1score, 
+            "FPR: " + fpr, 
+            "FNR: " + fnr
+          ]] 
+          sensitivityLists.push(nextAppend)
+        }
+      }
+      note.addList([
+        "Original accuracy: " + Math.floor(1000 * model["acc_orig"]) / 1000,
+        "Sensitive groups:",
+        (sensitivityLists.length == 0) ? ["None"] : sensitivityLists
+      ])
     }
+    // note.addParagraph(JSON.stringify(proxies));
+    var message = note.generateFormattedOutput(global_notification_count, note_count);
+    this._appendNote(message);
   }
 
   private _handleProxies(proxies: { [key: string]: any }[], note_count: number) {
