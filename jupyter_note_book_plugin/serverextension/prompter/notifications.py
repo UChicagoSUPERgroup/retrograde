@@ -531,14 +531,16 @@ class MissingDataNote(ProtectedColumnNote):
         env.log.debug("[MissingDataNote] updated responses")
         self.data = new_data
 
-class EqualizedOddsNote(Notification):
+class ModelReportNote(Notification):
     """
-    A note that takes models trained in the namespace and tries applying
-    the AIF post-processing correction to the model.
+    A notification that, similar to ErrorSliceNote, tests to see if any classifier models
+    that have been trained perform poorly (FPR, FNR, Precision, Recall, F-Score)
+    on certain columns from the original data that may have been excluded from the
+    training set.
     
-    Fomat: {"type" : "eq_odds", "model_name" : <name of model>,
+    Format: {"type" : "model_report", "model_name" : <name of model>,
             "acc_orig" : <original training acc>,
-            "groups" : <the group the metric is equalized w.r.t.>,
+            "groups" : <the group the metric is checked w.r.t.>,
             "error_rates" : <dict of groups with error rates separated by member (another dict)>,
             "k_highest_error_rates" : <dict of groups with highest error rates>
             }
@@ -587,7 +589,7 @@ class EqualizedOddsNote(Notification):
             match_name, match_cols, match_indexer = search_for_sensitive_cols(models_with_dfs[model_name]["x"], model_name, defined_dfs)
             if not match_name:
                 continue
-            env.log.debug("[EqOddsNote] model {0} has match {1}, additional info: {2}".format(model_name, match_name, models_with_dfs[model_name]))
+            env.log.debug("[ModelReportNote] model {0} has match {1}, additional info: {2}".format(model_name, match_name, models_with_dfs[model_name]))
             aligned_models[model_name] = models_with_dfs[model_name]
             df_name = models_with_dfs[model_name]["x_name"]
             aligned_models[model_name]["match"] = {"cols" : match_cols, 
@@ -615,7 +617,7 @@ class EqualizedOddsNote(Notification):
         # ancestor_df_name, ancestor_df_version = ancestor_list[0]
         # old ^
 
-        # env.log.debug("[EqOdds] Ancestors found for {0}".format(env.ancestors.keys()))
+        # env.log.debug("[ModelReport] Ancestors found for {0}".format(env.ancestors.keys()))
 
         ancestor_df_version = -1
         for a_name, a_version in env.ancestors.keys():
@@ -639,8 +641,8 @@ class EqualizedOddsNote(Notification):
             ancestor_df = None
 
         if not isinstance(ancestor_df, pd.DataFrame):
-            env.log.error("[EqOdds] get_dataframe_version did not find an ancestor_df.")
-            env.log.debug("[EqOdds] data {0} and data version {1}".format(data, ancestor_df_version))
+            env.log.error("[ModelReport] get_dataframe_version did not find an ancestor_df.")
+            env.log.debug("[ModelReport] data {0} and data version {1}".format(data, ancestor_df_version))
 
             return None
         ###### error handling
@@ -694,10 +696,10 @@ class EqualizedOddsNote(Notification):
         """
         error_rates_by_member = {} 
 
-        env.log.debug("[EqOdds] prot_group: {0}".format(prot_group))
+        env.log.debug("[ModelReport] prot_group: {0}".format(prot_group))
         if prot_group in df.columns:
             group_col = df[prot_group]
-            env.log.debug("[EqOdds] df datatypes: {0}".format(df.dtypes))
+            env.log.debug("[ModelReport] df datatypes: {0}".format(df.dtypes))
 
             # if binary
             shape = group_col.unique().shape[0]
@@ -716,7 +718,7 @@ class EqualizedOddsNote(Notification):
                 # try:
                 error_rates_by_member[prot_group] = error_rates(*acc_measures(y_true_member, y_pred_member))
                 # except ZeroDivisionError as e:
-                #     env.log.error("[EqOdds] Error for binary protected group {0}\nError: {1}\nlen(y_true)={2},len(y_pred)={3}".format(prot_group, e, len(y_true_member), len(y_pred_member)))
+                #     env.log.error("[ModelReport] Error for binary protected group {0}\nError: {1}\nlen(y_true)={2},len(y_pred)={3}".format(prot_group, e, len(y_true_member), len(y_pred_member)))
             # elif categorical
             elif shape > 2 and (is_unsigned_integer_dtype(type) or is_integer_dtype(type) or is_signed_integer_dtype(type)):
                 # do categorical
@@ -743,17 +745,17 @@ class EqualizedOddsNote(Notification):
                     # try:
                     error_rates_by_member[member] = error_rates(*acc_measures(y_true_member, y_pred_member))
                     # except ValueError as e:
-                        # env.log.error("[EqOdds] ValueError for member {0} in group {1}\nError: {2}".format(member, prot_group, e))
+                        # env.log.error("[ModelReport] ValueError for member {0} in group {1}\nError: {2}".format(member, prot_group, e))
             # elif ordered numeric
             elif shape > 2 and is_numeric_dtype(type):
                 # do numeric (ordered)
                 # TODO: make ranges of numeric values
                 pass
             else:
-                env.log.error("[EqOdds] Group column is not binary, categorical or numeric. Cannot compute error rates.")
+                env.log.error("[ModelReport] Group column is not binary, categorical or numeric. Cannot compute error rates.")
                 return {}
         else:
-            env.log.error("[EqOdds] prot_group: {0} not in df: {1}".format(prot_group, df.columns))
+            env.log.error("[ModelReport] prot_group: {0} not in df: {1}".format(prot_group, df.columns))
         return error_rates_by_member
     
     def sort_error_rates(self, error_rates_by_group):
@@ -781,13 +783,13 @@ class EqualizedOddsNote(Notification):
         """
         all_error_rates = {} # {group_name : error_rates_by_member}
         for group in col_names: # list of columns identified as protected by search_for_sensitive_cols
-            # env.log.debug("[EqOdds] model_name: {0}".format(model_name))
+            # env.log.debug("[ModelReport] model_name: {0}".format(model_name))
             group_error_rates = self.group_based_error_rates(env, group, x_parent_df, y, preds)
             if group_error_rates: 
                 # log the error rates
                 for member in group_error_rates:
                     precision, recall, f1score, fpr, fnr = group_error_rates[member]
-                    env.log.debug("[EqOddsNote] has computed these error rates for member, {4}, in group:{0}\nPrecision: {1:.4g}\nRecall: {2:.4g}\nF1Score: {3:.4g}\nFalse Positive Rate: {5:.4g}\nFalse Negative Rate: {6:.4g}"\
+                    env.log.debug("[ModelReportNote] has computed these error rates for member, {4}, in group:{0}\nPrecision: {1:.4g}\nRecall: {2:.4g}\nF1Score: {3:.4g}\nFalse Positive Rate: {5:.4g}\nFalse Negative Rate: {6:.4g}"\
                                     .format(group, precision, recall, f1score, member, fpr, fnr))
                 # save them
                 all_error_rates[group] = group_error_rates
@@ -800,11 +802,11 @@ class EqualizedOddsNote(Notification):
         # pylint: disable=too-many-locals,too-many-statements
         super().make_response(env, kernel_id, cell_id)
 
-        env.log.debug("[EqOddsNote] has received a request to make a response")
+        env.log.debug("[ModelReportNote] has received a request to make a response")
         
         # Q?: why random choice?
         model_name = choice(list(self.aligned_models.keys()))
-        resp = {"type" : "eq_odds", "model_name" : model_name}
+        resp = {"type" : "model_report", "model_name" : model_name}
 
 
         X = self.aligned_models[model_name]["x"]
@@ -819,12 +821,12 @@ class EqualizedOddsNote(Notification):
         self.aligned_models[model_name]["match"]["x_ancestor"] = self.get_ancestor_data(env, curr_df_name, kernel_id)
         if isinstance(self.aligned_models[model_name]["match"]["x_ancestor"], pd.DataFrame):
             x_ancestor = self.aligned_models[model_name]["match"]["x_ancestor"]
-            env.log.debug("[EqOddsNote] has found an ancestor of type:", 
+            env.log.debug("[ModelReportNote] has found an ancestor of type:", 
                             type(self.aligned_models[model_name]["match"]["x_ancestor"]))
-            env.log.debug("[EqOddsNote] has found an ancestor df", 
+            env.log.debug("[ModelReportNote] has found an ancestor df", 
                             x_ancestor.columns, x_ancestor.shape)
         else:
-            env.log.error("[EqOddsNote] ancestors not found")
+            env.log.error("[ModelReportNote] ancestors not found")
             return
 
 
@@ -841,10 +843,10 @@ class EqualizedOddsNote(Notification):
         # Find error rates for protected groups
         if prot_cols is None: 
             # exit? nothing to do if no groups
-            env.log.debug("[EqOddsNote] has no groups to compute error rates for")
+            env.log.debug("[ModelReportNote] has no groups to compute error rates for")
             return
         else:
-            # env.log.debug("[EqOddsNote] df_name: {0}".format(df_name))
+            # env.log.debug("[ModelReportNote] df_name: {0}".format(df_name))
             sorted_error_rates, k_highest_rates = self.get_sorted_k_highest_error_rates(env, 
                                                                                         prot_col_names, 
                                                                                         model_name, 
@@ -857,7 +859,7 @@ class EqualizedOddsNote(Notification):
         resp["error_rates"] = sorted_error_rates
         resp["k_highest_rates"] = k_highest_rates
 
-        env.log.debug("[EqOddsNote] response is \n{0}".format(resp))
+        env.log.debug("[ModelReportNote] response is \n{0}".format(resp))
 
         if resp["model_name"] not in self.columns:
             self.columns[resp["model_name"]] = {cell_id : (X,y)}
@@ -872,7 +874,7 @@ class EqualizedOddsNote(Notification):
     def update(self, env, kernel_id, cell_id, dfs, ns):
         """
         Check if model is still defined, if not, remove note
-        If model is still defined, recalculate EqOdds correction for grp
+        If model is still defined, recalculate ModelReport correction for grp
         """
         # pylint: disable=too-many-locals,too-many-arguments
         ns = self.db.recent_ns()
