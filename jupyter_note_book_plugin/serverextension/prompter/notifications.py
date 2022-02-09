@@ -6,7 +6,6 @@ These are the classes that handle detecting when a notification may be
 sent, what its response is composed of, and updating response contents
 when relevant
 """
-import json
 from random import choice
 
 import math
@@ -606,19 +605,6 @@ class ModelReportNote(Notification):
         """
         Gets the ancestor's dataframe object with correct version
         """
-        # ancestor_df_name = ancestor_df_dict["name"] # *check if* this or just the .keys()[0] 
-        # ancestor_df_version = ancestor_df_dict["version"] 
-        # curr_df_version = -1
-        # for df_tup in ancestor_df_dict.keys():
-        #     df_name, df_version = df_tup
-        #     if df_name == curr_df_name and df_version > curr_df_version:
-        #         curr_df_version = df_version
-        # ancestor_list = ancestor_df_dict.sort(key=lambda a: a[1], reverse=True) # highest version at front
-        # ancestor_df_name, ancestor_df_version = ancestor_list[0]
-        # old ^
-
-        # env.log.debug("[ModelReport] Ancestors found for {0}".format(env.ancestors.keys()))
-
         ancestor_df_version = -1
         for a_name, a_version in env.ancestors.keys():
             if a_name == curr_df_name and a_version > ancestor_df_version:
@@ -652,42 +638,6 @@ class ModelReportNote(Notification):
         prot_cols = [ancestor_df[p["original_name"]] for p in prot_cols]
         prot_col_names = [col.name for col in prot_cols]
         return prot_col_names, prot_cols
-    """
-    def align_ancestor_data(self, env, df): # can remove all of this 
-        \"""
-        Align ancestor data to the current dataframe.
-        \"""
-        # get the ancestor data
-        ancestors = env.get_ancestors(df) # returns list of [(ancestor_df_name, ancestor_version)]
-        
-        ancestor_dfs = {} # dict of (ancestor_df_name, ancestor_version) : ancestor_df
-        protected_ancestors = []
-        for a in ancestors:
-            ancestor_df_name = a[0]
-            ancestor_version = a[1]
-
-            # find the appropriate namespace based on ancestor_version
-            # TODO: Replace with get_df_version
-            ancestor_ns = self.db.link_cell_to_ns(ancestor_version, None, cell_time=-99999) # TODO: find where cell_time is or use a different function
-
-
-            if ancestor_ns:
-                ancestor_df = ancestor_ns[ancestor_df_name]
-                ancestor_dfs[a] = ancestor_df
-                # TODO: separate this search for protected ancestors to another step
-                protected_ancestors.append((search_for_sensitive_cols(ancestor_df, ancestor_df_name, ancestor_ns)), ancestor_version)
-                # we want protected ancestors to have (df name, exec_ct)
-            
-            
-        protected_ancestors.sort(key=lambda x: x[1]) # sort by exec_ct we want the earliest first
-        for prot_ancestor, prot_ancestor_version in protected_ancestors:
-            p_a_name, p_a_cols, p_a_indexer = prot_ancestor
-            matched = make_align(df.index, p_a_cols.index) # align indices from df to prot_ancestor
-            if matched:
-                matched_vals = p_a_cols.loc[matched["values"]]
-                return matched, matched_vals
-        return None
-    """
     def group_based_error_rates(self, env, prot_group, df, y_true, y_pred):
         """
         Compute precision, recall and f1score for a protected group in the df
@@ -813,9 +763,6 @@ class ModelReportNote(Notification):
         y = self.aligned_models[model_name]["y"]
         model = self.aligned_models[model_name]["model"]
 
-        # match_cols = self.aligned_models[model_name]["match"]["cols"]
-        # match_indexer = self.aligned_models[model_name]["match"]["indexer"]
-        # x_parent_df = self.aligned_models[model_name]["match"]["x_parent"] 
         curr_df_name = self.aligned_models[model_name]["x_name"]
         # get ancestor df here 
         self.aligned_models[model_name]["match"]["x_ancestor"] = self.get_ancestor_data(env, curr_df_name, kernel_id)
@@ -829,17 +776,12 @@ class ModelReportNote(Notification):
             env.log.error("[ModelReportNote] ancestors not found")
             return
 
-
-        # col_names = [col.name for col in match_cols]
-        # match_cols = [bin_col(col) for col in match_cols]
         # get acc_orig on indexed/subsetted df
         acc_orig = model.score(X, y)
         orig_preds = model.predict(X)
         orig_preds = pd.Series(orig_preds, index=X.index)
 
         prot_col_names, prot_cols = self.get_ancestor_prot_info(x_ancestor)
-        # or
-        # prot_col_names, prot_cols, _ = search_for_sensitive_cols(x_ancestor, df_name_to_match, df_ns)   
         # Find error rates for protected groups
         if prot_cols is None: 
             # exit? nothing to do if no groups
@@ -914,8 +856,6 @@ class ModelReportNote(Notification):
             self.aligned_models[model_name]["match"]["x_ancestor"] = self.get_ancestor_data(env, curr_df_name, kernel_id)
             x_ancestor = self.aligned_models[model_name]["match"]["x_ancestor"]
             groups, _ = self.get_ancestor_prot_info(x_ancestor)
-            # error_rates = resp["error_rates"]
-            # k_highest_error_rates = resp["k_highest_error_rates"]
             new_preds = model.predict(X)
             new_preds = pd.Series(new_preds, index=X.index)
             new_acc = model.score(X, y)
