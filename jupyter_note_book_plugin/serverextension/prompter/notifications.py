@@ -975,6 +975,46 @@ class ErrorSliceNote(Notification):
 
         env.log.debug("[ErrorSliceNote] updated responses")
         # self.data = new_data # removed until update is processed, as this overwrites notes.
+    def _write_slices(self, model, slices, pos_val, neg_val):
+        """write to key = model, the information about slices"""
+        if model not in self.data:
+            self.data[model] = []
+        for slice_data in slices:
+            slice_data["model_name"]  = model
+            slice_data["pos_value"] = str(pos_val)
+            slice_data["neg_value"] = str(neg_val)
+            slice_data["type"] = "error"
+            slice_data["slice"] = [(sl[0], str(sl[1])) for sl in slice_data["slice"]]
+            slice_data["n"] = int(slice_data["n"])
+
+            self.data[model].append(slice_data)
+
+    def _make_slices(self, model_data, env):
+        """return slice list"""
+        # pylint: disable=no-self-use
+        pos_val = model_data["model"].classes_[0]
+        neg_val = model_data["model"].classes_[1]
+        true = (model_data["y"] == pos_val)
+        predictions = model_data["model"].predict(model_data["x_parent"])
+        preds = ( predictions == pos_val)
+        slices = err_slices(model_data["x_parent"], preds, true, env)
+
+        return slices, pos_val, neg_val
+
+def align_index(obj, values, locs):
+    """given a list of index values or row indices, get subset of obj's rows"""
+    if isinstance(obj, (pd.Series, pd.DataFrame)):
+        if len(obj.index.intersection(values)) > 0:
+            if len(obj.shape) == 1:
+                return obj.loc[values]
+            return obj.loc[values,:]
+        # then no intersection, try to use locations
+        if len(obj.shape) == 1:
+            return obj.iloc[locs]
+        return obj.iloc[locs,:]
+    # then it's either a list or an np array
+    return np.take(obj, locs)
+
 def error_rates(tp, fp, tn, fn):
     """Returns precision, recall, f1score, false positive rate and false negative rate """
     if tp < 0:
@@ -1031,46 +1071,6 @@ def acc_measures(y_true, y_pred):
             else:
                 fp += 1
     return tp, fp, tn, fn
-    def _write_slices(self, model, slices, pos_val, neg_val):
-        """write to key = model, the information about slices"""
-        if model not in self.data:
-            self.data[model] = []
-        for slice_data in slices:
-            slice_data["model_name"]  = model
-            slice_data["pos_value"] = str(pos_val)
-            slice_data["neg_value"] = str(neg_val)
-            slice_data["type"] = "error"
-            slice_data["slice"] = [(sl[0], str(sl[1])) for sl in slice_data["slice"]]
-            slice_data["n"] = int(slice_data["n"])
-
-            self.data[model].append(slice_data)
-
-    def _make_slices(self, model_data, env):
-        """return slice list"""
-        # pylint: disable=no-self-use
-        pos_val = model_data["model"].classes_[0]
-        neg_val = model_data["model"].classes_[1]
-        true = (model_data["y"] == pos_val)
-        predictions = model_data["model"].predict(model_data["x_parent"])
-        preds = ( predictions == pos_val)
-        slices = err_slices(model_data["x_parent"], preds, true, env)
-
-        return slices, pos_val, neg_val
-
-def align_index(obj, values, locs):
-    """given a list of index values or row indices, get subset of obj's rows"""
-    if isinstance(obj, (pd.Series, pd.DataFrame)):
-        if len(obj.index.intersection(values)) > 0:
-            if len(obj.shape) == 1:
-                return obj.loc[values]
-            return obj.loc[values,:]
-        # then no intersection, try to use locations
-        if len(obj.shape) == 1:
-            return obj.iloc[locs]
-        return obj.iloc[locs,:]
-    # then it's either a list or an np array
-    return np.take(obj, locs)
-
 def make_align(index, other_index):
     """
     Return array of row indices so that df[index] will be a subset of rows of other_index
