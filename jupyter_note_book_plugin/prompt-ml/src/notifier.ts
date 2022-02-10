@@ -109,17 +109,36 @@ export class Prompter {
     note.addHeader("Model Report Note")
     for(var x = 0; x < eqOdds.length; x++) {
       var model : { [key: string] : any} = eqOdds[x];
-      note.addSubheader("Model " + model["model_name"])
+      // Name and accuracy to the first decimal place (i.e. 10.3%)
+      note.addSubheader("Model " + model["model_name"] + " (" + (Math.floor(1000 * model["acc_orig"]) / 10) + "% accuracy)")
       var sensitivityLists : any[] = []
+      // Iterates over error rates and creates nested arrays for a bulleted list
+      // i.e.
+      // [
+      //    <parent group name>: [
+      //        <nested group name> : [
+      //          "Precision: <precision score>",
+      //          "Recall: <recall score"
+      //        ],
+      //        <second nested group name : [...],
+      //    ],
+      //    <second parent group name: [...],
+      //    ...
+      // ]
       for(var group in model["error_rates"]) {
-        // var toAppend : any[] = [ group ]
         sensitivityLists.push(group)
         for(var correspondingGroup in model["error_rates"][group]) {
-          var precision = model["error_rates"][group][correspondingGroup][0],
-          recall = model["error_rates"][group][correspondingGroup][1],
-          f1score = model["error_rates"][group][correspondingGroup][2],
-          fpr = model["error_rates"][group][correspondingGroup][3],
-          fnr = model["error_rates"][group][correspondingGroup][4]
+          var thisGroup = model["error_rates"][group][correspondingGroup]
+          // Round to 3 decimal places
+          // To do: dedicated rounding method / global rounding config setting
+          for(var x = 0; x < thisGroup.length; x++)
+            thisGroup[x] = Math.floor(model["error_rates"][group][correspondingGroup][x] * 1000) / 1000
+          // Backend sends information in a static, predefined order
+          var precision = thisGroup[0],
+          recall = thisGroup[1],
+          f1score = thisGroup[2],
+          fpr = thisGroup[3],
+          fnr = thisGroup[4]
           var nextAppend : any[] = [correspondingGroup, [
             "Precision: " + precision, 
             "Recall: " + recall, 
@@ -130,13 +149,11 @@ export class Prompter {
           sensitivityLists.push(nextAppend)
         }
       }
-      note.addList([
-        "Original accuracy: " + Math.floor(1000 * model["acc_orig"]) / 1000,
-        "Sensitive groups:",
-        (sensitivityLists.length == 0) ? ["None"] : sensitivityLists
-      ])
+      // Attaching the data to the note itself
+      note.addParagraph("Sensitive groups:")
+      note.addList((sensitivityLists.length == 0) ? ["None"] : sensitivityLists)
     }
-    // note.addParagraph(JSON.stringify(proxies));
+    // Send to the Jupyterlab interface to render
     var message = note.generateFormattedOutput(global_notification_count, note_count);
     this._appendNote(message);
   }
