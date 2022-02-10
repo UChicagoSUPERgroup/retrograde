@@ -594,7 +594,8 @@ class ModelReportNote(Notification):
             aligned_models[model_name]["match"] = {"cols" : match_cols, 
                                                    "indexer" : match_indexer,
                                                    "name" : match_name,
-                                                   "x_ancestor" : None}
+                                                   "x_ancestor" : None,
+                                                   "x_ancestor_name" : None}
             # self.aligned_ancestors = self.align_ancestor_data(env, aligned_models[model_name]["x"])
         if len(aligned_models) > 0:
             self.aligned_models = aligned_models
@@ -632,12 +633,12 @@ class ModelReportNote(Notification):
 
             return None
         ###### error handling
-        return ancestor_df
+        return ancestor_df, ancestor_df_name
     def get_ancestor_prot_info(self, ancestor_df):
-        prot_cols = check_for_protected(ancestor_df.columns)
-        prot_cols = [ancestor_df[p["original_name"]] for p in prot_cols]
-        prot_col_names = [col.name for col in prot_cols]
-        return prot_col_names, prot_cols
+        prot_cols = guess_protected(ancestor_df)
+        prot_col_names = [col["original_name"] for col in prot_cols]
+        prot_cols_df = [ancestor_df[col] for col in prot_col_names]
+        return prot_col_names, prot_cols_df
     def group_based_error_rates(self, env, prot_group, df, y_true, y_pred):
         """
         Compute precision, recall and f1score for a protected group in the df
@@ -649,7 +650,7 @@ class ModelReportNote(Notification):
         env.log.debug("[ModelReport] prot_group: {0}".format(prot_group))
         if prot_group in df.columns:
             group_col = df[prot_group]
-            env.log.debug("[ModelReport] df datatypes: {0}".format(df.dtypes))
+            env.log.debug("[ModelReport] prot_group datatypes: {0}".format(group_col.dtypes))
 
             # if binary
             shape = group_col.unique().shape[0]
@@ -733,16 +734,17 @@ class ModelReportNote(Notification):
         """
         all_error_rates = {} # {group_name : error_rates_by_member}
         for group in col_names: # list of columns identified as protected by search_for_sensitive_cols
-            # env.log.debug("[ModelReport] model_name: {0}".format(model_name))
             group_error_rates = self.group_based_error_rates(env, group, x_parent_df, y, preds)
             if group_error_rates: 
                 # log the error rates
                 for member in group_error_rates:
                     precision, recall, f1score, fpr, fnr = group_error_rates[member]
-                    env.log.debug("[ModelReportNote] has computed these error rates for member, {4}, in group:{0}\nPrecision: {1:.4g}\nRecall: {2:.4g}\nF1Score: {3:.4g}\nFalse Positive Rate: {5:.4g}\nFalse Negative Rate: {6:.4g}"\
+                    env.log.debug("[ModelReportNote] has computed these error rates for member, {4}, in group: {0}\nPrecision: {1:.4g}\nRecall: {2:.4g}\nF1Score: {3:.4g}\nFalse Positive Rate: {5:.4g}\nFalse Negative Rate: {6:.4g}"\
                                     .format(group, precision, recall, f1score, member, fpr, fnr))
                 # save them
                 all_error_rates[group] = group_error_rates
+            else:
+                env.log.debug("[ModelReportNote] has failed to compute error ratees for this group: {0}".format(group))
         sorted_error_rates = self.sort_error_rates(all_error_rates)
         # sort most important k error_rates (this is relative, no normative judgment here)
         k_highest_rates = {key: val for n, (key, val) in enumerate(sorted_error_rates.items()) if n < self.k}
@@ -765,13 +767,16 @@ class ModelReportNote(Notification):
 
         curr_df_name = self.aligned_models[model_name]["x_name"]
         # get ancestor df here 
-        self.aligned_models[model_name]["match"]["x_ancestor"] = self.get_ancestor_data(env, curr_df_name, kernel_id)
+        self.aligned_models[model_name]["match"]["x_ancestor"], \
+            self.aligned_models[model_name]["match"]["x_ancestor_name"] \
+                = self.get_ancestor_data(env, curr_df_name, kernel_id)
         if isinstance(self.aligned_models[model_name]["match"]["x_ancestor"], pd.DataFrame):
             x_ancestor = self.aligned_models[model_name]["match"]["x_ancestor"]
-            env.log.debug("[ModelReportNote] has found an ancestor of type:", 
-                            type(self.aligned_models[model_name]["match"]["x_ancestor"]))
-            env.log.debug("[ModelReportNote] has found an ancestor df", 
-                            x_ancestor.columns, x_ancestor.shape)
+            x_ancestor_name = self.aligned_models[model_name]["match"]["x_ancestor"]
+            # env.log.debug("[ModelReportNote] has found an ancestor of type: {0}".format( 
+            #                 type(self.aligned_models[model_name]["match"]["x_ancestor"])))
+            env.log.debug("[ModelReportNote] has found an ancestor df. shape: {1}, cols: {0}".format(
+                            x_ancestor.columns, x_ancestor.shape))
         else:
             env.log.error("[ModelReportNote] ancestors not found")
             return
@@ -783,12 +788,13 @@ class ModelReportNote(Notification):
 
         prot_col_names, prot_cols = self.get_ancestor_prot_info(x_ancestor)
         # Find error rates for protected groups
-        if prot_cols is None: 
+        if prot_col_names is None or len(prot_col_names) == 0: 
             # exit? nothing to do if no groups
             env.log.debug("[ModelReportNote] has no groups to compute error rates for")
             return
         else:
-            # env.log.debug("[ModelReportNote] df_name: {0}".format(df_name))
+            env.log.debug("[ModelReportNote] (make_response) is retrieving error rates for these columns: {0}."
+                .format(prot_col_names))
             sorted_error_rates, k_highest_rates = self.get_sorted_k_highest_error_rates(env, 
                                                                                         prot_col_names, 
                                                                                         model_name, 
@@ -847,27 +853,41 @@ class ModelReportNote(Notification):
 
         for resp in live_resps:
             # TODO: Might be helpful to show a diff? or at least just show the last result so the user can see what has changed
+            # TODO: Implement a check if different than previous probably
             X,y = self.columns[resp["model_name"]][cell_id]
             model_name = resp["model_name"]
             model = non_dfs_ns[model_name]
             # groups = resp["groups"]
             curr_df_name = self.aligned_models[model_name]["x_name"]
             # get ancestor df here 
-            self.aligned_models[model_name]["match"]["x_ancestor"] = self.get_ancestor_data(env, curr_df_name, kernel_id)
+            self.aligned_models[model_name]["match"]["x_ancestor"], \
+                self.aligned_models[model_name]["match"]["x_ancestor_name"] \
+                    = self.get_ancestor_data(env, curr_df_name, kernel_id)
             x_ancestor = self.aligned_models[model_name]["match"]["x_ancestor"]
-            groups, _ = self.get_ancestor_prot_info(x_ancestor)
+            prot_col_names, prot_cols = self.get_ancestor_prot_info(x_ancestor)
             new_preds = model.predict(X)
             new_preds = pd.Series(new_preds, index=X.index)
             new_acc = model.score(X, y)
-            sorted_error_rates, k_highest_error_rates = self.get_sorted_k_highest_error_rates(env, 
-                                                                                              groups, 
+
+            if prot_cols is None: 
+                # exit? nothing to do if no groups
+                env.log.debug("[ModelReportNote] has no groups to compute error rates for")
+                return
+            else:
+                env.log.debug("[ModelReportNote] (update) is retrieving error rates for these columns: {0}."
+                    .format(prot_col_names))    
+                sorted_error_rates, k_highest_error_rates = self.get_sorted_k_highest_error_rates(env, 
+                                                                                              prot_col_names, 
                                                                                               model_name, 
                                                                                               x_ancestor, 
                                                                                               X, y, 
                                                                                               new_preds)
             resp["acc_orig"] = new_acc
+            resp["groups"] = prot_col_names
             resp["error_rates"] = sorted_error_rates
             resp["k_highest_error_rates"] = k_highest_error_rates
+
+            env.log.debug("[ModelReportNote] response is \n{0}".format(resp))
 
 
         # remember to clean up non-live elements of self.columns
