@@ -117,7 +117,7 @@ class ProtectedColumnNote(Notification):
 
         for df_name in self.df_protected_cols:
 
-            resp = self._make_resp_entry(df_name)
+            resp = self._make_resp_entry(df_name, env)
             if len(resp["columns"]) == 0:
                 continue
 
@@ -131,17 +131,40 @@ class ProtectedColumnNote(Notification):
                                                     "user_specified" : False, "fields" : col_info["field"]}
         self.db.update_marked_columns(kernel_id, input_data)
 
-    def _make_resp_entry(self, df_name):
+    def _make_resp_entry(self, df_name, env):
 
         resp = {"type" : "resemble"}
         resp["df"] = df_name
 
         resp["columns"] = {}
 
+        # Grab user-defined columns and puts them in a usable structure
+        # format:
+        # most_recent_cols[<df names>][<col names>] = {"user_specified": ..., "fields":..., etc.}
+        most_recent_cols_from_db = self.db.get_recent_cols(env._kernel_id)
+        most_recent_cols = {}
+        for db_record in most_recent_cols_from_db:
+            if db_record["name"] not in most_recent_cols:
+                most_recent_cols[db_record["name"]] = {}
+            most_recent_cols[db_record["name"]][db_record["col_name"]] = {
+                "sensitive": db_record["is_sensitive"] == 1,
+                "user_specified" : db_record["user_specified"] == 1, "field" : db_record["fields"]
+            }
+
+        # original part of the function; given the columns within a dataframe, it updates whether they
+        # are sensitive or not and their fields
         for col in self.df_protected_cols[df_name]:
-            resp["columns"][col["original_name"]] = {"sensitive" : True, "field" : col["protected_value"]}
+            resp["columns"][col["original_name"]] = {"user_specified": False, "sensitive" : True, "field" : col["protected_value"]}
         for col in self.df_not_protected_cols[df_name]:
-            resp["columns"][col] = {"sensitive" : False, "field" : None}
+            resp["columns"][col] = {"user_specified": False, "sensitive" : False, "field" : None}
+
+        # compares old data to determine if any needs to be overwritten (ignore auto classification)
+        # if self.protected_columns has this column, override it with the data that the user entered
+        if df_name in most_recent_cols:
+                for col_name, old_col_info in most_recent_cols[df_name].items():
+                    if old_col_info["user_specified"]:
+                        if col_name in resp["columns"]:
+                            resp["columns"][col_name] = old_col_info
         return resp
 
     def update(self, env, kernel_id, cell_id, dfs, ns):
@@ -161,15 +184,18 @@ class ProtectedColumnNote(Notification):
         update_data = {}
         new_df_names = list(self.df_protected_cols.keys())
 
-        for df_name, note_list in self.data.items():
+
+        for df_name, old_protected_columns in self.data.items():
 
             if df_name not in dfs:
                 continue
             if df_name in new_df_names: # if df is in here, then note was *just* generated
-                new_data[df_name] = note_list
+                new_data[df_name] = old_protected_columns
                 continue
 
-            protected_cols = guess_protected(dfs[df_name])
+            # check columns AND values
+            protected_cols = check_for_protected(dfs[df_name].columns)
+            protected_cols.extend(guess_protected(dfs[df_name]))
             self.df_protected_cols[df_name] = protected_cols
             protected_col_names = [col["original_name"] for col in protected_cols]
             self.df_not_protected_cols[df_name] = [col for col in dfs[df_name].columns if col not in protected_col_names]
@@ -177,13 +203,13 @@ class ProtectedColumnNote(Notification):
             env.log.debug("[ProtectedColumnNote] protected columns {0}".format(self.df_protected_cols[df_name]))
             env.log.debug("[ProtectedColumnNote] not protected columns {0}".format(self.df_not_protected_cols[df_name]))
 
-            new_data[df_name] = [self._make_resp_entry(df_name)]
+            new_data[df_name] = [self._make_resp_entry(df_name, env)]
             # TODO: for some reason, on this call, the not_protected columns are not being sent
             update_data[df_name] = {}
 
             for col_name, col_info in new_data[df_name][0]["columns"].items():
                 update_data[df_name][col_name] = {"is_sensitive": col_info["sensitive"],
-                                                  "user_specified" : False, "fields" : col_info["field"]}
+                                                  "user_specified" : col_info["user_specified"], "fields" : col_info["field"]}
 
         self.db.update_marked_columns(kernel_id, update_data)
 
