@@ -605,13 +605,15 @@ class ModelReportNote(Notification):
     def get_ancestor_data(self, env, curr_df_name, kernel_id):
         """
         Gets the ancestor's dataframe object with correct version
+        Returns :
+            ancestor_df : dataframe object
+            ancestor_df_name : string name of dataframe in notebook
         """
-        ancestor_df_version = -1
-        for a_name, a_version in env.ancestors.keys():
-            if a_name == curr_df_name and a_version > ancestor_df_version:
-                ancestor_df_name = a_name
-                ancestor_df_version = a_version
-        # ancestor_df_name, ancestor_df_version = env.ancestors[curr_df_name]
+        env.log.debug("[ModelReport] has env.ancestors = {0}".format(env.ancestors))
+        for child_name, child_version in env.ancestors.keys(): # iterate because we don't know version yet
+            if child_name == curr_df_name:
+                ancestor_set = env.ancestors[child_name, child_version]
+        ancestor_df_name, ancestor_df_version = max(ancestor_set, key=lambda x:x[1]) # return highest version (most recent)
         # first param of below is expecting dict
         # of { "name" : df_name,
         #      "kernel" : kernel_id
@@ -620,6 +622,7 @@ class ModelReportNote(Notification):
             "name" : ancestor_df_name,
             "kernel" : kernel_id
         }
+        env.log.debug("[ModelReport] looking for {0}".format(data))
 
         ###### error handling
         try:
@@ -630,10 +633,12 @@ class ModelReportNote(Notification):
         if not isinstance(ancestor_df, pd.DataFrame):
             env.log.error("[ModelReport] get_dataframe_version did not find an ancestor_df.")
             env.log.debug("[ModelReport] data {0} and data version {1}".format(data, ancestor_df_version))
-
             return None
+
+        env.log.debug("[ModelReport] found df: {0} with columns {1}".format(ancestor_df_name, ancestor_df.columns))
         ###### error handling
         return ancestor_df, ancestor_df_name
+        
     def get_ancestor_prot_info(self, ancestor_df):
         prot_cols = guess_protected(ancestor_df)
         prot_col_names = [col["original_name"] for col in prot_cols]
@@ -653,9 +658,9 @@ class ModelReportNote(Notification):
             env.log.debug("[ModelReport] prot_group datatypes: {0}".format(group_col.dtypes))
 
             # if binary
-            shape = group_col.unique().shape[0]
-            type = group_col.dtype
-            if shape <= 2:
+            unique_values = group_col.unique().shape[0]
+            dtype = group_col.dtype
+            if unique_values <= 2:
                 # do binary
                 mask = group_col == 1
                 if not isinstance(y_true, pd.Series):
@@ -671,11 +676,12 @@ class ModelReportNote(Notification):
                 # except ZeroDivisionError as e:
                 #     env.log.error("[ModelReport] Error for binary protected group {0}\nError: {1}\nlen(y_true)={2},len(y_pred)={3}".format(prot_group, e, len(y_true_member), len(y_pred_member)))
             # elif categorical
-            elif shape > 2 and (is_unsigned_integer_dtype(type) or is_integer_dtype(type) or is_signed_integer_dtype(type)):
+            elif unique_values > 2 and (is_unsigned_integer_dtype(dtype) or is_integer_dtype(dtype) or is_signed_integer_dtype(dtype)):
                 # do categorical
                 for member in group_col.unique():
                     # boolean masking
                     member_mask = group_col == member
+                    member = int(member)
                     if isinstance(y_true, (pd.Series, pd.DataFrame)):
                         # y_true_member = y_true[member_indices]
                         y_true_member = y_true.where(member_mask).dropna()
@@ -698,7 +704,7 @@ class ModelReportNote(Notification):
                     # except ValueError as e:
                         # env.log.error("[ModelReport] ValueError for member {0} in group {1}\nError: {2}".format(member, prot_group, e))
             # elif ordered numeric
-            elif shape > 2 and is_numeric_dtype(type):
+            elif unique_values > 2 and is_numeric_dtype(type):
                 # do numeric (ordered)
                 # TODO: make ranges of numeric values
                 pass
@@ -1044,7 +1050,7 @@ def error_rates(tp, fp, tn, fn):
     except ZeroDivisionError:
         fnr = 0
 
-    return precision, recall, f1score, fpr, fnr
+    return float(precision), float(recall), float(f1score), float(fpr), float(fnr)
 
 def acc_measures(y_true, y_pred):
     """
