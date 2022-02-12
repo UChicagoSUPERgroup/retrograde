@@ -202,11 +202,11 @@ export class Prompter {
         ([columnName, relationships]) => {
           const predictiveFeatures =
             relationships.predictive.length > 0
-              ? relationships.predictive.join(" ")
+              ? relationships.predictive.join(", ")
               : " ";
           const correlatedFeatures =
             relationships.correlated.length > 0
-              ? relationships.correlated.join(" ")
+              ? relationships.correlated.join(", ")
               : " ";
           return `
           <tbody>
@@ -221,7 +221,7 @@ export class Prompter {
       );
 
       const fullTable = $.parseHTML(
-        `<div class="proxy-columns-table"><table>${tableHeader}${tableEntries}</table></div>`
+        `<div class="proxy-columns-table"><table>${tableHeader}${tableEntries.join("")}</table></div>`
       );
       const fullTableHtmlElement = fullTable[0] as any as HTMLElement;
       note.addRawHtmlElement(fullTableHtmlElement);
