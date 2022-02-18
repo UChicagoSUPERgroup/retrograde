@@ -26,7 +26,6 @@ SQL_CMDS = {
   "ADD_DATA" : """INSERT INTO data(kernel, cell, version, source, name, user) VALUES (?, ?, ?, ?, ?, ?)""",
   "ADD_COLS" : """INSERT INTO columns(user, kernel, name, version, col_name, type, size) VALUES (?, ?, ?, ?, ?, ?, ?)""",
   "GET_VERSIONS" : """SELECT contents, version FROM versions WHERE kernel = ? AND id = ? AND user = ? ORDER BY version DESC LIMIT 1""",
-  "GET_COLS" : """SELECT * FROM columns WHERE user = ? AND col_name = ?""",
   "GET_FIELDS" : """SELECT fields FROM columns WHERE user = ? AND kernel = ? AND name = ? AND version = ? AND col_name = ?""",
   "GET_ALL_COLS" : """SELECT * FROM columns WHERE user = ? AND kernel = ? AND name = ? AND version = ?""",
   "GET_UNMARKED" : """SELECT col_name, name, version, type, size FROM columns WHERE kernel = ? AND user = ? AND name = ? AND version = ? AND checked = FALSE""",
@@ -308,8 +307,16 @@ class DbHandler:
             name = max_version["name"]
             version = max_version["MAX(version)"]
             self._cursor.execute(self.cmds["GET_VERSION_COLS"], (kernel, self.user, name, version))
-            recent_cols.extend(self._cursor.fetchall())
+            values = self._cursor.fetchall()
 
+            for value in values:
+                # there must be a way to enforce these conversions in mysql-connector, but I
+                # can't find them.
+                value["is_sensitive"] = bool(value["is_sensitive"])
+                value["user_specified"] = bool(value["user_specified"])
+                value["checked"] = bool(value["checked"])
+            recent_cols.extend(values)
+        
         return recent_cols        
     def get_unmarked_columns(self, kernel):
         """
@@ -362,7 +369,13 @@ class DbHandler:
             # want to get the max value for each column
             version = version_dict[(self.user, kernel, df_name)]
             for col_name,info in columns.items():
-                query_params = (info["fields"], info["is_sensitive"], info["user_specified"], True, 
+                is_sensitive = info["is_sensitive"]
+                user_specified = info["user_specified"]
+                if isinstance(is_sensitive, int):
+                    is_sensitive = bool(is_sensitive)
+                if isinstance(user_specified, int):
+                    user_specified = bool(user_specified) 
+                query_params = (info["fields"], is_sensitive, user_specified, True, 
                                 self.user, kernel, df_name, version, col_name)
                 query_tuples.append(query_params)
         self._cursor.executemany(self.cmds["UPDATE_COL_TYPES"], query_tuples)
