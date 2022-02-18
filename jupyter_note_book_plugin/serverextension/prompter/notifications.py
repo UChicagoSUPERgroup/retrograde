@@ -430,7 +430,8 @@ class ProxyColumnNote(ProtectedColumnNote):
 
         if len(df[num_col].dropna().unique()) < 2: # f test is not defined if values are uniform
             return 1.0
-
+        if len(sense_col_values) < 2:
+            return 1.0
         value_cols = [df[num_col][df[sense_col] == v].dropna() for v in sense_col_values]
  
         result = f_oneway(*value_cols)
