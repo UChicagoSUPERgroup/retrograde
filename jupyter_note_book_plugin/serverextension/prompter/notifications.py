@@ -160,6 +160,23 @@ class ProtectedColumnNote(Notification):
         new_data = {}
         update_data = {}
         new_df_names = list(self.df_protected_cols.keys())
+        recent_cols = self.db.get_recent_cols(env._kernel_id)
+
+        col_prev = {}
+
+        for col_entry in recent_cols:
+
+            df_name = col_entry["name"]
+            col_name = col_entry["col_name"]
+            is_sensitive = col_entry["is_sensitive"]
+            user_specified = col_entry["user_specified"]
+            fields = col_entry["fields"]
+
+            if df_name not in col_prev:
+                col_prev[df_name] = {}
+            if col_name  not in col_prev[df_name]:
+                col_prev[df_name][col_name] = {}
+            col_prev[df_name][col_name] = {"sensitive" : is_sensitive, "user_specified" : user_specified, "fields" : fields}
 
         for df_name, note_list in self.data.items():
 
@@ -171,20 +188,50 @@ class ProtectedColumnNote(Notification):
 
             protected_cols = guess_protected(dfs[df_name])
             self.df_protected_cols[df_name] = protected_cols
+
             protected_col_names = [col["original_name"] for col in protected_cols]
             self.df_not_protected_cols[df_name] = [col for col in dfs[df_name].columns if col not in protected_col_names]
 
             env.log.debug("[ProtectedColumnNote] protected columns {0}".format(self.df_protected_cols[df_name]))
             env.log.debug("[ProtectedColumnNote] not protected columns {0}".format(self.df_not_protected_cols[df_name]))
 
-            new_data[df_name] = [self._make_resp_entry(df_name)]
-            # TODO: for some reason, on this call, the not_protected columns are not being sent
+            df_entry = self._make_resp_entry(df_name)
             update_data[df_name] = {}
 
-            for col_name, col_info in new_data[df_name][0]["columns"].items():
-                update_data[df_name][col_name] = {"is_sensitive": col_info["sensitive"],
-                                                  "user_specified" : False, "fields" : col_info["field"]}
+            # Problem is columns here overwrite already existing values
+            # - desired behavior is only update from guess_protected if is_sensitive -> true?
+            # - if update needed, then not a new dataframe version, possible values changed
+            # - rules - never overwrite something user specified, is_sensitive | old is_sensitive
 
+            # TODO: problem is format - need to merge in update_data and in new_data entry 
+            new_entry = {"type" : "resemble", "df" : df_name, "columns" : {}}
+            for col_name, col_info in df_entry["columns"].items():
+                if col_prev[df_name][col_name]["user_specified"]:
+                    new_entry["columns"][col_name] = col_prev[df_name][col_name]
+                    update_data[df_name][col_name] = col_prev[df_name][col_name]
+                    update_data[df_name][col_name]["is_sensitive"] = update_data[df_name][col_name]["sensitive"]
+
+                elif col_prev[df_name][col_name]["sensitive"] and col_info["sensitive"]:
+                    # if this and col_info["sensitive"], then concat fields
+                    fields = set(col_prev[df_name][col_name]["fields"].split(","))
+                    fields.update(col_info["field"].split(","))
+                    update_data[df_name][col_name] = {"is_sensitive": True, "user_specified" : False,
+                                                      "fields" : ", ".join(fields)}
+                    new_entry["columns"][col_name] = {"sensitive" : True, "user_specified" : False, "fields" : ", ".join(fields)}
+                elif col_info["sensitive"] or col_prev[df_name][col_name]["sensitive"]:
+
+                    field = col_info["field"]
+                    if not field:
+                        field = col_prev[df_name][col_name]["fields"]
+
+                    update_data[df_name][col_name] = {"is_sensitive": True,
+                                                      "user_specified" : False, "fields" : field}
+                    new_entry["columns"][col_name] = {"sensitive" : True, "user_specified" : False, "fields" : field} 
+                else:
+                    new_entry["columns"][col_name] = {"is_sensitive" : False,
+                                                      "user_specified" : False,
+                                                      "fields" : None}
+            new_data[df_name] = [new_entry]
         self.db.update_marked_columns(kernel_id, update_data)
 
         self.data = new_data
@@ -409,7 +456,6 @@ class MissingDataNote(ProtectedColumnNote):
 
         recent_cols = self.db.get_recent_cols(env._kernel_id)
         df_names = {} 
-
         for col in recent_cols:
 
             df_name = col["name"]
