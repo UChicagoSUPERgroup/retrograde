@@ -546,7 +546,10 @@ class MissingDataNote(ProtectedColumnNote):
 
                     # largest percent
                     env.log.debug("[MissingDataNote] missing counts {0}".format(missing_counts))
-                    lp  = math.floor(100.0 * (missing_counts[missing_counts.idxmax()]/missing_counts.sum()))
+                    if missing_counts.sum() == 0.0:
+                        lp = 0
+                    else:
+                        lp  = math.floor(100.0 * (missing_counts[missing_counts.idxmax()]/missing_counts.sum()))
                     
                     sens_col_dict[sens_col_name] = {"largest_missing_value" : lmv, "largest_percent" : lp}
    
