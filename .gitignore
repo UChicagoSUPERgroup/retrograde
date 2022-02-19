@@ -1,6 +1,9 @@
 **/.DS_Store
 **/*.swp
 **/*.swo
+**/*.swm
+**/*.swn
+**/.ipynb_checkpoints
 */lib/**
 */bin/**
 **/etc/**
@@ -25,3 +28,5 @@ bin
 etc
 include
 share
+**/Pipfile
+**/Pipfile.lock
