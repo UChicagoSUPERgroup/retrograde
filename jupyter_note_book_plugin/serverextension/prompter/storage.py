@@ -185,11 +185,11 @@ class DbHandler:
             return results[0]        
         raise sqlite3.IntegrityError("Multiple namespaces in range")  
 
-    def is_new_data(self, entry_point, data_versions=None):
-        if data_versions is None:
-            data_versions = self.find_data(entry_point)
-            if data_versions is None:
-                return None
+    def _match_columns(self, entry_point, data_versions):
+        """
+        return version number of data, if it exists, 
+        else, return None
+        """
         for version in data_versions:
             entry_matched = True
             columns = self.get_columns(entry_point["kernel"], entry_point["name"], version["version"])
@@ -206,7 +206,29 @@ class DbHandler:
             if entry_matched:
                 return version["version"]
         return None
+    def is_new_data(self, entry_point, data_versions=None):
+        if data_versions is None:
+            data_versions = self.find_data(entry_point)
+            if data_versions is None:
+                return None
+        return self._match_columns(entry_point, data_versions)
+    def get_data_version(self, df_name, col_info, kernel): 
+        """
+        given dataframe, and column_info, return which version this
+        dataframe is
 
+        column_info should be a dictionary with a key for each column 
+        name pointing to a dictionary with keys {"type" and "size"}
+        """
+        entry_point = {
+            "name" : df_name,
+            "kernel" : kernel,
+            "columns" :  col_info}
+        data_versions = self.find_data(entry_point)
+        if data_versions:
+            return self._match_columns(entry_point, data_versions)
+        return None
+ 
     def check_add_data(self, entry_point, exec_ct):
         """
         check if entry_point data is updated, compare columns as well,
@@ -218,22 +240,9 @@ class DbHandler:
 
         if data_versions:
             # if column name, type and size do not match any version
-            for version in data_versions:
-                entry_matched = True
-                columns = self.get_columns(entry_point["kernel"], entry_point["name"], version["version"])
-                names = [col["col_name"] for col in columns]
-                
-                if len(names) == len(entry_point["columns"]) and set(names).issubset(set(entry_point["columns"])):
-                    for col in columns:
-                        if entry_point["columns"][col["col_name"]]["type"] != col["type"]:
-                            entry_matched = False
-                        if entry_point["columns"][col["col_name"]]["size"] != col["size"]:
-                            entry_matched = False
-                else:
-                    entry_matched = False
-                if entry_matched:
-                    return version["version"]
-
+            prev = self._match_columns(entry_point, data_versions)
+            if prev:
+                return prev
             max_version = max([v["version"] for v in data_versions])
 
             if "source" not in entry_point:

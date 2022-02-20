@@ -172,7 +172,17 @@ class ProtectedColumnNote(Notification):
                             resp["columns"][col_name] = old_col_info
         """
         return resp
+    def _make_col_info(self, df):
+        """
+        return a dictionary mapping column names to type and size
+        """
+        col_info = {}
 
+        for col in df.columns:
+            col_info[col] = {}
+            col_info[col]["size"] = len(df[col])
+            col_info[col]["type"] = str(df[col].dtypes)
+        return col_info
     def update(self, env, kernel_id, cell_id, dfs, ns):
         # pylint: disable=too-many-arguments
 
@@ -189,6 +199,7 @@ class ProtectedColumnNote(Notification):
         new_data = {}
         update_data = {}
         new_df_names = list(self.df_protected_cols.keys())
+        
         recent_cols = self.db.get_recent_cols(env._kernel_id)
 
         col_prev = {}
@@ -207,7 +218,6 @@ class ProtectedColumnNote(Notification):
                 col_prev[df_name][col_name] = {}
             col_prev[df_name][col_name] = {"sensitive" : is_sensitive, "user_specified" : user_specified, "fields" : fields}
 
-
         for df_name, old_protected_columns in self.data.items():
 
             if df_name not in dfs:
@@ -220,6 +230,23 @@ class ProtectedColumnNote(Notification):
             protected_cols = guess_protected(dfs[df_name])
             self.df_protected_cols[df_name] = protected_cols
 
+            col_data = self._make_col_info(dfs[df_name]) 
+            df_version = self.db.get_data_version(df_name, col_data, env._kernel_id) 
+
+            # TODO: write _make_col_info method
+
+            if not df_version:
+                env.log.warning(f"""[ProtectedColumnNote] no older version of {df_name} (this should never happen)""")
+                continue
+
+            col_prev = {}
+            prev_cols =  self.db.get_columns(env._kernel_id, df_name, df_version)
+
+            for col in prev_cols:
+                col_prev[col["col_name"]] = {"sensitive" : bool(col["is_sensitive"]), 
+                                             "user_specified" : bool(col["user_specified"]), 
+                                             "fields" : col["fields"]}
+
             protected_col_names = [col["original_name"] for col in protected_cols]
             self.df_not_protected_cols[df_name] = [col for col in dfs[df_name].columns if col not in protected_col_names]
 
@@ -231,16 +258,16 @@ class ProtectedColumnNote(Notification):
 
             new_entry = {"type" : "resemble", "df" : df_name, "columns" : {}}
             for col_name, col_info in df_entry["columns"].items():
-                if col_prev[df_name][col_name]["user_specified"]:
+                if col_prev[col_name]["user_specified"]:
                     # TODO: in v2.0, we should align naming conventions for note data instances
                     # across all ecosystem components. 
-                    new_entry["columns"][col_name] = col_prev[df_name][col_name]
+                    new_entry["columns"][col_name] = col_prev[col_name]
                     new_entry["columns"][col_name]["field"] = new_entry["columns"][col_name]["fields"]
 
-                    update_data[df_name][col_name] = col_prev[df_name][col_name]
+                    update_data[df_name][col_name] = col_prev[col_name]
                     update_data[df_name][col_name]["is_sensitive"] = update_data[df_name][col_name]["sensitive"]
 
-                elif col_prev[df_name][col_name]["sensitive"] and col_info["sensitive"]:
+                elif col_prev[col_name]["sensitive"] and col_info["sensitive"]:
 
                     field = col_info["field"]
                     if not field:
@@ -250,11 +277,11 @@ class ProtectedColumnNote(Notification):
                                                       "fields" : field}
                     new_entry["columns"][col_name] = {"sensitive" : True, "user_specified" : False, "field" : field}
 
-                elif col_info["sensitive"] or col_prev[df_name][col_name]["sensitive"]:
+                elif col_info["sensitive"] or col_prev[col_name]["sensitive"]:
 
                     field = col_info["field"]
                     if not field:
-                        field = col_prev[df_name][col_name]["fields"]
+                        field = col_prev[col_name]["fields"]
 
                     update_data[df_name][col_name] = {"is_sensitive": True,
                                                       "user_specified" : False, "fields" : field}
