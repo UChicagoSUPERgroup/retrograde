@@ -3,9 +3,10 @@ from .config import MODE
 
 if MODE == "EXP_CTS":
     NOTE_RULES = {
-        "intro" :[],
+        "all" : [ProtectedColumnNote], # should trigger always
+        "intro" :[ProxyColumnNote],
         "tutorial" : [ProxyColumnNote],
-        "null_clean" : [ProtectedColumnNote],
+        "null_clean" : [MissingDataNote],
         "model" : [ModelReportNote, ErrorSliceNote],
         "end" : []
     }
