@@ -10,6 +10,7 @@ from random import choice
 
 import math
 import operator
+from tokenize import group
 
 import pandas as pd
 from pandas.api.types import is_numeric_dtype, is_unsigned_integer_dtype, is_integer_dtype, is_signed_integer_dtype
@@ -638,9 +639,6 @@ class ModelReportNote(Notification):
     def __init__(self, db):
         super().__init__(db)
         self.aligned_models = {} # candidates for using correction
-        # self.aligned_ancestors = [] # aligned ancestor dfs
-        # mapping of model name -> (x,y), used so that when doing update
-        # we don't need to redo the alignment testing
         self.columns = {}
         self.k = 2 #Q? what should k be? how can user change k? (this is k highest error rates to display)
 
@@ -672,7 +670,7 @@ class ModelReportNote(Notification):
         
         models_with_dfs = check_call_dfs(defined_dfs, non_dfs_ns, models, env)
         aligned_models = {}
-
+        prot_anc_found = False
         for model_name in models_with_dfs:
             match_name, match_cols, match_indexer = search_for_sensitive_cols(models_with_dfs[model_name]["x"], model_name, defined_dfs)
             if not match_name:
@@ -680,16 +678,50 @@ class ModelReportNote(Notification):
             env.log.debug("[ModelReportNote] model {0} has match {1}, additional info: {2}".format(model_name, match_name, models_with_dfs[model_name]))
             aligned_models[model_name] = models_with_dfs[model_name]
             df_name = models_with_dfs[model_name]["x_name"]
+            prot_anc_found, x_ancestor, x_ancestor_name, prot_col_names, prot_cols = self.prot_ancestors_found(env, df_name, env._kernel_id)
+            if not prot_anc_found:
+                continue
             aligned_models[model_name]["match"] = {"cols" : match_cols, 
                                                    "indexer" : match_indexer,
                                                    "name" : match_name,
-                                                   "x_ancestor" : None,
-                                                   "x_ancestor_name" : None}
-            # self.aligned_ancestors = self.align_ancestor_data(env, aligned_models[model_name]["x"])
-        if len(aligned_models) > 0:
+                                                   "x_ancestor" : x_ancestor,
+                                                   "x_ancestor_name" : x_ancestor_name,
+                                                   "prot_col_names" : prot_col_names,
+                                                   "prot_cols" : prot_cols}
+        if len(aligned_models) > 0 and prot_anc_found:
             self.aligned_models = aligned_models
-            return True                            
+            return prot_anc_found                            
         return False
+
+    def get_prot_from_aligned(self, model_name):
+        '''
+        Returns x_ancestor (DataFrame), x_ancestor_name (string), prot_col_names (list), prot_cols (DataFrame or Series)
+        '''
+        if model_name in self.aligned_models:
+            match = self.aligned_models[model_name]["match"]
+            return match["x_ancestor"], match["x_ancestor_name"], match["prot_col_names"], match["prot_cols"]
+        return None, None, None, None
+
+    def prot_ancestors_found(self, env, curr_df_name, kernel_id):
+        '''
+        Returns  prot_anc_found (bool), x_ancestor (DataFrame), x_ancestor_name (string), prot_col_names (list), prot_cols (DataFrame or Series)
+        '''
+        # Query DB for ancestor df object
+        x_ancestor, x_ancestor_name = self.get_ancestor_data(env, curr_df_name, kernel_id)
+        if isinstance(x_ancestor, pd.DataFrame):
+            env.log.debug("[ModelReportNote] has found an ancestor df. shape: {1}, cols: {0}".format(
+                            x_ancestor.columns, x_ancestor.shape))
+        else:
+            env.log.error("[ModelReportNote] ancestors not found")
+            return False, None, None, None, None
+
+        # Find error rates for protected groups
+        prot_col_names, prot_cols = self.get_ancestor_prot_info(x_ancestor)
+        if prot_col_names is None or len(prot_col_names) == 0: 
+            env.log.debug("[ModelReportNote] has no groups to compute error rates for")
+            return False, None, None, None, None
+
+        return True, x_ancestor, x_ancestor_name, prot_col_names, prot_cols
 
     def get_ancestor_data(self, env, curr_df_name, kernel_id):
         """
@@ -699,11 +731,31 @@ class ModelReportNote(Notification):
             ancestor_df_name : string name of dataframe in notebook
         """
         env.log.debug("[ModelReport] has env.ancestors = {0}".format(env.ancestors))
-        for child_name, child_version in env.ancestors.keys(): # iterate because we don't know version yet
-            if child_name == curr_df_name:
-                ancestor_set = env.ancestors[child_name, child_version]
-        ancestor_df_name, ancestor_df_version = max(ancestor_set, key=lambda x:x[1]) # return highest version (most recent)
-        # first param of below is expecting dict
+        search_df_name = curr_df_name
+        found = True
+        ancestor_df_name = ""
+        ancestor_df_version = None
+        # search as far as possible for the ancestor
+        while found:
+            found = False
+            for child_name, child_version in env.ancestors.keys(): # iterate because we don't know version yet
+                if child_name == search_df_name:
+                    ancestor_set = env.ancestors[child_name, child_version]
+                    if not ancestor_set or "." in max(ancestor_set, key=lambda x:x[1])[0]:
+                        # if a file extension "." has been found in the name we can't go back any further 
+                        found=False
+                        break
+                    ancestor_df_name, ancestor_df_version = max(ancestor_set, key=lambda x:x[1]) # return highest version (most recent)
+                    found = True
+            if found:
+                search_df_name = ancestor_df_name
+        
+        # for child_name, child_version in env.ancestors.keys(): # iterate because we don't know version yet
+        #     if child_name == curr_df_name:
+        #         ancestor_set = env.ancestors[child_name, child_version]
+        # ancestor_df_name, ancestor_df_version = max(ancestor_set, key=lambda x:x[1]) # return highest version (most recent)
+        
+        # first param of get_dataframe_version is expecting dict
         # of { "name" : df_name,
         #      "kernel" : kernel_id
         #    }
@@ -720,9 +772,9 @@ class ModelReportNote(Notification):
             ancestor_df = None
 
         if not isinstance(ancestor_df, pd.DataFrame):
-            env.log.error("[ModelReport] get_dataframe_version did not find an ancestor_df.")
+            env.log.error("[ModelReport] get_dataframe_version did not find an ancestor_df. See below message.")
             env.log.debug("[ModelReport] data {0} and data version {1}".format(data, ancestor_df_version))
-            return None
+            return None, None
 
         env.log.debug("[ModelReport] found df: {0} with columns {1}".format(ancestor_df_name, ancestor_df.columns))
         ###### error handling
@@ -748,7 +800,6 @@ class ModelReportNote(Notification):
 
             # if binary
             unique_values = group_col.unique().shape[0]
-            dtype = group_col.dtype
             if unique_values <= 2:
                 # do binary
                 mask = group_col == 1
@@ -765,12 +816,15 @@ class ModelReportNote(Notification):
                 # except ZeroDivisionError as e:
                 #     env.log.error("[ModelReport] Error for binary protected group {0}\nError: {1}\nlen(y_true)={2},len(y_pred)={3}".format(prot_group, e, len(y_true_member), len(y_pred_member)))
             # elif categorical
-            elif unique_values > 2 and (is_unsigned_integer_dtype(dtype) or is_integer_dtype(dtype) or is_signed_integer_dtype(dtype)):
+            elif unique_values > 2: #and not is_numeric_dtype(group_col.dtype)
                 # do categorical
                 for member in group_col.unique():
                     # boolean masking
                     member_mask = group_col == member
-                    member = int(member)
+                    if is_numeric_dtype(group_col.dtype):
+                        member = int(member)
+                    else:
+                        member = str(member)
                     if isinstance(y_true, (pd.Series, pd.DataFrame)):
                         # y_true_member = y_true[member_indices]
                         y_true_member = y_true.where(member_mask).dropna()
@@ -792,10 +846,11 @@ class ModelReportNote(Notification):
                     error_rates_by_member[member] = error_rates(*acc_measures(y_true_member, y_pred_member))
                     # except ValueError as e:
                         # env.log.error("[ModelReport] ValueError for member {0} in group {1}\nError: {2}".format(member, prot_group, e))
-            # elif ordered numeric
-            elif unique_values > 2 and is_numeric_dtype(type):
-                # do numeric (ordered)
-                # TODO: make ranges of numeric values
+            # # TODO: add different functionality for numeric dtypes (fine as is)
+            elif unique_values > 2 and is_numeric_dtype(group_col.dtype):
+                # ideas for numeric
+                # - make ranges of numeric values?
+                #   - form some sort of distribution and bin the groups? 
                 pass
             else:
                 env.log.error("[ModelReport] Group column is not binary, categorical or numeric. Cannot compute error rates.")
@@ -851,7 +906,6 @@ class ModelReportNote(Notification):
 
         env.log.debug("[ModelReportNote] has received a request to make a response")
         
-        # Q?: why random choice?
         model_name = choice(list(self.aligned_models.keys()))
         resp = {"type" : "model_report", "model_name" : model_name}
 
@@ -860,32 +914,48 @@ class ModelReportNote(Notification):
         y = self.aligned_models[model_name]["y"]
         model = self.aligned_models[model_name]["model"]
 
-        curr_df_name = self.aligned_models[model_name]["x_name"]
-        # get ancestor df here 
-        self.aligned_models[model_name]["match"]["x_ancestor"], \
-            self.aligned_models[model_name]["match"]["x_ancestor_name"] \
-                = self.get_ancestor_data(env, curr_df_name, kernel_id)
-        if isinstance(self.aligned_models[model_name]["match"]["x_ancestor"], pd.DataFrame):
-            x_ancestor = self.aligned_models[model_name]["match"]["x_ancestor"]
-            x_ancestor_name = self.aligned_models[model_name]["match"]["x_ancestor"]
-            # env.log.debug("[ModelReportNote] has found an ancestor of type: {0}".format( 
-            #                 type(self.aligned_models[model_name]["match"]["x_ancestor"])))
-            env.log.debug("[ModelReportNote] has found an ancestor df. shape: {1}, cols: {0}".format(
-                            x_ancestor.columns, x_ancestor.shape))
-        else:
-            env.log.error("[ModelReportNote] ancestors not found")
-            return
+        # curr_df_name = self.aligned_models[model_name]["x_name"]
+        # # get ancestor df here 
+        # self.aligned_models[model_name]["match"]["x_ancestor"], \
+        #     self.aligned_models[model_name]["match"]["x_ancestor_name"] \
+        #         = self.get_ancestor_data(env, curr_df_name, kernel_id)
+        # if isinstance(self.aligned_models[model_name]["match"]["x_ancestor"], pd.DataFrame):
+        #     x_ancestor = self.aligned_models[model_name]["match"]["x_ancestor"]
+        #     x_ancestor_name = self.aligned_models[model_name]["match"]["x_ancestor"]
+        #     # env.log.debug("[ModelReportNote] has found an ancestor of type: {0}".format( 
+        #     #                 type(self.aligned_models[model_name]["match"]["x_ancestor"])))
+        #     env.log.debug("[ModelReportNote] has found an ancestor df. shape: {1}, cols: {0}".format(
+        #                     x_ancestor.columns, x_ancestor.shape))
+        # else:
+        #     env.log.error("[ModelReportNote] ancestors not found")
+        #     return
 
         # get acc_orig on indexed/subsetted df
         acc_orig = model.score(X, y)
         orig_preds = model.predict(X)
         orig_preds = pd.Series(orig_preds, index=X.index)
 
-        prot_col_names, prot_cols = self.get_ancestor_prot_info(x_ancestor)
-        # Find error rates for protected groups
-        if prot_col_names is None or len(prot_col_names) == 0: 
-            # exit? nothing to do if no groups
-            env.log.debug("[ModelReportNote] has no groups to compute error rates for")
+        # prot_col_names, prot_cols = self.get_ancestor_prot_info(x_ancestor)
+        # # Find error rates for protected groups
+        # if prot_col_names is None or len(prot_col_names) == 0: 
+        #     # exit? nothing to do if no groups
+        #     env.log.debug("[ModelReportNote] has no groups to compute error rates for")
+        #     return
+        # else:
+        #     env.log.debug("[ModelReportNote] (make_response) is retrieving error rates for these columns: {0}."
+        #         .format(prot_col_names))
+        #     sorted_error_rates, k_highest_rates = self.get_sorted_k_highest_error_rates(env, 
+        #                                                                                 prot_col_names, 
+        #                                                                                 model_name, 
+        #                                                                                 x_ancestor, 
+        #                                                                                 X, y, 
+        #                                                                                 orig_preds)   
+        
+        x_ancestor, x_ancestor_name, prot_col_names, prot_cols = self.get_prot_from_aligned(model_name)
+
+        if x_ancestor is None or prot_col_names is None:
+            env.log.error("[ModelReportNote] has no groups to compute errors for, something went wrong.")
+            # form some empty response? return? idk
             return
         else:
             env.log.debug("[ModelReportNote] (make_response) is retrieving error rates for these columns: {0}."
@@ -895,7 +965,9 @@ class ModelReportNote(Notification):
                                                                                         model_name, 
                                                                                         x_ancestor, 
                                                                                         X, y, 
-                                                                                        orig_preds)      
+                                                                                        orig_preds) 
+           
+
         resp["acc_orig"] = acc_orig
         resp["groups"] = prot_col_names
         # TODO: check if empty?
@@ -947,36 +1019,29 @@ class ModelReportNote(Notification):
         live_resps = [resp for resp in self.data[cell_id] if check_if_defined(resp)]
 
         for resp in live_resps:
-            # TODO: Might be helpful to show a diff? or at least just show the last result so the user can see what has changed
-            # TODO: Implement a check if different than previous probably
             X,y = self.columns[resp["model_name"]][cell_id]
             model_name = resp["model_name"]
             model = non_dfs_ns[model_name]
-            # groups = resp["groups"]
             curr_df_name = self.aligned_models[model_name]["x_name"]
-            # get ancestor df here 
-            self.aligned_models[model_name]["match"]["x_ancestor"], \
-                self.aligned_models[model_name]["match"]["x_ancestor_name"] \
-                    = self.get_ancestor_data(env, curr_df_name, kernel_id)
-            x_ancestor = self.aligned_models[model_name]["match"]["x_ancestor"]
-            prot_col_names, prot_cols = self.get_ancestor_prot_info(x_ancestor)
             new_preds = model.predict(X)
             new_preds = pd.Series(new_preds, index=X.index)
             new_acc = model.score(X, y)
 
-            if prot_cols is None: 
-                # exit? nothing to do if no groups
-                env.log.debug("[ModelReportNote] has no groups to compute error rates for")
-                return
+            x_ancestor, x_ancestor_name, prot_col_names, prot_cols = self.get_prot_from_aligned(model_name)
+
+            if x_ancestor is None or prot_col_names is None or len(prot_col_names) == 0:
+                env.log.error("[ModelReportNote] has no groups to compute errors for, something went wrong.")
+                # form some empty response? return? idk
+                continue
             else:
                 env.log.debug("[ModelReportNote] (update) is retrieving error rates for these columns: {0}."
-                    .format(prot_col_names))    
+                    .format(prot_col_names))
                 sorted_error_rates, k_highest_error_rates = self.get_sorted_k_highest_error_rates(env, 
-                                                                                              prot_col_names, 
-                                                                                              model_name, 
-                                                                                              x_ancestor, 
-                                                                                              X, y, 
-                                                                                              new_preds)
+                                                                                            prot_col_names, 
+                                                                                            model_name, 
+                                                                                            x_ancestor, 
+                                                                                            X, y, 
+                                                                                            new_preds)
             resp["acc_orig"] = new_acc
             resp["groups"] = prot_col_names
             resp["error_rates"] = sorted_error_rates
