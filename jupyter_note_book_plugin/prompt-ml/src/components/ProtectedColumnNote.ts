@@ -38,8 +38,8 @@ export class ProtectedColumnNote extends PopupNotification {
     console.log(dfs);
     for (var x = 0; x < dfs.length; x++) {
       dfString += `<div class="dfs">
-            <div class="df shadowDefault" id=${dfs[x]}>
-                <h1>Within ${dfs[x]}</h1>
+            <div class="noselect condensed df shadowDefault" id=${dfs[x]}>
+                <h1><span class="prefix"> + </span>Within <span class="code-snippet">${dfs[x]}</span></h1>
                 <div class="sensitivity">
                     <h2>Column Sensitivity</h2>
                     <p class="columnSensitivityExplanation">Below you can assign each of the columns
@@ -66,10 +66,18 @@ export class ProtectedColumnNote extends PopupNotification {
                     <br />When you are building machine learning models off of data that includes 
                     information from protected classes, you may be inadvertently replicating power
                     structures that cause violence and harm, which could play into how your model makes predictions.</p>
-                </div>${dfString}
+                </div>
+                ${dfString}
             </div>
         `);
     var htmlElem = elem[1] as any as HTMLElement;
+    $(elem).find(".df h1").on("click", e => {
+      var parentElem = $($(e.currentTarget).parent())
+      // Toggle basic visibility effects
+      parentElem.toggleClass("condensed");
+      // Change prefix to "+" or "-" depending on if the note is condensed
+      parentElem.find("h1 .prefix").text((parentElem.hasClass("condensed")) ? " + " : " - ");
+    })
     for (var x = 0; x < this._data.length; x++) {
       htmlElem
         .querySelector(`#${this._data[x]["df"]} .sensitivity`)

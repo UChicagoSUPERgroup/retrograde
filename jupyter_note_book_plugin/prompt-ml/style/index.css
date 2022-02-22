@@ -449,16 +449,25 @@ svg.condensed {
   margin-top: 30px;
 }
 
-.promptMl.protectedColumns .df {
+.promptMl.protectedColumns .df:not(.condensed) {
   display: grid;
   grid-template-columns: 1fr 1fr;
   grid-template-rows: auto 1fr;
   grid-gap: 10px;
 }
 
+.protectedColumns .df.condensed > *:not(h1) {
+  display: none;
+}
+
+.protectedColumns .df .prefix {
+  font-family: monospace;
+}
+
 .promptMl.protectedColumns .df > h1 {
   grid-column: 1 / 3;
   grid-row: 1 / 2;
+  width: 100%;
 }
 
 .promptMl.sensitivity h3 {
@@ -513,4 +522,25 @@ th {
   border: 1px solid #999;
   padding: 8px;
   text-align: left;
+}
+
+.code-snippet {
+  font-family: Monaco,Courier New,monospace!important;
+  color: #e01e5a;
+  background-color: rgba(30, 30, 30, .04);
+  border: 1px solid gray;
+  border-radius: 8px;
+  font-size: 20px;
+  padding: 3px 10px;
+}
+
+/* https://stackoverflow.com/questions/826782/how-to-disable-text-selection-highlighting */
+
+.noselect {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -khtml-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
 }

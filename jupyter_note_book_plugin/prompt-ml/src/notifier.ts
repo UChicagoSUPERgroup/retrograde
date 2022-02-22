@@ -172,7 +172,7 @@ export class Prompter {
     note.addRawHtmlElement(descriptionHtmlElement);
 
     for (let df_name in d) {
-      note.addHeader(`Within <strong>${df_name}</strong>`);
+      note.addHeader(`Within <span class="code-snippet">${df_name}</span></strong>`);
       var df = d[df_name];
       const columnNames = df["proxy_col_name"];
       const tableRows: { [columnName: string]: ProxyColumnRelationships } = {};
@@ -249,7 +249,7 @@ export class Prompter {
     // Iterating over every dataframe
     for (var df_name in notice["dfs"]) {
       // Small-view df container
-      note.addSubheader(`<h3>Within ${df_name}</h3>`);
+      note.addSubheader(`<h3>Within <span class="code-snippet">${df_name}</span></h3>`);
       var df = notice["dfs"][df_name];
       var ul = [];
       // Expanded-view df container
