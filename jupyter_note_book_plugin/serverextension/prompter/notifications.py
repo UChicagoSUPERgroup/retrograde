@@ -657,7 +657,10 @@ class ModelReportNote(Notification):
        
         return {model_name : model_info for model_name, model_info in models.items() if model_name not in cell_models}
 
-
+    def _find_prot_ancestor(self, df_name, version):
+        """
+        find whether there is an ancestor in the set
+        """
     def check_feasible(self, cell_id, env, dfs, ns):
         
         if "namespace" in ns:
@@ -671,6 +674,7 @@ class ModelReportNote(Notification):
         models_with_dfs = check_call_dfs(defined_dfs, non_dfs_ns, models, env)
         aligned_models = {}
         prot_anc_found = False
+
         for model_name in models_with_dfs:
             match_name, match_cols, match_indexer = search_for_sensitive_cols(models_with_dfs[model_name]["x"], model_name, defined_dfs)
             if not match_name:
@@ -678,7 +682,7 @@ class ModelReportNote(Notification):
             env.log.debug("[ModelReportNote] model {0} has match {1}, additional info: {2}".format(model_name, match_name, models_with_dfs[model_name]))
             aligned_models[model_name] = models_with_dfs[model_name]
             df_name = models_with_dfs[model_name]["x_name"]
-            prot_anc_found, x_ancestor, x_ancestor_name, prot_col_names, prot_cols = self.prot_ancestors_found(env, df_name, env._kernel_id)
+            prot_anc_found, x_ancestor, x_ancestor_name, prot_col_names, prot_cols = self.prot_ancestors_found(env, df_name, dfs, env._kernel_id)
             if not prot_anc_found:
                 continue
             aligned_models[model_name]["match"] = {"cols" : match_cols, 
@@ -692,6 +696,39 @@ class ModelReportNote(Notification):
             self.aligned_models = aligned_models
             return prot_anc_found                            
         return False
+    def _get_prot_ancestor(self, env, df_name, dfs, kernel_id):
+        """
+        Find ancestor of df_name with sensitive columns
+        """
+        col_info = ProtectedColumnNote._make_col_info(self, dfs[df_name])
+        df_version = self.db.get_data_version(df_name, col_info, kernel_id)
+        
+        q = [(df_name, df_version)]
+        seen = set() # since there may be cycles, want to avoid infinite loops
+ 
+        while q != []:
+
+            df, version = q.pop()
+            protected_cols = self._check_prot(df, version, kernel_id)
+            if protected_cols != []:
+                return protected_cols, df, version
+
+            seen.add((df, version))
+
+            if (df, version) in env.ancestors:
+                parents = env.ancestors[(df, version)]
+                q.extend(list(parents - seen))
+        return None, None, None
+
+    def _check_prot(self, df, version, kernel):
+
+        cols = self.db.get_columns(kernel, df, version)
+        prot_col_names = []
+
+        for col in cols:    
+            if col["is_sensitive"] == 1:
+                prot_col_names.append(col["col_name"])
+        return prot_col_names
 
     def get_prot_from_aligned(self, model_name):
         '''
@@ -702,26 +739,28 @@ class ModelReportNote(Notification):
             return match["x_ancestor"], match["x_ancestor_name"], match["prot_col_names"], match["prot_cols"]
         return None, None, None, None
 
-    def prot_ancestors_found(self, env, curr_df_name, kernel_id):
+    def prot_ancestors_found(self, env, curr_df_name, dfs, kernel_id):
         '''
         Returns  prot_anc_found (bool), x_ancestor (DataFrame), x_ancestor_name (string), prot_col_names (list), prot_cols (DataFrame or Series)
         '''
         # Query DB for ancestor df object
-        x_ancestor, x_ancestor_name = self.get_ancestor_data(env, curr_df_name, kernel_id)
+        prot_col_names, ancestor_df, version = self._get_prot_ancestor(env, curr_df_name, dfs, kernel_id)
+        x_ancestor = self.db.get_dataframe_version({"name" : ancestor_df, "kernel" : kernel_id}, version)
+
         if isinstance(x_ancestor, pd.DataFrame):
-            env.log.debug("[ModelReportNote] has found an ancestor df. shape: {1}, cols: {0}".format(
-                            x_ancestor.columns, x_ancestor.shape))
+            env.log.debug("[ModelReportNote] has found an ancestor df. shape: {1}, cols: {0}".format(x_ancestor.shape, x_ancestor.columns))
         else:
             env.log.error("[ModelReportNote] ancestors not found")
             return False, None, None, None, None
 
         # Find error rates for protected groups
-        prot_col_names, prot_cols = self.get_ancestor_prot_info(x_ancestor)
+#        prot_col_names, prot_cols = self.get_ancestor_prot_info(x_ancestor)
+        prot_cols = [x_ancestor[col] for col in prot_col_names]
         if prot_col_names is None or len(prot_col_names) == 0: 
             env.log.debug("[ModelReportNote] has no groups to compute error rates for")
             return False, None, None, None, None
 
-        return True, x_ancestor, x_ancestor_name, prot_col_names, prot_cols
+        return True, x_ancestor, ancestor_df, prot_col_names, prot_cols
 
     def get_ancestor_data(self, env, curr_df_name, kernel_id):
         """
@@ -905,7 +944,8 @@ class ModelReportNote(Notification):
         super().make_response(env, kernel_id, cell_id)
 
         env.log.debug("[ModelReportNote] has received a request to make a response")
-        
+       
+        # TODO: should change this, was from previous version where we only wanted 1 
         model_name = choice(list(self.aligned_models.keys()))
         resp = {"type" : "model_report", "model_name" : model_name}
 
@@ -953,6 +993,7 @@ class ModelReportNote(Notification):
         
         x_ancestor, x_ancestor_name, prot_col_names, prot_cols = self.get_prot_from_aligned(model_name)
 
+        """
         if x_ancestor is None or prot_col_names is None:
             env.log.error("[ModelReportNote] has no groups to compute errors for, something went wrong.")
             # form some empty response? return? idk
@@ -960,12 +1001,14 @@ class ModelReportNote(Notification):
         else:
             env.log.debug("[ModelReportNote] (make_response) is retrieving error rates for these columns: {0}."
                 .format(prot_col_names))
-            sorted_error_rates, k_highest_rates = self.get_sorted_k_highest_error_rates(env, 
-                                                                                        prot_col_names, 
-                                                                                        model_name, 
-                                                                                        x_ancestor, 
-                                                                                        X, y, 
-                                                                                        orig_preds) 
+        """
+        # Commenting out b.c all checking should happen in check_feasible
+        sorted_error_rates, k_highest_rates = self.get_sorted_k_highest_error_rates(env, 
+                                                                                    prot_col_names, 
+                                                                                    model_name, 
+                                                                                    x_ancestor, 
+                                                                                    X, y, 
+                                                                                    orig_preds) 
            
 
         resp["acc_orig"] = acc_orig
@@ -994,7 +1037,7 @@ class ModelReportNote(Notification):
         # pylint: disable=too-many-locals,too-many-arguments
         ns = self.db.recent_ns()
         non_dfs_ns = dill.loads(ns["namespace"])
-        
+
         def check_if_defined(resp):
 
             if resp["model_name"] not in non_dfs_ns:
@@ -1019,15 +1062,23 @@ class ModelReportNote(Notification):
         live_resps = [resp for resp in self.data[cell_id] if check_if_defined(resp)]
 
         for resp in live_resps:
-            X,y = self.columns[resp["model_name"]][cell_id]
             model_name = resp["model_name"]
+            match_name, match_cols, match_indexer = search_for_sensitive_cols(self.aligned_models[model_name]["x"], model_name, defined_dfs)
             model = non_dfs_ns[model_name]
-            curr_df_name = self.aligned_models[model_name]["x_name"]
+
+            df_name = self.aligned_models[model_name]["x_name"]
+            prot_anc_found, x_ancestor, x_ancestor_name, prot_col_names, prot_cols = self.prot_ancestors_found(env, df_name, dfs, env._kernel_id)
+
+            X = self.aligned_models[model_name]["x"]
+            y = self.aligned_models[model_name]["y"]
+
             new_preds = model.predict(X)
             new_preds = pd.Series(new_preds, index=X.index)
             new_acc = model.score(X, y)
 
-            x_ancestor, x_ancestor_name, prot_col_names, prot_cols = self.get_prot_from_aligned(model_name)
+            # check if still sensitive
+
+#            x_ancestor, x_ancestor_name, prot_col_names, prot_cols = self.get_prot_from_aligned(model_name)
 
             if x_ancestor is None or prot_col_names is None or len(prot_col_names) == 0:
                 env.log.error("[ModelReportNote] has no groups to compute errors for, something went wrong.")

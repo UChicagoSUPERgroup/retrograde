@@ -107,7 +107,7 @@ export class Prompter {
       } else if (notice_type == "missing") {
         console.log("making missing data message");
         this._handleMissing(list_of_notes, note_count);
-      } else if (notice_type == "eq_odds") {
+      } else if (notice_type == "model_report") {
         this._makeEqOdds(list_of_notes, note_count)
       } else {
         console.log("Note type not recognized " + notice_type);
