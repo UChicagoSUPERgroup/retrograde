@@ -1063,7 +1063,7 @@ class ModelReportNote(Notification):
 
         for resp in live_resps:
             model_name = resp["model_name"]
-            match_name, match_cols, match_indexer = search_for_sensitive_cols(self.aligned_models[model_name]["x"], model_name, defined_dfs)
+            match_name, match_cols, match_indexer = search_for_sensitive_cols(self.aligned_models[model_name]["x"], model_name,dfs)
             model = non_dfs_ns[model_name]
 
             df_name = self.aligned_models[model_name]["x_name"]
