@@ -94,24 +94,22 @@ class AnalysisManager:
         except RuntimeError as e:
             self._nb.log.error("[MANAGER] Analysis environment encountered exception {0}, call back {1}".format(e, sys.exc_info()[0]))
 
-    #    self.update_notifications(kernel_id, cell_id)
-    #    self.new_notifications(kernel_id, cell_id, cell_mode)
         ns = self.db.recent_ns()
         dfs = load_dfs(ns)
 
         non_dfs = dill.loads(ns["namespace"])
 
-        for r in self.notes[cell_mode]:
-            if r.feasible(cell_id, env, dfs, non_dfs):
-                r.make_response(env, kernel_id, cell_id) 
-            r.update(env, kernel_id, cell_id, dfs, non_dfs)
         for r in self.notes["all"]:
             if r.feasible(cell_id, env, dfs, non_dfs):
                 r.make_response(env, kernel_id, cell_id)
             r.update(env, kernel_id, cell_id, dfs, non_dfs)
+        for r in self.notes[cell_mode]:
+            if r.feasible(cell_id, env, dfs, non_dfs):
+                r.make_response(env, kernel_id, cell_id) 
+            r.update(env, kernel_id, cell_id, dfs, non_dfs)
         response = self.send_notifications(kernel_id, cell_id, request["exec_ct"])
  
-        self._nb.log.info("[MANAGER] sending response {0}".format(response))
+#        self._nb.log.info("[MANAGER] sending response {0}".format(response))
 
         return response
 
@@ -155,37 +153,3 @@ class AnalysisManager:
 
         return resp 
 
-    def update_notifications(self, kernel_id, cell_id):
-        """
-        are there notes associated with this cell that need to be updated?
-        """
-        for notes in self.notes.values():
-            for note in notes:
-                if note.on_cell(cell_id):
-                    note.update(self.analyses[kernel_id], kernel_id, cell_id)
-
-    def new_notifications(self, kernel_id, cell_id, cell_mode):
-        """
-        check if it is feasible to add any new note, and if so select
-        and generate data for that note
-        """ 
-        self._nb.log.debug("[MANAGER] running rules for cell {0}, kernel {1}".format(cell_id, kernel_id)) 
-        env = self.analyses[kernel_id]
-
-        if cell_mode not in self.notes:
-            self._nb.log.warning("[MANAGER] Cell mode {0} not in configured rules {1}".format(cell_mode, self.notes.keys()))
-            return
-
-        feasible_rules = [r for r in self.notes[cell_mode] if r.feasible(cell_id, env)]
-        self._nb.log.debug("[MANAGER] There are {0} feasible rules".format(len(feasible_rules)))
-        
-        if feasible_rules and MODE == "EXP_CTS":
-            
-            chosen_rule = choice(feasible_rules)
-            chosen_rule.make_response(self.analyses[kernel_id], kernel_id, cell_id)
-            self._nb.log.debug("[MANAGER] chose rule {0}".format(chosen_rule))
-
-        elif feasible_rules and MODE == "EXP_END":
-            for rule in feasible_rules:
-                self._nb.log.debug("[MANAGER] running rule {0}".format(rule))
-                rule.make_response(self.analyses[kernel_id], kernel_id, cell_id)

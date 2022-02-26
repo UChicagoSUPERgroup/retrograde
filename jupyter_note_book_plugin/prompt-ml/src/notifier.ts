@@ -218,7 +218,7 @@ export class Prompter {
     note.addRawHtmlElement(descriptionHtmlElement);
 
     for (let df_name in d) {
-      note.addHeader(`Within <strong>${df_name}</strong>`);
+      note.addHeader(`Within <span class="code-snippet">${df_name}</span></strong>`);
       var df = d[df_name];
       const columnNames = df["proxy_col_name"];
       const tableRows: { [columnName: string]: ProxyColumnRelationships } = {};
@@ -248,11 +248,11 @@ export class Prompter {
         ([columnName, relationships]) => {
           const predictiveFeatures =
             relationships.predictive.length > 0
-              ? relationships.predictive.join(" ")
+              ? relationships.predictive.join(", ")
               : " ";
           const correlatedFeatures =
             relationships.correlated.length > 0
-              ? relationships.correlated.join(" ")
+              ? relationships.correlated.join(", ")
               : " ";
           return `
           <tbody>
@@ -267,7 +267,7 @@ export class Prompter {
       );
 
       const fullTable = $.parseHTML(
-        `<div class="proxy-columns-table"><table>${tableHeader}${tableEntries}</table></div>`
+        `<div class="proxy-columns-table"><table>${tableHeader}${tableEntries.join("")}</table></div>`
       );
       const fullTableHtmlElement = fullTable[0] as any as HTMLElement;
       note.addRawHtmlElement(fullTableHtmlElement);
@@ -294,9 +294,10 @@ export class Prompter {
     // Create container for the small-view content
     // Iterating over every dataframe
     for (var df_idx in notice) {
+
       // Small-view df container
       var df_name = notice[df_idx]["df"];
-      note.addSubheader(`<h3>Within ${df_name}</h3>`);
+      note.addSubheader(`<h3>Within <span class="code-snippet">${df_name}</span></h3>`);
       var ul = [];
       // Expanded-view df container
       // Iterating over every column

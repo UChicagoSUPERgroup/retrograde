@@ -1,6 +1,7 @@
 import { 
   Notebook, 
   NotebookActions,
+  NotebookPanel
 } from "@jupyterlab/notebook";
 
 import {
@@ -39,7 +40,7 @@ export class Listener {
 
     this.tracker = tracker;
     this.client = client;
-    this.init();
+    this.await();
 
   }
 
@@ -47,12 +48,18 @@ export class Listener {
     return this._infoSignal;
   }
 
-  private async init() {
-    //await a notebook widget to render, and then begin listening for cell eventss
-    await this.tracker.currentWidget.revealed;
-    this.notebook = this.tracker.currentWidget.content;
-    this.listen();
-    this._ready.resolve(undefined);
+  private async await() {
+    this.init(this.tracker, this.tracker.currentWidget, this)
+    this.tracker.currentChanged.connect((sender, current) => {this.init(sender, current, this)})
+  }
+
+  private async init(signalSender : INotebookTracker, currentWidget : NotebookPanel, listener : Listener) {
+    if(signalSender.currentWidget != null) {
+        await signalSender.currentWidget.revealed;
+        listener.notebook = signalSender.currentWidget.content;
+        listener.listen();
+        listener._ready.resolve(undefined);
+    }
   }
 
   private listen() {

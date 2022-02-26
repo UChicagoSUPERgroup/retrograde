@@ -512,8 +512,6 @@ class MissingDataNote(ProtectedColumnNote):
 
     def check_feasible(self, cell_id, env, dfs, ns):
         """check feasibility of sending a missing data note"""
-        if not super().check_feasible(cell_id, env, dfs, ns):
-            return False
 
         recent_cols = self.db.get_recent_cols(env._kernel_id)
         df_names = {} 
@@ -523,7 +521,7 @@ class MissingDataNote(ProtectedColumnNote):
             if df_name not in df_names:
                 df_names[df_name] = []
             df_names[df_name].append(col)
-
+        env.log.debug(f"""[MissingDataNote] checking {df_names.keys()}""")
         for df_name in df_names:
             if df_name not in dfs:
                 continue
@@ -533,6 +531,7 @@ class MissingDataNote(ProtectedColumnNote):
 
             if has_missing and has_sensitive: 
                 self.missing_col_lists[df_name] = (dfs[df_name], df_names[df_name])
+        env.log.debug(f"""[MissingDataNote] found {self.missing_col_lists.keys()}""")
         return self.missing_col_lists != {}
          
    
