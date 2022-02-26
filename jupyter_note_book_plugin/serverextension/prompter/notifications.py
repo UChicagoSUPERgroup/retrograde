@@ -900,6 +900,8 @@ class ModelReportNote(Notification):
             resp["groups"] = prot_col_names
             resp["error_rates"] = sorted_error_rates
             resp["k_highest_rates"] = k_highest_rates
+            resp["current_df"] = self.aligned_models[model_name]["match"]["name"]
+            resp["ancestor_df"] = x_ancestor_name
 
             env.log.debug("[ModelReportNote] response is \n{0}".format(resp))
             self._info_cache[model_name] = self.aligned_models[model_name] 
@@ -984,6 +986,8 @@ class ModelReportNote(Notification):
             resp["groups"] = prot_col_names
             resp["error_rates"] = sorted_error_rates
             resp["k_highest_error_rates"] = k_highest_error_rates
+            resp["current_df"] = df_name
+            resp["ancestor_df"] = x_ancestor_name
             updated_data[model_name] = [resp]
             env.log.debug("[ModelReportNote] response is \n{0}".format(updated_data[model_name]))
             
