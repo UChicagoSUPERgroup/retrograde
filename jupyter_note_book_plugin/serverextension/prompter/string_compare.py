@@ -8,8 +8,8 @@ from pandas.api.types import is_numeric_dtype
 
 PROTECTED_MATCH_THRESHOLD = 90
 PROTECTED_PROXY_MATCH_THRESHOLD = 80
-NATIONALITY_THRESHOLD = 50 # nationality threshold of 30 was too weak
-COLUMN_PATTERN_THRESHOLD = 0.8
+NATIONALITY_THRESHOLD = 85 # nationality threshold of 30 was too weak
+COLUMN_PATTERN_THRESHOLD = 0.5
 PATH_PROTECTED_JSON = './protected_columns.json'
 PATH_PROTECTED_JSON_FULL = 'evaluation_task/build/protected_columns.json'
 PATH_NATIONALITIES = './nationalities.txt'
@@ -169,7 +169,7 @@ def _fuzzy_string_across_dict(candidate_string, reference_dict, threshold):
     for k,v in reference_dict.items():
         #see source for explanation of partial ratio
         #https://github.com/seatgeek/fuzzywuzzy/blob/9a4bc22c7483198fcb96afacc42f5f700fb803ed/fuzzywuzzy/fuzz.py#L59-L100
-        partial_match = fuzz.partial_ratio(k, candidate_string)
+        partial_match = fuzz.partial_ratio(v, candidate_string)
         if partial_match >= threshold:
             results.append({"protected_value" : k, 
                             "protected_value_background" : v,
@@ -191,22 +191,21 @@ def _match_any_string(string, words, threshold):
 def _string_column_vs_list(dataframe, colname, words, threshold, log_sample=False):
     # same as before TODO consider moving to a seperate function?
     use_df = dataframe
-    n = len(dataframe.index)
+    sample_size = len(dataframe.index)
     if log_sample:
-        sizelog2 = floor(log2(n))
+        sample_size = floor(log2(sample_size))
         sizeunique = len(pd.unique(use_df[colname]))
         
         temp = use_df[[colname]]
         use_df = temp[~temp.index.duplicated(keep='first')]
 
-        if sizeunique > sizelog2:
-            use_df = use_df.sample(n=sizelog2)
-        n = len(use_df.index)
-    
+        if sizeunique > sample_size:
+            use_df = use_df.sample(n=sample_size)
+    sample_size = len(use_df[colname].unique()) # only the exact # of values that will be checked
     matches = [_match_any_string(str(a), words, threshold)["match"] for a in use_df[colname].unique()]
     count = sum(matches)
 
-    return float(count) / n
+    return float(count) / sample_size
 
 # checks if a number is an integer
 def _is_integer(n):

@@ -1,10 +1,10 @@
 """
 These are AST visitors used primarily by the analysis environment
 """
-
+from astor import dump_tree
 from ast import NodeVisitor
 from ast import Call, Attribute, Name, Str, Assign, Expr, Num
-from ast import Index, Subscript, Slice, ExtSlice, List
+from ast import Index, Subscript, Slice, ExtSlice, List, Constant
 import pandas as pd
 
 PD_READ_FUNCS = ["read_csv", "read_fwf", "read_json", "read_html",
@@ -37,28 +37,32 @@ class DataFrameVisitor(BaseImportVisitor):
     It returns information about information like source on a best
     effort basis
     """
-    # TODO: visitor needs to tag when a known df object is assigned to as well
-    def __init__(self, df_names, pd_alias):
+    def __init__(self, df_names, new_dfs, pd_alias):
 
         super().__init__(pd_alias)
+
         self.df_names = df_names
+        self.new_dfs = new_dfs
 
         self.assign_map = {}  # the mapping of LHS -> RHS
-        self.info = {} # information about the data
+        self.info = {} # map of df_name -> {ancestor_df_or_filename,}
 
-        self.context = {"info" : [], "df_names" : [], "non_df_names" : []}
+        # we track non_df name references to build an assign map
+        # for modelvisitor
+
+        self.context = {"df_refs" : [], "non_df_refs" : []}
          
     def visit_Call(self, node):
         self.generic_visit(node)
         if is_newdata_call(node, self.alias):
             info = get_newdata_info(node, self.alias)
-            self.context["info"].append(info)
+            self.context["df_refs"].append(info["source"])
 
     def visit_Name(self, node):
         if node.id in self.df_names:
-            self.context["df_names"].append(node.id)
+            self.context["df_refs"].append(node.id)
         else:
-            self.context["non_df_names"].append(node.id)
+            self.context["non_df_refs"].append(node.id)
 
     def route_child(self, node):
         # since calling generic_visit(node) skips node this includes node 
@@ -75,55 +79,48 @@ class DataFrameVisitor(BaseImportVisitor):
             self.generic_visit(node)
 
     def visit_Assign(self, node):
-        self.route_child(node.value)
 
-        rhs_has_df = self.context["df_names"] != []
-        rhs_df_names = self.context["df_names"]
-        rhs_non_dfs = self.context["non_df_names"]
+        # assign statements are <Left Hand Side, aka targets> = <Right Hand Side, aka value>
+        self.route_child(node.value) # this parses the right hand side of the assign statement
+        
+        # does RHS reference dfs or is there a read_csv call?
+        # does LHS reference new_dfs?
+        # if RHS and LHS, for each element in LHS add RHS references
+        # if RHS but no LHS, do nothing
+        # if LHS but no RHS, do nothing
 
-        self.context["df_names"] = []
-        self.context["non_df_names"] = []
+        rhs_has_df = self.context["df_refs"] != []
+        rhs_df_names = self.context["df_refs"]
+        rhs_non_dfs = self.context["non_df_refs"]
 
-        for tgt in node.targets: 
+
+        # search left hand side
+        self.context["df_refs"] = []
+        self.context["non_df_refs"] = []
+
+        for tgt in node.targets: # this parses the left hand side of the assign statement
             self.route_child(tgt)
-        lhs_has_df = self.context["df_names"] != []
-        lhs_names = self.context["df_names"]
+        
+        lhs_has_df = self.context["df_refs"] != []
+        lhs_names = self.context["df_refs"]
 
-        if lhs_has_df and not rhs_has_df:
-            # match info to name 
-            for name in lhs_names:
-                if self.context["info"] != []:
-                    info = self.context["info"].pop()
-                    self.info[name] = info
-                else:
-                    self.info[name] = {}
         if lhs_has_df and rhs_has_df:
             for name in lhs_names:
-                if self.context["info"] != []:
-                    info = self.context["info"].pop()
-                    self.info[name] = info
-                # copy right info from rhs
-                elif rhs_df_names != []:
-                    rhs_name = rhs_df_names.pop()
-                    self.info[name] = {"source" : rhs_name, "format": "derived"}
-                else:
-                    self.info[name] = {}
-        if not lhs_has_df:
-            for name in self.context["non_df_names"]:
-                try:
-                    self.assign_map[name].add(node.value)
-                except KeyError:
+                if name not in self.info:
+                    self.info[name] = set()
+                self.info[name].update(rhs_df_names)
+        if lhs_has_df: 
+            for name in self.context["non_df_refs"]:
+                if name not in self.assign_map:
                     self.assign_map[name] = set()
-                    self.assign_map[name].add(node.value)
+                self.assign_map[name].add(node.value)
 
-        self.context["df_names"] = []
-        self.context["non_df_names"] = []
-        self.context["info"] = []
+        self.context["df_refs"] = []
+        self.context["non_df_refs"] = []
         
     def visit_Expr(self, node):
-        self.context["info"] = []
-        self.context["df_names"] = []
-        self.context["non_df_names"] = []
+        self.context["df_refs"] = []
+        self.context["non_df_refs"] = []
 
 class ModelScoreVisitor(BaseImportVisitor):
 
@@ -191,9 +188,10 @@ class ModelScoreVisitor(BaseImportVisitor):
             self.models[node.id] = {}
 
     def get_columns(self, node):
+
         visitor = ColumnVisitor(self.ns, self.assignments)
         visitor.visit(node)
-        
+
         return visitor.cols, visitor.df_name
 
 class ColumnVisitor(NodeVisitor):
@@ -251,7 +249,11 @@ class ColumnVisitor(NodeVisitor):
             else:
                 if ref_obj in self.cols:
                     self.cols = [ref_obj]
-
+        if isinstance(node.slice, List):
+            poss_selected = resolve_list(self.ns, node.slice)
+            self.cols = poss_selected
+        if isinstance(node.slice, Constant):
+            self.cols = [node.slice.value]
     def parse_loc(self, node):
         """
         node is a subscript where the main item references the loc attribute

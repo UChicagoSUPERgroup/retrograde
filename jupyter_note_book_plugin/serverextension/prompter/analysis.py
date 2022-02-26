@@ -30,13 +30,14 @@ class AnalysisEnvironment:
         self.pandas_alias = Aliases("pandas") # handle imports and functions
         self.entry_points = {} # new data introduced into notebook
         self._kernel_id = kernel_id
-
+        
         self._nbapp = nbapp
-        self.client = None
         self.models = {}
 
         self.ptr_set = {}
         self.log = self._nbapp.log
+
+        self.ancestors = {} # map of (df_name, version) -> {(input_df_name, version), ...,}
 
     def cell_exec(self, code, notebook, cell_id, exec_ct):
         """
@@ -56,8 +57,12 @@ class AnalysisEnvironment:
         full_ns.update(ns_dfs)
 
         model_names = [k for k,v in full_ns.items() if isinstance(v, ClassifierMixin)]
-     
-        df_visitor = DataFrameVisitor(ns_dfs.keys(), self.pandas_alias)
+    
+        # new data check
+        new_data = self._get_new_data(ns_dfs, cell_id)
+
+        # parse relationships
+        df_visitor = DataFrameVisitor(ns_dfs.keys(), new_data, self.pandas_alias)
         df_visitor.visit(cell_code) 
         self.ptr_set.update(df_visitor.assign_map)  
 
@@ -71,7 +76,7 @@ class AnalysisEnvironment:
 
         for df_name in df_visitor.info:
 
-            self.entry_points[df_name] = df_visitor.info[df_name]
+            self.entry_points[df_name] = {"ancestors" : df_visitor.info[df_name]}
             self.entry_points[df_name]["cell"] = cell_id
             self.entry_points[df_name]["name"] = df_name
             self.entry_points[df_name]["kernel"] = self._kernel_id
@@ -86,8 +91,26 @@ class AnalysisEnvironment:
                         self.entry_points[df_name]["columns"][c]["type"] = str(df_obj[c].dtypes)
         # add data to db
         for entry_point in self.entry_points.values():
+
             self.log.debug("[AnalysisEnv] checking {0}".format(entry_point))
-            self.db.check_add_data(entry_point)   
+            pt_version = self.db.check_add_data(entry_point, exec_ct)   
+            child = (entry_point["name"], pt_version)
+
+            if child not in self.ancestors:
+                self.ancestors[child] = set()
+
+            # get the most recent version of each. ancestor
+            # this could be made more efficient by looking up all ancestors
+            # once and then using a lookup, but unless this ends up being a 
+            # big time-sink, additional complexity probably not worth it. 
+            for ancestor in entry_point["ancestors"]:
+                anc_versions = self.db.find_data({"name" : ancestor, "kernel" : self._kernel_id})
+                if anc_versions is None:
+                    anc_max_version = 1
+                else:
+                    anc_max_version = max([anc["version"] for anc in anc_versions])
+                self.ancestors[child].add((ancestor, anc_max_version))
+
         # new model fit calls? 
         new_models = model_visitor.models
         self.log.debug("[AnalysisEnv] new models are {0}".format(new_models)) 
@@ -102,51 +125,29 @@ class AnalysisEnvironment:
             else: 
                 self.models[model_name] = new_models[model_name]
                 self.models[model_name]["cell"] = cell_id
+    def _get_new_data(self, df_ns, cell_id):
+        """find the new dataframe elements""" 
+        new_dfs = {}
+        for df in df_ns:
 
-    def _wait_for_clear(self, client):
-        """let's try polling the iopub channel until nothing queued up to execute"""
-        while True:
-            try:
-                io_msg = client.iopub_channel.get_msg(timeout=0.25)
-                if io_msg["msg_type"] == "status":
-                    if io_msg["content"]["execution_state"] == "idle":
-                        return
-            except Empty:
-                return
+            lookup_entry = {
+                "cell" : cell_id,
+                "name" : df,
+                "kernel" : self._kernel_id,
+                "columns" : {},
+            }
 
-    def _execute_code(self, code, client=None, kernel_id=None, timeout=1):
-        if not kernel_id: kernel_id = self._kernel_id
+            for col in df_ns[df].columns:
+                lookup_entry["columns"][col] = {}
+                lookup_entry["columns"][col]["size"] = len(df_ns[df][col])
+                lookup_entry["columns"][col]["type"] = str(df_ns[df][col].dtypes)
 
-        start_time = timer()
+            version = self.db.is_new_data(lookup_entry) # returns true/false whether entry is new or not
 
-        if not client: client = self.client # client initially defined as None
-
-        if (not client) or (kernel_id != self._kernel_id):
-            self._nbapp.log.debug("[ANALYSIS] creating new client for {0}".format(code))
-            kernel = self._nbapp.kernel_manager.get_kernel(kernel_id)
-            client = kernel.client()
-
-            client.start_channels()
-            client.wait_for_ready()
-
-            self.client = client # want to associate kernel id with client
-            self._kernel_id = kernel_id
-#        self._nbapp.log.debug("[ANALYSIS] acquiring lock for {0}".format(kernel_id))
-#        self._nbapp.log.debug("[ANALYSIS] {0}".format(dir(kernel)))
-#        self._nbapp.web_app.kernel_locks[kernel_id].acquire()
-        
-        kernel = self._nbapp.kernel_manager.get_kernel(kernel_id)
-        self._wait_for_clear(client)
-
-        output = run_code(client, kernel, code, self._nbapp.log)
-
-        self._nbapp.log.debug("[ANALYSIS] {0}\n{1}".format(kernel_id, output))
-#        self._nbapp.web_app.kernel_locks[kernel_id].release()
-        end_time = timer()
-#        self._nbapp.log.debug("[ANALYSIS] Code execution taking %s seconds" % (end_time - start_time))
-        self._nbapp.log.debug("[ANALYSIS] Executed {0}, output {1}".format(code, output))
-        return output
-
+            if version is None: 
+                new_dfs[df] = df_ns[df]
+        return new_dfs
+                
     def get_models(self):
         """are models in cell defined in this analysis?"""
         return self.models
