@@ -105,6 +105,10 @@ class AnalysisManager:
             if r.feasible(cell_id, env, dfs, non_dfs):
                 r.make_response(env, kernel_id, cell_id) 
             r.update(env, kernel_id, cell_id, dfs, non_dfs)
+        for r in self.notes["all"]:
+            if r.feasible(cell_id, env, dfs, non_dfs):
+                r.make_response(env, kernel_id, cell_id)
+            r.update(env, kernel_id, cell_id, dfs, non_dfs)
         response = self.send_notifications(kernel_id, cell_id, request["exec_ct"])
  
         self._nb.log.info("[MANAGER] sending response {0}".format(response))

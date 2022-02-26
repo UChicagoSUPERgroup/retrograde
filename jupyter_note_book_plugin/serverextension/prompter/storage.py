@@ -22,11 +22,10 @@ SQL_CMDS = {
   "UPDATE_CELLS" : """UPDATE cells SET contents = ?, num_exec = num_exec + 1, last_exec = ?, kernel = ?, metadata = ? WHERE id = ? AND user = ?;""",
   "INSERT_VERSIONS" : """INSERT INTO versions(user, kernel, id, version, time, contents, exec_ct) VALUES (?,?,?,?,?,?,?);""",
   "DATA_VERSIONS" : """SELECT kernel, source, name, version, user FROM data WHERE source = ? AND name = ? AND user = ? AND kernel = ? ORDER BY version""",
-  "DATA_VERSIONS_NO_SOURCE" : """SELECT kernel, source, name, version, user FROM data WHERE name = ? AND user = ? AND kernel = ? ORDER BY version""",
-  "ADD_DATA" : """INSERT INTO data(kernel, cell, version, source, name, user) VALUES (?, ?, ?, ?, ?, ?)""",
+  "DATA_VERSIONS_NO_SOURCE" : """SELECT kernel, source, name, version, user, exec_ct FROM data WHERE name = ? AND user = ? AND kernel = ? ORDER BY version""",
+  "ADD_DATA" : """INSERT INTO data(kernel, cell, version, source, name, user, exec_ct) VALUES (?, ?, ?, ?, ?, ?, ?)""",
   "ADD_COLS" : """INSERT INTO columns(user, kernel, name, version, col_name, type, size) VALUES (?, ?, ?, ?, ?, ?, ?)""",
   "GET_VERSIONS" : """SELECT contents, version FROM versions WHERE kernel = ? AND id = ? AND user = ? ORDER BY version DESC LIMIT 1""",
-  "GET_COLS" : """SELECT * FROM columns WHERE user = ? AND col_name = ?""",
   "GET_FIELDS" : """SELECT fields FROM columns WHERE user = ? AND kernel = ? AND name = ? AND version = ? AND col_name = ?""",
   "GET_ALL_COLS" : """SELECT * FROM columns WHERE user = ? AND kernel = ? AND name = ? AND version = ?""",
   "GET_UNMARKED" : """SELECT col_name, name, version, type, size FROM columns WHERE kernel = ? AND user = ? AND name = ? AND version = ? AND checked = FALSE""",
@@ -35,13 +34,15 @@ SQL_CMDS = {
   "GET_VERSION_COLS" : """SELECT * FROM columns WHERE kernel = ? AND user = ? AND name = ? AND version = ?""",
   "STORE_RESP" : """INSERT INTO notifications(kernel, user, cell, resp, exec_ct) VALUES (?, ?, ?, ?, ?)""",
   "GET_RESPS" : """SELECT cell, resp FROM notifications WHERE kernel = ? AND user = ?""",
+  "GET_DATA_VERSION": "SELECT * from data WHERE exec_ct = ? AND name = ?", # NOTE: unused, probably wrong
+  "LINK_CELL" : """"""
 }
 
 LOCAL_SQL_CMDS = { # cmds that will always get executed locally
   "MAKE_NS_TABLE" : """CREATE TABLE namespaces(msg_id TEXT PRIMARY KEY, exec_num INT, code TEXT, time TIMESTAMP, namespace BLOB)""",
   "RECOVER_NS" : """SELECT namespace FROM namespaces WHERE msg_id = ?""",
   "RECENT_NS" : """SELECT * FROM namespaces ORDER BY time DESC LIMIT 1""",
-  "LINK_CELL" : """SELECT * FROM namespaces WHERE exec_num = ?""",
+  "LINK_CELL" : """SELECT * FROM namespaces WHERE exec_num = ? ORDER BY time""",
 }
 
 class DbHandler:
@@ -171,8 +172,9 @@ class DbHandler:
         delta = timedelta(seconds=3) 
 
         #self.renew_connection()
-        curs.execute(self.cmds["LINK_CELL"], (exec_ct,))
-        results = curs.fetchall()
+        # curs.execute(self.cmds["LINK_CELL"], (exec_ct,))
+        self._local_cursor.execute(self.cmds["LINK_CELL"], (exec_ct,))
+        results = self._local_cursor.fetchall()
        
         results = [r for r in results if r["time"] > (cell_time - delta)]  
         results = [r for r in results if r["time"] < (cell_time + delta)]
@@ -183,7 +185,51 @@ class DbHandler:
             return results[0]        
         raise sqlite3.IntegrityError("Multiple namespaces in range")  
 
-    def check_add_data(self, entry_point):
+    def _match_columns(self, entry_point, data_versions):
+        """
+        return version number of data, if it exists, 
+        else, return None
+        """
+        for version in data_versions:
+            entry_matched = True
+            columns = self.get_columns(entry_point["kernel"], entry_point["name"], version["version"])
+            names = [col["col_name"] for col in columns]
+  
+            if len(names) == len(entry_point["columns"]) and set(names).issubset(set(entry_point["columns"])):
+                for col in columns:
+                    if entry_point["columns"][col["col_name"]]["type"] != col["type"]:
+                        entry_matched = False
+                    if entry_point["columns"][col["col_name"]]["size"] != col["size"]:
+                        entry_matched = False
+            else:
+                entry_matched = False
+            if entry_matched:
+                return version["version"]
+        return None
+    def is_new_data(self, entry_point, data_versions=None):
+        if data_versions is None:
+            data_versions = self.find_data(entry_point)
+            if data_versions is None:
+                return None
+        return self._match_columns(entry_point, data_versions)
+    def get_data_version(self, df_name, col_info, kernel): 
+        """
+        given dataframe, and column_info, return which version this
+        dataframe is
+
+        column_info should be a dictionary with a key for each column 
+        name pointing to a dictionary with keys {"type" and "size"}
+        """
+        entry_point = {
+            "name" : df_name,
+            "kernel" : kernel,
+            "columns" :  col_info}
+        data_versions = self.find_data(entry_point)
+        if data_versions:
+            return self._match_columns(entry_point, data_versions)
+        return None
+ 
+    def check_add_data(self, entry_point, exec_ct):
         """
         check if entry_point data is updated, compare columns as well,
         then update
@@ -194,22 +240,9 @@ class DbHandler:
 
         if data_versions:
             # if column name, type and size do not match any version
-            for version in data_versions:
-                entry_matched = True
-                columns = self.get_columns(entry_point["kernel"], entry_point["name"], version["version"])
-                names = [col["col_name"] for col in columns]
-                
-                if len(names) == len(entry_point["columns"]) and set(names).issubset(set(entry_point["columns"])):
-                    for col in columns:
-                        if entry_point["columns"][col["col_name"]]["type"] != col["type"]:
-                            entry_matched = False
-                        if entry_point["columns"][col["col_name"]]["size"] != col["size"]:
-                            entry_matched = False
-                else:
-                    entry_matched = False
-                if entry_matched:
-                    return version["version"]
-
+            prev = self._match_columns(entry_point, data_versions)
+            if prev:
+                return prev
             max_version = max([v["version"] for v in data_versions])
 
             if "source" not in entry_point:
@@ -217,18 +250,18 @@ class DbHandler:
                 max_data_version = [v for v in data_versions if v["version"] == max_version][0]
                 entry_point["source"] = max_data_version["source"] 
 
-            self.add_data(entry_point, max_version+1) 
+            self.add_data(entry_point, max_version+1, exec_ct) 
             return max_version + 1
         else:
             # data is new, add data and columns to database
             if "source" not in entry_point:
                 entry_point["source"] = "unknown"
-            self.add_data(entry_point, 1)
+            self.add_data(entry_point, 1, exec_ct)
             return 1
-
     def find_data(self, data):
         """look up if data entry exists, return if exists, None if not"""
         # note that will *not* compare columns
+        """
         if "source" in data.keys():
             source = data["source"]
             name = data["name"] 
@@ -242,7 +275,7 @@ class DbHandler:
             if data_versions == []: 
                 return None
             return data_versions
-
+        """
         name = data["name"]
         kernel = data["kernel"] 
 
@@ -254,7 +287,42 @@ class DbHandler:
             return None
         return data_versions
 
-    def add_data(self, data, version):
+    def get_dataframe_version(self, data, version, cursor=None):
+        """Tries to find a pandas dataframe object corresponding to the data and version"""
+        # set the cursor
+        if cursor is None:
+            cursor = self._cursor
+
+        # find if data is in database to begin with
+        data_versions = self.find_data(data)
+        if data_versions is None:
+            return None
+        else:
+            # loop through all matches to find the version we're looking for
+            for match in data_versions:
+                if match["version"] == version:
+                    exec_ct = match["exec_ct"]
+                    # query local database
+                    self.renew_connection()
+                    cursor.execute(self.cmds["LINK_CELL"], (exec_ct,))
+                    # list of all 
+                    namespaces = cursor.fetchall()
+                    if len(namespaces) < 1:
+                        return None # there were no namespaces with this exec_ct
+                    else:
+                        # NOTE: gets the earliest timestamped matching namespace
+                        # TODO: select by kernel id instead?
+                        namespace = namespaces[0]
+                        df_name = data["name"]
+                        dfs = load_dfs(namespace)
+                        if df_name in dfs:
+                            return dfs[df_name]
+                        else:
+                            return None
+            # if we're here, no such version exists
+            return None
+
+    def add_data(self, data, version, exec_ct):
         """add data to data entry table
         data format is 
             {"kernel" : kernel_id, 
@@ -275,7 +343,9 @@ class DbHandler:
 
         self.renew_connection()
 
-        self._cursor.execute(self.cmds["ADD_DATA"], (kernel, cell, version, source, name, self.user))
+        # manager.py calls cell_exec() with exec_ct. cell_exec() calls check_add_data() and passes it down
+        # check_add_data() passes exec_ct to add_data which finally adds it to the database
+        self._cursor.execute(self.cmds["ADD_DATA"], (kernel, cell, version, source, name, self.user, exec_ct))
 
         cols = [(self.user,
                  kernel,
@@ -308,8 +378,16 @@ class DbHandler:
             name = max_version["name"]
             version = max_version["MAX(version)"]
             self._cursor.execute(self.cmds["GET_VERSION_COLS"], (kernel, self.user, name, version))
-            recent_cols.extend(self._cursor.fetchall())
+            values = self._cursor.fetchall()
 
+            for value in values:
+                # there must be a way to enforce these conversions in mysql-connector, but I
+                # can't find them.
+                value["is_sensitive"] = bool(value["is_sensitive"])
+                value["user_specified"] = bool(value["user_specified"])
+                value["checked"] = bool(value["checked"])
+            recent_cols.extend(values)
+        
         return recent_cols        
     def get_unmarked_columns(self, kernel):
         """
@@ -362,7 +440,13 @@ class DbHandler:
             # want to get the max value for each column
             version = version_dict[(self.user, kernel, df_name)]
             for col_name,info in columns.items():
-                query_params = (info["fields"], info["is_sensitive"], info["user_specified"], True, 
+                is_sensitive = info["is_sensitive"]
+                user_specified = info["user_specified"]
+                if isinstance(is_sensitive, int):
+                    is_sensitive = bool(is_sensitive)
+                if isinstance(user_specified, int):
+                    user_specified = bool(user_specified) 
+                query_params = (info["fields"], is_sensitive, user_specified, True, 
                                 self.user, kernel, df_name, version, col_name)
                 query_tuples.append(query_params)
         self._cursor.executemany(self.cmds["UPDATE_COL_TYPES"], query_tuples)
@@ -470,7 +554,7 @@ class RemoteDbHandler(DbHandler):
     def _init_local_db(self, dbname=DB_NAME, dirname=DB_DIR):
         db_path_resolved = os.path.expanduser(dirname)
 
-#        print("creating local database at {0}".format(db_path_resolved+dbname))
+        # print("creating local database at {0}".format(db_path_resolved+dbname))
 
         if os.path.isdir(db_path_resolved) and os.path.isfile(db_path_resolved+dbname): 
             self._local_conn = sqlite3.connect(db_path_resolved+dbname, 
@@ -492,6 +576,8 @@ class RemoteDbHandler(DbHandler):
         return super().recent_ns(curs=self._local_cursor)
     def link_cell_to_ns(self, exec_ct, contents, cell_time,curs=None):
         return super().link_cell_to_ns(exec_ct, contents, cell_time, curs=self._local_cursor)
+    def get_dataframe_version(self, data, version, curs=None):
+        return super().get_dataframe_version(data, version, cursor=self._local_cursor)
 
     def renew_connection(self):
 

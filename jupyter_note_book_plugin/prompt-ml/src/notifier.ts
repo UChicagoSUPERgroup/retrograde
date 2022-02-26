@@ -107,10 +107,56 @@ export class Prompter {
       } else if (notice_type == "missing") {
         console.log("making missing data message");
         this._handleMissing(list_of_notes, note_count);
+      } else if (notice_type == "model_report") {
+        this._makeEqOdds(list_of_notes, note_count)
       } else {
         console.log("Note type not recognized " + notice_type);
       }
+    }      
+  }
+
+
+  private _makeEqOdds(eqOdds: { [key: string]: any }[], note_count: number) {
+    var note = new PopupNotification("eqOdds", false, "Model Report Note");
+    note.addHeader("Model Report Note")
+    console.log("eqodds length ",eqOdds.length); 
+    for(var m = 0; m < eqOdds.length; m++) {
+      var model : { [key: string] : any} = eqOdds[m];
+      console.log("eqodds model ", model["model_name"], "m ",m);
+      // Name and accuracy to the first decimal place (i.e. 10.3%)
+      note.addSubheader("Model " + model["model_name"] + " (" + (Math.floor(1000 * model["acc_orig"]) / 10) + "% accuracy)")
+      var sensitivityLists : any[] = []
+      for(var group in model["error_rates"]) {
+        sensitivityLists.push(group)
+        for(var correspondingGroup in model["error_rates"][group]) {
+          var thisGroup = model["error_rates"][group][correspondingGroup]
+          // Round to 3 decimal places
+          // To do: dedicated rounding method / global rounding config setting
+          for(var x = 0; x < thisGroup.length; x++)
+            thisGroup[x] = Math.floor(model["error_rates"][group][correspondingGroup][x] * 1000) / 1000
+          // Backend sends information in a static, predefined order
+          var precision = thisGroup[0],
+          recall = thisGroup[1],
+          f1score = thisGroup[2],
+          fpr = thisGroup[3],
+          fnr = thisGroup[4]
+          var nextAppend : any[] = [correspondingGroup, [
+            "Precision: " + precision, 
+            "Recall: " + recall, 
+            "F1 Score: " + f1score, 
+            "FPR: " + fpr, 
+            "FNR: " + fnr
+          ]] 
+          sensitivityLists.push(nextAppend)
+        }
+      }
+      // Attaching the data to the note itself
+      note.addParagraph("Sensitive groups:")
+      note.addList((sensitivityLists.length == 0) ? ["None"] : sensitivityLists)
     }
+    // Send to the Jupyterlab interface to render
+    var message = note.generateFormattedOutput(global_notification_count, note_count);
+    this._appendNote(message);
   }
 
   private _handleProxies(
@@ -131,7 +177,7 @@ export class Prompter {
   }
 
   private _handleMissing(
-    missing_notes: { [key: string]: { [key: string]: any } },
+    missing_notes: { [key: string] : any}[],
     note_count: number
   ) {
     var note = this._makeMissingMsg(missing_notes, note_count);
@@ -231,7 +277,7 @@ export class Prompter {
   }
 
   private _makeMissingMsg(
-    notice: { [key: string]: { [key: string]: any } },
+    notice: { [key: string]: any }[],
     note_count: number
   ) {
     var note: PopupNotification = new PopupNotification(
@@ -247,23 +293,26 @@ export class Prompter {
     they are missing due to observed or unobserved variables.`);
     // Create container for the small-view content
     // Iterating over every dataframe
-    for (var df_name in notice["dfs"]) {
+    for (var df_idx in notice) {
+
       // Small-view df container
+      var df_name = notice[df_idx]["df"];
       note.addSubheader(`<h3>Within <span class="code-snippet">${df_name}</span></h3>`);
-      var df = notice["dfs"][df_name];
       var ul = [];
       // Expanded-view df container
       // Iterating over every column
+      var df = notice[df_idx]; 
       for (const col_name_index in df["missing_columns"]) {
         // Extract information for the small-view content
-        var col_name = df["missing_columns"][col_name_index];
-        var col_count = df[col_name]["number_missing"];
-        var total_length = df[col_name]["total_length"];
+        console.log("colname index ",col_name_index);
+        var col_count = df["missing_columns"][col_name_index]["number_missing"];
+        var total_length = df["missing_columns"][col_name_index]["total_length"];
         // Extract the mode (for expanded view)
         var modes = [];
-        for (const key in df[col_name]) {
-          if (key == "total_length" || key == "number_missing") continue;
-          else modes.push([key, df[col_name][key]["largest_percent"]]);
+        console.log("extracting view ", df["missing_columns"][col_name_index]);
+        for (const key in df["missing_columns"][col_name_index]["sens_col"]) {
+          console.log("key ",key);
+          modes.push([key, df["missing_columns"][col_name_index]["sens_col"][key]["largest_percent"]]);
         }
         modes = modes.sort(
           (a: [string, number][][], b: [string, number][][]) => {
@@ -274,11 +323,13 @@ export class Prompter {
             }
           }
         );
+        console.log("modes", modes);
         var cor_col = modes[0][0];
-        var percent = df[col_name][cor_col]["largest_percent"];
-        var cor_mode = df[col_name][cor_col]["largest_missing_value"];
+        
+        var percent = df["missing_columns"][col_name_index]["sens_col"][cor_col]["largest_percent"];
+        var cor_mode = df["missing_columns"][col_name_index]["sens_col"][cor_col]["largest_missing_value"];
         ul.push(
-          `Column <strong>${col_name}</strong> is missing <strong>${col_count}</strong>/<strong>${total_length}</strong> entries`
+          `Column <strong>${col_name_index}</strong> is missing <strong>${col_count}</strong>/<strong>${total_length}</strong> entries`
         );
         ul.push([
           `This occurs most frequently (${percent}%) when ${cor_col} is ${cor_mode}`,
