@@ -7,7 +7,7 @@ if MODE == "EXP_CTS":
         "intro" :[ProxyColumnNote],
         "tutorial" : [ProxyColumnNote],
         "null_clean" : [MissingDataNote],
-        "model" : [ModelReportNote, ErrorSliceNote],
+        "model" : [ModelReportNote],
         "end" : []
     }
 if MODE == "EXP_END":

@@ -638,7 +638,8 @@ class ModelReportNote(Notification):
     """
     def __init__(self, db):
         super().__init__(db)
-        self.aligned_models = {} # candidates for using correction
+        self.aligned_models = {} # candidates for tabulating error types
+        self._info_cache = {} # cache of notes used for generated note updating
         self.columns = {}
         self.k = 2 #Q? what should k be? how can user change k? (this is k highest error rates to display)
 
@@ -649,18 +650,10 @@ class ModelReportNote(Notification):
         """  
         poss_models = env.get_models()
         models = {model_name : model_info for model_name, model_info in poss_models.items() if model_name in non_dfs_ns.keys()} 
+        old_models = list(self.data.keys())
+        
+        return {model_name : model_info for model_name, model_info in models.items() if model_name not in old_models}
 
-        if cell_id in self.data:
-            cell_models = [model.get("model_name") for model in self.data.get(cell_id)]
-        else:
-            cell_models = []
-       
-        return {model_name : model_info for model_name, model_info in models.items() if model_name not in cell_models}
-
-    def _find_prot_ancestor(self, df_name, version):
-        """
-        find whether there is an ancestor in the set
-        """
     def check_feasible(self, cell_id, env, dfs, ns):
         
         if "namespace" in ns:
@@ -753,8 +746,6 @@ class ModelReportNote(Notification):
             env.log.error("[ModelReportNote] ancestors not found")
             return False, None, None, None, None
 
-        # Find error rates for protected groups
-#        prot_col_names, prot_cols = self.get_ancestor_prot_info(x_ancestor)
         prot_cols = [x_ancestor[col] for col in prot_col_names]
         if prot_col_names is None or len(prot_col_names) == 0: 
             env.log.debug("[ModelReportNote] has no groups to compute error rates for")
@@ -762,68 +753,7 @@ class ModelReportNote(Notification):
 
         return True, x_ancestor, ancestor_df, prot_col_names, prot_cols
 
-    def get_ancestor_data(self, env, curr_df_name, kernel_id):
-        """
-        Gets the ancestor's dataframe object with correct version
-        Returns :
-            ancestor_df : dataframe object
-            ancestor_df_name : string name of dataframe in notebook
-        """
-        env.log.debug("[ModelReport] has env.ancestors = {0}".format(env.ancestors))
-        search_df_name = curr_df_name
-        found = True
-        ancestor_df_name = ""
-        ancestor_df_version = None
-        # search as far as possible for the ancestor
-        while found:
-            found = False
-            for child_name, child_version in env.ancestors.keys(): # iterate because we don't know version yet
-                if child_name == search_df_name:
-                    ancestor_set = env.ancestors[child_name, child_version]
-                    if not ancestor_set or "." in max(ancestor_set, key=lambda x:x[1])[0]:
-                        # if a file extension "." has been found in the name we can't go back any further 
-                        found=False
-                        break
-                    ancestor_df_name, ancestor_df_version = max(ancestor_set, key=lambda x:x[1]) # return highest version (most recent)
-                    found = True
-            if found:
-                search_df_name = ancestor_df_name
         
-        # for child_name, child_version in env.ancestors.keys(): # iterate because we don't know version yet
-        #     if child_name == curr_df_name:
-        #         ancestor_set = env.ancestors[child_name, child_version]
-        # ancestor_df_name, ancestor_df_version = max(ancestor_set, key=lambda x:x[1]) # return highest version (most recent)
-        
-        # first param of get_dataframe_version is expecting dict
-        # of { "name" : df_name,
-        #      "kernel" : kernel_id
-        #    }
-        data = {
-            "name" : ancestor_df_name,
-            "kernel" : kernel_id
-        }
-        env.log.debug("[ModelReport] looking for {0}".format(data))
-
-        ###### error handling
-        try:
-            ancestor_df = self.db.get_dataframe_version(data, ancestor_df_version) # load the dataframe
-        except KeyError as e:
-            ancestor_df = None
-
-        if not isinstance(ancestor_df, pd.DataFrame):
-            env.log.error("[ModelReport] get_dataframe_version did not find an ancestor_df. See below message.")
-            env.log.debug("[ModelReport] data {0} and data version {1}".format(data, ancestor_df_version))
-            return None, None
-
-        env.log.debug("[ModelReport] found df: {0} with columns {1}".format(ancestor_df_name, ancestor_df.columns))
-        ###### error handling
-        return ancestor_df, ancestor_df_name
-        
-    def get_ancestor_prot_info(self, ancestor_df):
-        prot_cols = guess_protected(ancestor_df)
-        prot_col_names = [col["original_name"] for col in prot_cols]
-        prot_cols_df = [ancestor_df[col] for col in prot_col_names]
-        return prot_col_names, prot_cols_df
     def group_based_error_rates(self, env, prot_group, df, y_true, y_pred):
         """
         Compute precision, recall and f1score for a protected group in the df
@@ -943,67 +873,22 @@ class ModelReportNote(Notification):
         # pylint: disable=too-many-locals,too-many-statements
         super().make_response(env, kernel_id, cell_id)
 
-        env.log.debug("[ModelReportNote] has received a request to make a response")
-       
-        # TODO: should change this, was from previous version where we only wanted 1 
-        model_name = choice(list(self.aligned_models.keys()))
-        resp = {"type" : "model_report", "model_name" : model_name}
+        #env.log.debug("[ModelReportNote] has received a request to make a response")
+      
+        for model_name in self.aligned_models.keys(): 
+            resp = {"type" : "model_report", "model_name" : model_name}
 
+            X = self.aligned_models[model_name]["x"]
+            y = self.aligned_models[model_name]["y"]
+            model = self.aligned_models[model_name]["model"]
 
-        X = self.aligned_models[model_name]["x"]
-        y = self.aligned_models[model_name]["y"]
-        model = self.aligned_models[model_name]["model"]
+            acc_orig = model.score(X, y)
+            orig_preds = model.predict(X)
+            orig_preds = pd.Series(orig_preds, index=X.index)
 
-        # curr_df_name = self.aligned_models[model_name]["x_name"]
-        # # get ancestor df here 
-        # self.aligned_models[model_name]["match"]["x_ancestor"], \
-        #     self.aligned_models[model_name]["match"]["x_ancestor_name"] \
-        #         = self.get_ancestor_data(env, curr_df_name, kernel_id)
-        # if isinstance(self.aligned_models[model_name]["match"]["x_ancestor"], pd.DataFrame):
-        #     x_ancestor = self.aligned_models[model_name]["match"]["x_ancestor"]
-        #     x_ancestor_name = self.aligned_models[model_name]["match"]["x_ancestor"]
-        #     # env.log.debug("[ModelReportNote] has found an ancestor of type: {0}".format( 
-        #     #                 type(self.aligned_models[model_name]["match"]["x_ancestor"])))
-        #     env.log.debug("[ModelReportNote] has found an ancestor df. shape: {1}, cols: {0}".format(
-        #                     x_ancestor.columns, x_ancestor.shape))
-        # else:
-        #     env.log.error("[ModelReportNote] ancestors not found")
-        #     return
+            x_ancestor, x_ancestor_name, prot_col_names, prot_cols = self.get_prot_from_aligned(model_name)
 
-        # get acc_orig on indexed/subsetted df
-        acc_orig = model.score(X, y)
-        orig_preds = model.predict(X)
-        orig_preds = pd.Series(orig_preds, index=X.index)
-
-        # prot_col_names, prot_cols = self.get_ancestor_prot_info(x_ancestor)
-        # # Find error rates for protected groups
-        # if prot_col_names is None or len(prot_col_names) == 0: 
-        #     # exit? nothing to do if no groups
-        #     env.log.debug("[ModelReportNote] has no groups to compute error rates for")
-        #     return
-        # else:
-        #     env.log.debug("[ModelReportNote] (make_response) is retrieving error rates for these columns: {0}."
-        #         .format(prot_col_names))
-        #     sorted_error_rates, k_highest_rates = self.get_sorted_k_highest_error_rates(env, 
-        #                                                                                 prot_col_names, 
-        #                                                                                 model_name, 
-        #                                                                                 x_ancestor, 
-        #                                                                                 X, y, 
-        #                                                                                 orig_preds)   
-        
-        x_ancestor, x_ancestor_name, prot_col_names, prot_cols = self.get_prot_from_aligned(model_name)
-
-        """
-        if x_ancestor is None or prot_col_names is None:
-            env.log.error("[ModelReportNote] has no groups to compute errors for, something went wrong.")
-            # form some empty response? return? idk
-            return
-        else:
-            env.log.debug("[ModelReportNote] (make_response) is retrieving error rates for these columns: {0}."
-                .format(prot_col_names))
-        """
-        # Commenting out b.c all checking should happen in check_feasible
-        sorted_error_rates, k_highest_rates = self.get_sorted_k_highest_error_rates(env, 
+            sorted_error_rates, k_highest_rates = self.get_sorted_k_highest_error_rates(env, 
                                                                                     prot_col_names, 
                                                                                     model_name, 
                                                                                     x_ancestor, 
@@ -1011,23 +896,22 @@ class ModelReportNote(Notification):
                                                                                     orig_preds) 
            
 
-        resp["acc_orig"] = acc_orig
-        resp["groups"] = prot_col_names
-        # TODO: check if empty?
-        resp["error_rates"] = sorted_error_rates
-        resp["k_highest_rates"] = k_highest_rates
+            resp["acc_orig"] = acc_orig
+            resp["groups"] = prot_col_names
+            resp["error_rates"] = sorted_error_rates
+            resp["k_highest_rates"] = k_highest_rates
 
-        env.log.debug("[ModelReportNote] response is \n{0}".format(resp))
-
-        if resp["model_name"] not in self.columns:
-            self.columns[resp["model_name"]] = {cell_id : (X,y)}
-        else:
-            self.columns[resp["model_name"]][cell_id] = (X, y)
+            env.log.debug("[ModelReportNote] response is \n{0}".format(resp))
+            self._info_cache[model_name] = self.aligned_models[model_name] 
+            if resp["model_name"] not in self.columns:
+                self.columns[resp["model_name"]] = (X,y)
+            else:
+                self.columns[resp["model_name"]] = (X, y)
  
-        if cell_id in self.data:
-            self.data[cell_id].append(resp)
-        else:
-            self.data[cell_id] = [resp]
+            if model_name in self.data:
+                self.data[model_name].append(resp)
+            else:
+                self.data[model_name] = [resp]
 
     def update(self, env, kernel_id, cell_id, dfs, ns):
         """
@@ -1040,11 +924,11 @@ class ModelReportNote(Notification):
 
         def check_if_defined(resp):
 
-            if resp["model_name"] not in non_dfs_ns:
+            if resp not in non_dfs_ns:
                 return False
 
-            X, y = self.columns.get(resp["model_name"]).get(cell_id)
-            model = non_dfs_ns.get(resp["model_name"])
+            X, y = self.columns.get(resp)
+            model = non_dfs_ns.get(resp)
 
             if X is None or y is None or model is None:
                 return False
@@ -1059,18 +943,19 @@ class ModelReportNote(Notification):
                 return False
             return True
 
-        live_resps = [resp for resp in self.data[cell_id] if check_if_defined(resp)]
+        live_resps = [model for model in self.data if check_if_defined(model)]
+        updated_data = {}
 
-        for resp in live_resps:
-            model_name = resp["model_name"]
-            match_name, match_cols, match_indexer = search_for_sensitive_cols(self.aligned_models[model_name]["x"], model_name,dfs)
+        for model_name in live_resps:
+        
+            X = self._info_cache[model_name]["x"]
+            y = self._info_cache[model_name]["y"]
+            
+            match_name, match_cols, match_indexer = search_for_sensitive_cols(X, model_name,dfs)
             model = non_dfs_ns[model_name]
 
-            df_name = self.aligned_models[model_name]["x_name"]
+            df_name = self._info_cache[model_name]["x_name"]
             prot_anc_found, x_ancestor, x_ancestor_name, prot_col_names, prot_cols = self.prot_ancestors_found(env, df_name, dfs, env._kernel_id)
-
-            X = self.aligned_models[model_name]["x"]
-            y = self.aligned_models[model_name]["y"]
 
             new_preds = model.predict(X)
             new_preds = pd.Series(new_preds, index=X.index)
@@ -1093,22 +978,23 @@ class ModelReportNote(Notification):
                                                                                             x_ancestor, 
                                                                                             X, y, 
                                                                                             new_preds)
+            # TODO: this needs to be changed over
+            resp = {"type" : "model_report", "model_name" : model_name}
             resp["acc_orig"] = new_acc
             resp["groups"] = prot_col_names
             resp["error_rates"] = sorted_error_rates
             resp["k_highest_error_rates"] = k_highest_error_rates
-
-            env.log.debug("[ModelReportNote] response is \n{0}".format(resp))
-
-
+            updated_data[model_name] = [resp]
+            env.log.debug("[ModelReportNote] response is \n{0}".format(updated_data[model_name]))
+            
         # remember to clean up non-live elements of self.columns
-        live_names = [resp["model_name"] for resp in live_resps]
-        old_names = [resp["model_name"] for resp in self.data[cell_id] if resp["model_name"]  not in live_names]
+        live_names = [model_name for model_name in live_resps]
+        old_names = [resp for resp in self.data if resp  not in live_names]
        
         for old_name in old_names:
-            del self.columns[old_name][cell_id]
-         
-        self.data[cell_id] = live_resps
+            del self.columns[old_name]
+            del self._info_cache[old_name] 
+        self.data = updated_data
 
 class ErrorSliceNote(Notification):
     """
