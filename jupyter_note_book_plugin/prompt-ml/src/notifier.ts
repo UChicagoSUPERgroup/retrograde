@@ -119,24 +119,13 @@ export class Prompter {
   private _makeEqOdds(eqOdds: { [key: string]: any }[], note_count: number) {
     var note = new PopupNotification("eqOdds", false, "Model Report Note");
     note.addHeader("Model Report Note")
-    for(var x = 0; x < eqOdds.length; x++) {
-      var model : { [key: string] : any} = eqOdds[x];
+    console.log("eqodds length ",eqOdds.length); 
+    for(var m = 0; m < eqOdds.length; m++) {
+      var model : { [key: string] : any} = eqOdds[m];
+      console.log("eqodds model ", model["model_name"], "m ",m);
       // Name and accuracy to the first decimal place (i.e. 10.3%)
       note.addSubheader("Model " + model["model_name"] + " (" + (Math.floor(1000 * model["acc_orig"]) / 10) + "% accuracy)")
       var sensitivityLists : any[] = []
-      // Iterates over error rates and creates nested arrays for a bulleted list
-      // i.e.
-      // [
-      //    <parent group name>: [
-      //        <nested group name> : [
-      //          "Precision: <precision score>",
-      //          "Recall: <recall score"
-      //        ],
-      //        <second nested group name : [...],
-      //    ],
-      //    <second parent group name: [...],
-      //    ...
-      // ]
       for(var group in model["error_rates"]) {
         sensitivityLists.push(group)
         for(var correspondingGroup in model["error_rates"][group]) {
