@@ -6,6 +6,8 @@ import { Listener } from "./cell-listener";
 
 import { PopupNotification } from "./components/PopupNotification";
 import { ProtectedColumnNote } from "./components/ProtectedColumnNote";
+import { Group } from "./components/Group";
+import { Model } from "./components/Model";
 
 import $ = require("jquery");
 
@@ -117,17 +119,16 @@ export class Prompter {
 
 
   private _makeEqOdds(eqOdds: { [key: string]: any }[], note_count: number) {
-    var note = new PopupNotification("eqOdds", false, "Model Report Note");
+    var note = new PopupNotification("modelReport", false, "Model Report Note");
     note.addHeader("Model Report Note")
     console.log("eqodds length ",eqOdds.length); 
     for(var m = 0; m < eqOdds.length; m++) {
       var model : { [key: string] : any} = eqOdds[m];
       console.log("eqodds model ", model["model_name"], "m ",m);
       // Name and accuracy to the first decimal place (i.e. 10.3%)
-      note.addSubheader("Model " + model["model_name"] + " (" + (Math.floor(1000 * model["acc_orig"]) / 10) + "% accuracy)")
-      var sensitivityLists : any[] = []
+      var name = "Model " + model["model_name"] + " (" + (Math.floor(1000 * model["acc_orig"]) / 10) + "% accuracy)"
+      var groups : Group[] = []
       for(var group in model["error_rates"]) {
-        sensitivityLists.push(group)
         for(var correspondingGroup in model["error_rates"][group]) {
           var thisGroup = model["error_rates"][group][correspondingGroup]
           // Round to 3 decimal places
@@ -135,24 +136,16 @@ export class Prompter {
           for(var x = 0; x < thisGroup.length; x++)
             thisGroup[x] = Math.floor(model["error_rates"][group][correspondingGroup][x] * 1000) / 1000
           // Backend sends information in a static, predefined order
-          var precision = thisGroup[0],
+          var precision : string = thisGroup[0],
           recall = thisGroup[1],
           f1score = thisGroup[2],
           fpr = thisGroup[3],
-          fnr = thisGroup[4]
-          var nextAppend : any[] = [correspondingGroup, [
-            "Precision: " + precision, 
-            "Recall: " + recall, 
-            "F1 Score: " + f1score, 
-            "FPR: " + fpr, 
-            "FNR: " + fnr
-          ]] 
-          sensitivityLists.push(nextAppend)
+          fnr = thisGroup[4];
+          groups.push(new Group(correspondingGroup, precision, recall, f1score, fpr, fnr))
         }
       }
       // Attaching the data to the note itself
-      note.addParagraph("Sensitive groups:")
-      note.addList((sensitivityLists.length == 0) ? ["None"] : sensitivityLists)
+      note.addRawHtmlElement(new Model(name, model["current_df"], model["ancestor_df"], groups).export())
     }
     // Send to the Jupyterlab interface to render
     var message = note.generateFormattedOutput(global_notification_count, note_count);
@@ -205,17 +198,6 @@ export class Prompter {
   private _makeProxyMsg(d: any, note_count: number) {
     var note = new PopupNotification("proxy", false, "Proxy Columns");
     note.addHeader("Proxy Columns");
-
-    const description = $.parseHTML(
-      "<div>" +
-        '<p>Certain variables in this notebook may encode or have strong correlations with sensitive variables. In some cases, the use of these correlated variables may produce outcomes that are biased. This bias may be undesirable, unethical and in some cases illegal. <a style="color: blue; text-decoration; underline" target="_blank" href="PLACEHOLDER">(Read More)</a></p>' +
-        "<br /><p>This plugin has detected the presence of certain columns in this notebook that may be correlated with sensitive variables. In some instances, this correlation was detected by computing the correlation between the sensitive column and the candidate proxy column.</p>" +
-        "<br /><p>A column may also be correlated with a sensitive variable that is not contained in the data. This plugin also notes when a column may encode data that is known to correlate with a sensitive variable that is not present in the dataset.</p>" +
-        "<br /><p>The correlations found or suggested here may or may not be meaningful. There also may be situation-specific correlations that are not detected by this plugin.</p>" +
-        "</div>"
-    );
-    const descriptionHtmlElement = description[0] as any as HTMLElement;
-    note.addRawHtmlElement(descriptionHtmlElement);
 
     for (let df_name in d) {
       note.addHeader(`Within <span class="code-snippet">${df_name}</span></strong>`);
@@ -273,6 +255,20 @@ export class Prompter {
       note.addRawHtmlElement(fullTableHtmlElement);
     }
 
+
+    const description = $.parseHTML(
+      "<div>" +
+        '<p>Certain variables in this notebook may encode or have strong correlations with sensitive variables. In some cases, the use of these correlated variables may produce outcomes that are biased. This bias may be undesirable, unethical and in some cases illegal. <a style="color: blue; text-decoration; underline" target="_blank" href="PLACEHOLDER">(Read More)</a></p>' +
+        "<br /><p>This plugin has detected the presence of certain columns in this notebook that may be correlated with sensitive variables. In some instances, this correlation was detected by computing the correlation between the sensitive column and the candidate proxy column.</p>" +
+        "<br /><p>A column may also be correlated with a sensitive variable that is not contained in the data. This plugin also notes when a column may encode data that is known to correlate with a sensitive variable that is not present in the dataset.</p>" +
+        "<br /><p>The correlations found or suggested here may or may not be meaningful. There also may be situation-specific correlations that are not detected by this plugin.</p>" +
+        "<br /><p>The plugin calculates these values by comparing every sensitive column with every non-sensitive column. The plugin uses Analysis of Variance, Chi-Square, and Spearman procedures depending on the type of columns being compared." + 
+        "</div>"
+    );
+    const descriptionHtmlElement = description[0] as any as HTMLElement;
+    note.addRawHtmlElement(descriptionHtmlElement);
+
+
     return note.generateFormattedOutput(global_notification_count, note_count);
   }
 
@@ -286,15 +282,7 @@ export class Prompter {
       "Missing Data"
     );
     note.addHeader("Missing Data");
-    note.addParagraph(`here are a number of reasons why data may be missing. In some instances, 
-    it may be due to biased collection practices. It may also be missing due to random 
-    error <a href=\"placeholder\"(Read More)</a>`);
-    note.addParagraph(`This plugin cannot detect whether the missing data are missing at random or whether 
-    they are missing due to observed or unobserved variables.`);
-    // Create container for the small-view content
-    // Iterating over every dataframe
     for (var df_idx in notice) {
-
       // Small-view df container
       var df_name = notice[df_idx]["df"];
       note.addSubheader(`<h3>Within <span class="code-snippet">${df_name}</span></h3>`);
@@ -337,6 +325,14 @@ export class Prompter {
       }
       note.addList(ul);
     }
+    note.addParagraph(`There are a number of reasons why data may be missing. In some instances, 
+    it may be due to biased collection practices. It may also be missing due to random 
+    error <a href=\"placeholder\">(Read More)</a>.`);
+    note.addParagraph(`This plugin cannot detect whether the missing data are missing at random or whether 
+    they are missing due to observed or unobserved variables.`);
+    note.addParagraph(`Instead, the plugin calculates missing data values by examining the all columns with missing values; then, for rows within that column, it identifies the most common sensitive data values within other columns.`);
+    // Create container for the small-view content
+    // Iterating over every dataframe
     return note;
   }
 
