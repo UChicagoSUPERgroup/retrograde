@@ -15,6 +15,7 @@ PATH_PROTECTED_JSON_FULL = 'evaluation_task/build/protected_columns.json'
 PATH_NATIONALITIES = './nationalities.txt'
 PATH_NATIONALITIES_FULL = 'evaluation_task/build/nationalities.txt'
 NATIONALITY_WORDS = None
+EXEMPT_GUESS = ["color", "race", "age"]
 
 # try to pre-load the nationalities file
 def load_nationalities():
@@ -36,6 +37,7 @@ def check_for_protected(column_names):
         next_results = _fuzzy_string_across_dict(column_name.lower(), protected_corpus, PROTECTED_MATCH_THRESHOLD)
         results.extend(next_results)
     return results
+
 
 def guess_protected(dataframe):
         """
@@ -172,6 +174,12 @@ def _fuzzy_string_across_dict(candidate_string, reference_dict, threshold):
         partial_match = fuzz.partial_ratio(v, candidate_string)
         if partial_match >= threshold:
             results.append({"protected_value" : k, 
+                            "protected_value_background" : v,
+                            "original_name" : candidate_string})
+        else:
+            # we want to exempt some guesses that contain common words
+            if k not in EXEMPT_GUESS and k in candidate_string:
+                results.append({"protected_value" : k, 
                             "protected_value_background" : v,
                             "original_name" : candidate_string})
     return results
