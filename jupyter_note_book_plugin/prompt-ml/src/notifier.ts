@@ -202,7 +202,7 @@ export class Prompter {
     for (let df_name in d) {
       note.addHeader(`Within <span class="code-snippet">${df_name}</span></strong>`);
       var df = d[df_name];
-      const columnNames = df["proxy_col_name"];
+      const columnNames = df["sensitive_col_name"];
       const tableRows: { [columnName: string]: ProxyColumnRelationships } = {};
       columnNames.forEach((columnName: string, idx: number) => {
         if (tableRows[columnName] === undefined) {
@@ -212,17 +212,17 @@ export class Prompter {
           };
         }
         if (df["p_vals"][idx] < 0.001) {
-          tableRows[columnName].correlated.push(df["sensitive_col_name"][idx]);
+          tableRows[columnName].correlated.push(df["proxy_col_name"][idx]);
         } else {
-          tableRows[columnName].predictive.push(df["sensitive_col_name"][idx]);
+          tableRows[columnName].predictive.push(df["proxy_col_name"][idx]);
         }
       });
       const tableHeader = `
         <thead>
           <tr>
             <th>Column name</th>
-            <th>Predictive of (maybe)</th>
-            <th>Strongly correlated with</th>
+            <th>Highest correlated columns</th>
+            <th>Other correlated columns</th>
           </tr>
         </thead>
       `;
@@ -258,11 +258,12 @@ export class Prompter {
 
     const description = $.parseHTML(
       "<div>" +
-        '<p>Certain variables in this notebook may encode or have strong correlations with sensitive variables. In some cases, the use of these correlated variables may produce outcomes that are biased. This bias may be undesirable, unethical and in some cases illegal. <a style="color: blue; text-decoration; underline" target="_blank" href="PLACEHOLDER">(Read More)</a></p>' +
-        "<br /><p>This plugin has detected the presence of certain columns in this notebook that may be correlated with sensitive variables. In some instances, this correlation was detected by computing the correlation between the sensitive column and the candidate proxy column.</p>" +
-        "<br /><p>A column may also be correlated with a sensitive variable that is not contained in the data. This plugin also notes when a column may encode data that is known to correlate with a sensitive variable that is not present in the dataset.</p>" +
-        "<br /><p>The correlations found or suggested here may or may not be meaningful. There also may be situation-specific correlations that are not detected by this plugin.</p>" +
-        "<br /><p>The plugin calculates these values by comparing every sensitive column with every non-sensitive column. The plugin uses Analysis of Variance, Chi-Square, and Spearman procedures depending on the type of columns being compared." + 
+        "<br /><p>This plugin has detected the presence of certain columns in this notebook that are correlated with sensitive variables.</p>" +
+        '<br /><p><b>Why it matters</b> Using columns correlated with sensitive variables may produce outcomes that are biased. This bias may be undesirable, unethical and in some cases illegal. <a style="color: blue; text-decoration; underline" target="_blank" href="PLACEHOLDER">(Read More)</a></p>' +
+        "<br /><p><b>What you can do</b> The correlations found or suggested here may or may not be meaningful. There also may be situation-specific correlations that are not detected by this plugin. In some cases, it may be appropriate to use a column which does have a correlation with a sensitive variable.</p>" +
+        "<br /><p>Ultimately, it is up to you to make a decision about whether it is valid to include the correlated columns in your model.</p>"+
+        "<br /><p><b>How was it detected?</b> The plugin calculates these values by comparing every sensitive column with every non-sensitive column. The plugin uses Analysis of Variance, Chi-Square, and Spearman tests depending on the type of columns being compared." + 
+        "The correlations shown are those that had a p-value of less than 0.2, the Highest Correlated columns are those that had a p-value of less than 0.001"+
         "</div>"
     );
     const descriptionHtmlElement = description[0] as any as HTMLElement;
