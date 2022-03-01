@@ -554,7 +554,10 @@ class MissingDataNote(ProtectedColumnNote):
             sense_cols = [col for col in cols if col["is_sensitive"]]
            
             df_report = {"type" : "missing", "df" : df_name, "missing_columns" : {}}
- 
+
+            # what we want: when sens_col == x, x% are missing
+            # when <sens_col> is <lmv>, missing <largest_percent>
+
             for missing_col in missing_cols:
 
                 is_na_col = df[missing_col].isna()
@@ -570,16 +573,17 @@ class MissingDataNote(ProtectedColumnNote):
                         continue
                     sens_col_name = sens_col["col_name"]
                     missing_counts = df[sens_col_name][is_na_col].value_counts()
-                     
+                    
+                    if missing_counts.sum() == 0:
+                        continue
+ 
                     # largest missing value
-                    lmv = str(missing_counts.idxmax())
+                    max_value = missing_counts.idxmax()
+                    lmv = str(max_value)
+                    is_max_value = (df[sens_col_name] == missing_counts.idxmax())
+                    is_max_and_missing = (is_max_value & is_na_col)
 
-                    # largest percent
-                    env.log.debug("[MissingDataNote] missing counts {0}".format(missing_counts))
-                    if missing_counts.sum() == 0.0:
-                        lp = 0
-                    else:
-                        lp  = math.floor(100.0 * (missing_counts[missing_counts.idxmax()]/missing_counts.sum()))
+                    lp  = math.floor(100.0 *(sum(is_max_and_missing)/sum(is_max_value))) 
                     
                     sens_col_dict[sens_col_name] = {"largest_missing_value" : lmv, "largest_percent" : lp}
    
