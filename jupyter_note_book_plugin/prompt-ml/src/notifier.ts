@@ -315,13 +315,16 @@ export class Prompter {
         console.log("modes", modes);
         var cor_col = modes[0][0];
         
-        var percent = df["missing_columns"][col_name_index]["sens_col"][cor_col]["largest_percent"];
+//        var percent = df["missing_columns"][col_name_index]["sens_col"][cor_col]["largest_percent"];
         var cor_mode = df["missing_columns"][col_name_index]["sens_col"][cor_col]["largest_missing_value"];
+        var num_missing = df["missing_columns"][col_name_index]["sens_col"][cor_col]["n_missing"];
+        var num_max = df["missing_columns"][col_name_index]["sens_col"][cor_col]["n_max"];
+
         ul.push(
-          `Column <strong>${col_name_index}</strong> is missing <strong>${col_count}</strong>/<strong>${total_length}</strong> entries`
+          `When <strong>${cor_col}</strong> is <strong>${cor_mode}</strong>, <strong>${col_name_index}</strong> is missing <strong>${num_missing}</strong>/<strong>${num_max}</strong> entries`
         );
         ul.push([
-          `This occurs most frequently (${percent}%) when ${cor_col} is ${cor_mode}`,
+          `${col_name_index} is missing ${col_count}/${total_length} entries`,
         ]);
       }
       note.addList(ul);
