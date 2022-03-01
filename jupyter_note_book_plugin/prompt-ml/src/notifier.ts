@@ -259,7 +259,7 @@ export class Prompter {
     const description = $.parseHTML(
       "<div>" +
         "<br /><p>This plugin has detected the presence of certain columns in this notebook that are correlated with sensitive variables.</p>" +
-        '<br /><p><b>Why it matters</b> Using columns correlated with sensitive variables may produce outcomes that are biased. This bias may be undesirable, unethical and in some cases illegal. <a style="color: blue; text-decoration; underline" target="_blank" href="PLACEHOLDER">(Read More)</a></p>' +
+        '<br /><p><b>Why it matters</b> Using columns correlated with sensitive variables may produce outcomes that are biased. This bias may be undesirable, unethical and in some cases illegal. </p>' +
         "<br /><p><b>What you can do</b> The correlations found or suggested here may or may not be meaningful. There also may be situation-specific correlations that are not detected by this plugin. In some cases, it may be appropriate to use a column which does have a correlation with a sensitive variable.</p>" +
         "<br /><p>Ultimately, it is up to you to make a decision about whether it is valid to include the correlated columns in your model.</p>"+
         "<br /><p><b>How was it detected?</b> The plugin calculates these values by comparing every sensitive column with every non-sensitive column. The plugin uses Analysis of Variance, Chi-Square, and Spearman tests depending on the type of columns being compared." + 
@@ -329,12 +329,20 @@ export class Prompter {
       }
       note.addList(ul);
     }
-    note.addParagraph(`There are a number of reasons why data may be missing. In some instances, 
+    note.addParagraph("This plugin has detected patterns of missing data");
+    note.addParagraph(`<br /><b>Why it matters</b> There are a number of reasons why data may be missing. In some instances, 
     it may be due to biased collection practices. It may also be missing due to random 
-    error <a href=\"placeholder\">(Read More)</a>.`);
-    note.addParagraph(`This plugin cannot detect whether the missing data are missing at random or whether 
-    they are missing due to observed or unobserved variables.`);
-    note.addParagraph(`Instead, the plugin calculates missing data values by examining the all columns with missing values; then, for rows within that column, it identifies the most common sensitive data values within other columns.`);
+    error.  How you handle the missing values may impact how the model behaves.`);
+
+    note.addParagraph(`<br /><b>What you can do</b> It is up to you to determine why you think the values in each column are missing.
+    In some cases, it may be appropriate to exclude rows with missing entries in a particular column.
+    It may also be appropriate to impute that data. These decisions also may depend on whether you believe the column is relevant to the predictive
+    task. If the column with missing data is not relevant, then it may be appropriate to exclude that column.`)
+
+    note.addParagraph(`<br /><b>How was it detected?</b> The plugin calculates missing data values by examining the all columns with na values. 
+    This means that placeholder values not recognized by <code>pd.isna()</code> are not recognized.
+    This note uses the protected columns identified in the Protected Column notification and checks the most common sensitive data value when an entry is missing.
+    It does not check combinations of columns.`);
     // Create container for the small-view content
     // Iterating over every dataframe
     return note;
