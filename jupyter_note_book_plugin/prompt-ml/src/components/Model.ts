@@ -44,8 +44,7 @@ export class Model {
     var elem = $.parseHTML(`
     <div class="model">
         <h3>${name}</h3>
-        <p>Model trained on: <span class="code-snippet-minor">${originalDf}</span></p>
-        <p>Plugin calculated on: <span class="code-snippet-minor">${currentDf}</span></p>
+        <p>Model evaluated on: <span class="code-snippet-minor">${currentDf}</span>, using sensitive columns from <span class="code-snippet-minor">${originalDf}</span></p>
         <div class="groups-container">
             
         </div>

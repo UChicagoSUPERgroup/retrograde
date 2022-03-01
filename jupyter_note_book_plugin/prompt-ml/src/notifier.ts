@@ -128,25 +128,37 @@ export class Prompter {
       // Name and accuracy to the first decimal place (i.e. 10.3%)
       var name = "Model " + model["model_name"] + " (" + (Math.floor(1000 * model["acc_orig"]) / 10) + "% accuracy)"
       var groups : Group[] = []
-      for(var group in model["error_rates"]) {
-        for(var correspondingGroup in model["error_rates"][group]) {
-          var thisGroup = model["error_rates"][group][correspondingGroup]
+      for(var group in model["k_highest_error_rates"]) {
+        for(var correspondingGroup in model["k_highest_error_rates"][group]) {
+          var thisGroup = model["k_highest_error_rates"][group][correspondingGroup]
           // Round to 3 decimal places
           // To do: dedicated rounding method / global rounding config setting
           for(var x = 0; x < thisGroup.length; x++)
-            thisGroup[x] = Math.floor(model["error_rates"][group][correspondingGroup][x] * 1000) / 1000
+            thisGroup[x] = Math.floor(model["k_highest_error_rates"][group][correspondingGroup][x] * 1000) / 1000
           // Backend sends information in a static, predefined order
           var precision : string = thisGroup[0],
           recall = thisGroup[1],
           f1score = thisGroup[2],
           fpr = thisGroup[3],
           fnr = thisGroup[4];
-          groups.push(new Group(correspondingGroup, precision, recall, f1score, fpr, fnr))
+          groups.push(new Group(group+" : "+correspondingGroup, precision, recall, f1score, fpr, fnr))
         }
       }
       // Attaching the data to the note itself
       note.addRawHtmlElement(new Model(name, model["current_df"], model["ancestor_df"], groups).export())
     }
+    note.addParagraph(`<p>This plugin has calculated performance metrics for data subsets based on Protected Columns</p>`);
+    note.addParagraph(`<br /><p><b>Why it matters</b> Overall accuracy of a model may not tell the whole story. 
+                       A model may be accurate overall, but may have better or worse performance on particular data subsets. 
+                       Alternatively, errors of one type may be more frequent within one subset, and errors of another type may be more frequent in a different data subset.</p>`);
+    
+    note.addParagraph(`<br /><p><b>What you can do</b> It is up to you to determine how to balance overall accuracy and group-level performance. 
+                     It may be the case that choosing a different model, choosing different model parameters, or choosing different input columns will change these characteristics.
+                Exploring the whole space may not be feasible, so prioritizing certain performance metrics and groups, and characterizing the tradeoffs there may be most efficient.</p>`);
+    note.addParagraph(`<br /><p><b>How was it detected?</b> The performance metrics shown here are derived from the plugin's best guess at the protected columns associated with the model's testing data. 
+                       Because of this they may not perfectly match a manual evaluation. 
+                       The plugin calculates the performance with respect to protected groups identified in the Protected Column note. 
+                       The plugin calculates precision, recall, F1 Score, false positive rate (FPR) and false negative rate (FNR). More information about these metrics can be found <a href="https://towardsdatascience.com/performance-metrics-confusion-matrix-precision-recall-and-f1-score-a8fe076a2262">here</a></p>`);
     // Send to the Jupyterlab interface to render
     var message = note.generateFormattedOutput(global_notification_count, note_count);
     this._appendNote(message);
