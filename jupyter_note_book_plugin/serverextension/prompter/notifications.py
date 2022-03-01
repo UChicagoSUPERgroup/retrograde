@@ -584,8 +584,13 @@ class MissingDataNote(ProtectedColumnNote):
                     is_max_and_missing = (is_max_value & is_na_col)
 
                     lp  = math.floor(100.0 *(sum(is_max_and_missing)/sum(is_max_value))) 
-                    
-                    sens_col_dict[sens_col_name] = {"largest_missing_value" : lmv, "largest_percent" : lp}
+                    num_missing = sum(is_max_and_missing)
+                    num_max = sum(is_max_value) 
+
+                    sens_col_dict[sens_col_name] = {"largest_missing_value" : lmv, 
+                                                    "largest_percent" : lp,
+                                                    "n_missing" : str(num_missing),
+                                                    "n_max" : str(num_max)}
    
                 df_report["missing_columns"][missing_col]["sens_col"] = sens_col_dict
             dfs.append(df_report)
