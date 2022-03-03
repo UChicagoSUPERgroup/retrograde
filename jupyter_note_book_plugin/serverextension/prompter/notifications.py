@@ -642,7 +642,7 @@ class ModelReportNote(Notification):
             "k_highest_error_rates" : <dict of groups with highest error rates>
             }
             error_rates format is {<group_name> : {<member_name>: error rates} }
-            error_rates are given in a tuple that looks like (precision, recall, f1score, fpr, fnr)
+            error_rates are given in a tuple that looks like (precision, recall, f1score, fpr, fnr, n)
     """
     def __init__(self, db):
         super().__init__(db)
@@ -865,7 +865,7 @@ class ModelReportNote(Notification):
             if group_error_rates: 
                 # log the error rates
                 for member in group_error_rates:
-                    precision, recall, f1score, fpr, fnr = group_error_rates[member]
+                    precision, recall, f1score, fpr, fnr, n = group_error_rates[member]
                     env.log.debug("[ModelReportNote] has computed these error rates for member, {4}, in group: {0}\nPrecision: {1:.4g}\nRecall: {2:.4g}\nF1Score: {3:.4g}\nFalse Positive Rate: {5:.4g}\nFalse Negative Rate: {6:.4g}"\
                                     .format(group, precision, recall, f1score, member, fpr, fnr))
                 # save them
@@ -1152,8 +1152,8 @@ def error_rates(tp, fp, tn, fn):
         fnr = fn / (fn+tp)
     except ZeroDivisionError:
         fnr = 0
-
-    return float(precision), float(recall), float(f1score), float(fpr), float(fnr)
+    n = tp+fp+fn+tn
+    return float(precision), float(recall), float(f1score), float(fpr), float(fnr), float(n)
 
 def acc_measures(y_true, y_pred):
     """
