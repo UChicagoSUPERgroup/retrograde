@@ -140,8 +140,9 @@ export class Prompter {
           recall = thisGroup[1],
           f1score = thisGroup[2],
           fpr = thisGroup[3],
-          fnr = thisGroup[4];
-          groups.push(new Group(group+" : "+correspondingGroup, precision, recall, f1score, fpr, fnr))
+          fnr = thisGroup[4],
+          n = thisGroup[5];
+          groups.push(new Group(group+": "+correspondingGroup, precision, recall, f1score, fpr, fnr, n))
         }
       }
       // Attaching the data to the note itself

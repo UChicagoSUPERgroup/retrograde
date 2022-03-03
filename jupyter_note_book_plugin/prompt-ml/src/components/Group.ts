@@ -20,7 +20,8 @@ export class Group {
     recall: string,
     f1Score: string,
     fpr: string,
-    fnr: string
+    fnr: string,
+    n : string
   ) {
     this._content = this._generateBaseElement(
             name,
@@ -28,7 +29,8 @@ export class Group {
             recall,
             f1Score,
             fpr,
-            fnr
+            fnr,
+            n,
     );
   }
 
@@ -43,11 +45,12 @@ export class Group {
     recall: string,
     f1Score: string,
     fpr: string,
-    fnr: string
+    fnr: string,
+    n : string,
   ): HTMLDivElement {
     var elem = $.parseHTML(`
     <div class="group">
-        <h4>${name}</h4>
+        <h4 style="text-align:left">${name}<br/>n=${n}</h4>
         <p>Precision: ${precision}</p>
         <p>Recall: ${recall}</p>
         <p>F1 Score: ${f1Score}</p>
