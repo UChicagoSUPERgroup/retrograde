@@ -386,13 +386,17 @@ svg.condensed {
   padding: 0 30px;
 }
 
+.promptMl {
+  font-family: Arial, Helvetica, sans-serif;
+}
+
 .promptMl.protectedColumns {
   display: grid;
   grid-template-columns: 1fr;
   grid-template-rows: auto auto auto;
   grid-auto-rows: auto;
   padding: 15px;
-  font-family: Arial, Helvetica, sans-serif;
+  
 }
 
 .promptMl.protectedColumns .intro {
@@ -524,7 +528,41 @@ th {
   text-align: left;
 }
 
-.code-snippet {
+.promptMl.modelReport .model {
+  background-color: #E0E0E0;
+  padding: 10px;
+  border-radius: 15px;
+  margin-bottom: 15px;
+}
+
+.promptMl.modelReport .model h3 {
+  margin-top: 5px;
+}
+
+.promptMl.modelReport .model > p {
+  margin: 15px 0;
+}
+
+.promptMl.modelReport .group {
+  display: inline-block;
+  background-color: rgba(0, 0, 0, 0.15);
+  border-radius: 15px;
+  padding: 5px 15px;
+  margin: 7px;
+}
+
+.promptMl.modelReport .group h4 {
+  width: 100%;
+  text-align: center;
+  font-size: 1.10em;
+  margin: 12px 0;
+}
+
+.promptMl.modelReport .group p {
+  margin: 5px 0;
+}
+
+.code-snippet, .code-snippet-minor {
   font-family: Monaco,Courier New,monospace!important;
   color: #e01e5a;
   background-color: rgba(30, 30, 30, .04);
@@ -532,6 +570,11 @@ th {
   border-radius: 8px;
   font-size: 20px;
   padding: 3px 10px;
+}
+
+.code-snippet-minor {
+  font-size: 14px;
+  padding: 3px 6px;
 }
 
 /* https://stackoverflow.com/questions/826782/how-to-disable-text-selection-highlighting */

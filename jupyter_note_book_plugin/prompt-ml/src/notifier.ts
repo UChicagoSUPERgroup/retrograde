@@ -6,6 +6,8 @@ import { Listener } from "./cell-listener";
 
 import { PopupNotification } from "./components/PopupNotification";
 import { ProtectedColumnNote } from "./components/ProtectedColumnNote";
+import { Group } from "./components/Group";
+import { Model } from "./components/Model";
 
 import $ = require("jquery");
 
@@ -117,43 +119,46 @@ export class Prompter {
 
 
   private _makeEqOdds(eqOdds: { [key: string]: any }[], note_count: number) {
-    var note = new PopupNotification("eqOdds", false, "Model Report Note");
+    var note = new PopupNotification("modelReport", false, "Model Report Note");
     note.addHeader("Model Report Note")
     console.log("eqodds length ",eqOdds.length); 
     for(var m = 0; m < eqOdds.length; m++) {
       var model : { [key: string] : any} = eqOdds[m];
       console.log("eqodds model ", model["model_name"], "m ",m);
       // Name and accuracy to the first decimal place (i.e. 10.3%)
-      note.addSubheader("Model " + model["model_name"] + " (" + (Math.floor(1000 * model["acc_orig"]) / 10) + "% accuracy)")
-      var sensitivityLists : any[] = []
-      for(var group in model["error_rates"]) {
-        sensitivityLists.push(group)
-        for(var correspondingGroup in model["error_rates"][group]) {
-          var thisGroup = model["error_rates"][group][correspondingGroup]
+      var name = "Model " + model["model_name"] + " (" + (Math.floor(1000 * model["acc_orig"]) / 10) + "% accuracy)"
+      var groups : Group[] = []
+      for(var group in model["k_highest_error_rates"]) {
+        for(var correspondingGroup in model["k_highest_error_rates"][group]) {
+          var thisGroup = model["k_highest_error_rates"][group][correspondingGroup]
           // Round to 3 decimal places
           // To do: dedicated rounding method / global rounding config setting
           for(var x = 0; x < thisGroup.length; x++)
-            thisGroup[x] = Math.floor(model["error_rates"][group][correspondingGroup][x] * 1000) / 1000
+            thisGroup[x] = Math.floor(model["k_highest_error_rates"][group][correspondingGroup][x] * 1000) / 1000
           // Backend sends information in a static, predefined order
-          var precision = thisGroup[0],
+          var precision : string = thisGroup[0],
           recall = thisGroup[1],
           f1score = thisGroup[2],
           fpr = thisGroup[3],
-          fnr = thisGroup[4]
-          var nextAppend : any[] = [correspondingGroup, [
-            "Precision: " + precision, 
-            "Recall: " + recall, 
-            "F1 Score: " + f1score, 
-            "FPR: " + fpr, 
-            "FNR: " + fnr
-          ]] 
-          sensitivityLists.push(nextAppend)
+          fnr = thisGroup[4];
+          groups.push(new Group(group+" : "+correspondingGroup, precision, recall, f1score, fpr, fnr))
         }
       }
       // Attaching the data to the note itself
-      note.addParagraph("Sensitive groups:")
-      note.addList((sensitivityLists.length == 0) ? ["None"] : sensitivityLists)
+      note.addRawHtmlElement(new Model(name, model["current_df"], model["ancestor_df"], groups).export())
     }
+    note.addParagraph(`<p>This plugin has calculated performance metrics for data subsets based on Protected Columns</p>`);
+    note.addParagraph(`<br /><p><b>Why it matters</b> Overall accuracy of a model may not tell the whole story. 
+                       A model may be accurate overall, but may have better or worse performance on particular data subsets. 
+                       Alternatively, errors of one type may be more frequent within one subset, and errors of another type may be more frequent in a different data subset.</p>`);
+    
+    note.addParagraph(`<br /><p><b>What you can do</b> It is up to you to determine how to balance overall accuracy and group-level performance. 
+                     It may be the case that choosing a different model, choosing different model parameters, or choosing different input columns will change these characteristics.
+                Exploring the whole space may not be feasible, so prioritizing certain performance metrics and groups, and characterizing the tradeoffs there may be most efficient.</p>`);
+    note.addParagraph(`<br /><p><b>How was it detected?</b> The performance metrics shown here are derived from the plugin's best guess at the protected columns associated with the model's testing data. 
+                       Because of this they may not perfectly match a manual evaluation. 
+                       The plugin calculates the performance with respect to protected groups identified in the Protected Column note. 
+                       The plugin calculates precision, recall, F1 Score, false positive rate (FPR) and false negative rate (FNR). More information about these metrics can be found <a href="https://towardsdatascience.com/performance-metrics-confusion-matrix-precision-recall-and-f1-score-a8fe076a2262">here</a></p>`);
     // Send to the Jupyterlab interface to render
     var message = note.generateFormattedOutput(global_notification_count, note_count);
     this._appendNote(message);
@@ -206,21 +211,10 @@ export class Prompter {
     var note = new PopupNotification("proxy", false, "Proxy Columns");
     note.addHeader("Proxy Columns");
 
-    const description = $.parseHTML(
-      "<div>" +
-        '<p>Certain variables in this notebook may encode or have strong correlations with sensitive variables. In some cases, the use of these correlated variables may produce outcomes that are biased. This bias may be undesirable, unethical and in some cases illegal. <a style="color: blue; text-decoration; underline" target="_blank" href="PLACEHOLDER">(Read More)</a></p>' +
-        "<br /><p>This plugin has detected the presence of certain columns in this notebook that may be correlated with sensitive variables. In some instances, this correlation was detected by computing the correlation between the sensitive column and the candidate proxy column.</p>" +
-        "<br /><p>A column may also be correlated with a sensitive variable that is not contained in the data. This plugin also notes when a column may encode data that is known to correlate with a sensitive variable that is not present in the dataset.</p>" +
-        "<br /><p>The correlations found or suggested here may or may not be meaningful. There also may be situation-specific correlations that are not detected by this plugin.</p>" +
-        "</div>"
-    );
-    const descriptionHtmlElement = description[0] as any as HTMLElement;
-    note.addRawHtmlElement(descriptionHtmlElement);
-
     for (let df_name in d) {
       note.addHeader(`Within <span class="code-snippet">${df_name}</span></strong>`);
       var df = d[df_name];
-      const columnNames = df["proxy_col_name"];
+      const columnNames = df["sensitive_col_name"];
       const tableRows: { [columnName: string]: ProxyColumnRelationships } = {};
       columnNames.forEach((columnName: string, idx: number) => {
         if (tableRows[columnName] === undefined) {
@@ -230,17 +224,17 @@ export class Prompter {
           };
         }
         if (df["p_vals"][idx] < 0.001) {
-          tableRows[columnName].correlated.push(df["sensitive_col_name"][idx]);
+          tableRows[columnName].correlated.push(df["proxy_col_name"][idx]);
         } else {
-          tableRows[columnName].predictive.push(df["sensitive_col_name"][idx]);
+          tableRows[columnName].predictive.push(df["proxy_col_name"][idx]);
         }
       });
       const tableHeader = `
         <thead>
           <tr>
             <th>Column name</th>
-            <th>Predictive of (maybe)</th>
-            <th>Strongly correlated with</th>
+            <th>Highest correlated columns</th>
+            <th>Other correlated columns</th>
           </tr>
         </thead>
       `;
@@ -273,6 +267,21 @@ export class Prompter {
       note.addRawHtmlElement(fullTableHtmlElement);
     }
 
+
+    const description = $.parseHTML(
+      "<div>" +
+        "<br /><p>This plugin has detected the presence of certain columns in this notebook that are correlated with sensitive variables.</p>" +
+        '<br /><p><b>Why it matters</b> Using columns correlated with sensitive variables may produce outcomes that are biased. This bias may be undesirable, unethical and in some cases illegal. </p>' +
+        "<br /><p><b>What you can do</b> The correlations found or suggested here may or may not be meaningful. There also may be situation-specific correlations that are not detected by this plugin. In some cases, it may be appropriate to use a column which does have a correlation with a sensitive variable.</p>" +
+        "<br /><p>Ultimately, it is up to you to make a decision about whether it is valid to include the correlated columns in your model.</p>"+
+        "<br /><p><b>How was it detected?</b> The plugin calculates these values by comparing every sensitive column with every non-sensitive column. The plugin uses Analysis of Variance, Chi-Square, and Spearman tests depending on the type of columns being compared." + 
+        "The correlations shown are those that had a p-value of less than 0.2, the Highest Correlated columns are those that had a p-value of less than 0.001"+
+        "</div>"
+    );
+    const descriptionHtmlElement = description[0] as any as HTMLElement;
+    note.addRawHtmlElement(descriptionHtmlElement);
+
+
     return note.generateFormattedOutput(global_notification_count, note_count);
   }
 
@@ -286,15 +295,7 @@ export class Prompter {
       "Missing Data"
     );
     note.addHeader("Missing Data");
-    note.addParagraph(`here are a number of reasons why data may be missing. In some instances, 
-    it may be due to biased collection practices. It may also be missing due to random 
-    error <a href=\"placeholder\"(Read More)</a>`);
-    note.addParagraph(`This plugin cannot detect whether the missing data are missing at random or whether 
-    they are missing due to observed or unobserved variables.`);
-    // Create container for the small-view content
-    // Iterating over every dataframe
     for (var df_idx in notice) {
-
       // Small-view df container
       var df_name = notice[df_idx]["df"];
       note.addSubheader(`<h3>Within <span class="code-snippet">${df_name}</span></h3>`);
@@ -326,17 +327,36 @@ export class Prompter {
         console.log("modes", modes);
         var cor_col = modes[0][0];
         
-        var percent = df["missing_columns"][col_name_index]["sens_col"][cor_col]["largest_percent"];
+//        var percent = df["missing_columns"][col_name_index]["sens_col"][cor_col]["largest_percent"];
         var cor_mode = df["missing_columns"][col_name_index]["sens_col"][cor_col]["largest_missing_value"];
+        var num_missing = df["missing_columns"][col_name_index]["sens_col"][cor_col]["n_missing"];
+        var num_max = df["missing_columns"][col_name_index]["sens_col"][cor_col]["n_max"];
+
         ul.push(
-          `Column <strong>${col_name_index}</strong> is missing <strong>${col_count}</strong>/<strong>${total_length}</strong> entries`
+          `When <strong>${cor_col}</strong> is <strong>${cor_mode}</strong>, <strong>${col_name_index}</strong> is missing <strong>${num_missing}</strong>/<strong>${num_max}</strong> entries`
         );
         ul.push([
-          `This occurs most frequently (${percent}%) when ${cor_col} is ${cor_mode}`,
+          `${col_name_index} is missing ${col_count}/${total_length} entries`,
         ]);
       }
       note.addList(ul);
     }
+    note.addParagraph("This plugin has detected patterns of missing data");
+    note.addParagraph(`<br /><b>Why it matters</b> There are a number of reasons why data may be missing. In some instances, 
+    it may be due to biased collection practices. It may also be missing due to random 
+    error.  How you handle the missing values may impact how the model behaves.`);
+
+    note.addParagraph(`<br /><b>What you can do</b> It is up to you to determine why you think the values in each column are missing.
+    In some cases, it may be appropriate to exclude rows with missing entries in a particular column.
+    It may also be appropriate to impute that data. These decisions also may depend on whether you believe the column is relevant to the predictive
+    task. If the column with missing data is not relevant, then it may be appropriate to exclude that column.`)
+
+    note.addParagraph(`<br /><b>How was it detected?</b> The plugin calculates missing data values by examining the all columns with na values. 
+    This means that placeholder values not recognized by <code>pd.isna()</code> are not recognized.
+    This note uses the protected columns identified in the Protected Column notification and checks the most common sensitive data value when an entry is missing.
+    It does not check combinations of columns.`);
+    // Create container for the small-view content
+    // Iterating over every dataframe
     return note;
   }
 
