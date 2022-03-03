@@ -649,7 +649,10 @@ class ModelReportNote(Notification):
         self.aligned_models = {} # candidates for tabulating error types
         self._info_cache = {} # cache of notes used for generated note updating
         self.columns = {}
+
         self.k = 2 #Q? what should k be? how can user change k? (this is k highest error rates to display)
+        self.BOUND = 0.1 # how much above/below median must a metric be to be highlighted
+        self.GROUP_LIMIT = 0.01 # what fraction of data must a subgroup be before being highlighted?
 
     def _get_new_models(self, cell_id, env, non_dfs_ns): 
         """
@@ -873,10 +876,51 @@ class ModelReportNote(Notification):
             else:
                 env.log.debug("[ModelReportNote] has failed to compute error ratees for this group: {0}".format(group))
         sorted_error_rates = self.sort_error_rates(all_error_rates)
+        sorted_error_rates = self.filter_and_select(sorted_error_rates, len(X), env)
         # sort most important k error_rates (this is relative, no normative judgment here)
         k_highest_rates = {key: val for n, (key, val) in enumerate(sorted_error_rates.items()) if n < self.k}
         return sorted_error_rates, k_highest_rates
+    def filter_and_select(self, error_rates, n, env):
+        """
+        do not return any slice with less than 1% of data
+        add level to the group: group_val: metrics: (pr, recall, f1score, fpr, fnr), "highlight" : (+1, 0, -1, ...)
+        """
+        new_output = {}
 
+        for group in error_rates:
+
+            new_output[group] = {}
+            group_vals = list(error_rates[group].keys())
+            metric_list = ["precision", "recall", "f1score", "fpr", "fnr"]
+
+            group_vals = [group_val for group_val in group_vals if error_rates[group][group_val][5] > n*self.GROUP_LIMIT]
+ 
+            for metric_idx, metric in enumerate(metric_list):
+
+                vals = np.array([error_rates[group][group_val][metric_idx] for group_val in group_vals])
+                med_val = np.median(vals)
+
+                above = vals >= med_val*(1+self.BOUND)
+                below = vals <= med_val*(1-self.BOUND)
+
+                env.log.debug(f"[ModelReportNote.filter_select] {group} bounds {med_val*(1-self.BOUND)}, {med_val*(1+self.BOUND)}")
+                env.log.debug(f"[ModelReportNote.filter_select] {vals} {above}, {below}")
+
+                for group_idx, group_val in enumerate(group_vals):
+                    if group_val not in new_output[group]:
+                        new_output[group][group_val] = {"metrics" : error_rates[group][group_val], 
+                                                        "highlight" : [0 for metric in metric_list]} 
+                    if metric in ["fpr", "fnr"]:
+                        if above[group_idx]:
+                            new_output[group][group_val]["highlight"][metric_idx] = -1
+                        elif below[group_idx]:
+                            new_output[group][group_val]["highlight"][metric_idx] = 1
+                    else:
+                        if above[group_idx]:
+                            new_output[group][group_val]["highlight"][metric_idx] = 1
+                        elif below[group_idx]:
+                            new_output[group][group_val]["highlight"][metric_idx] = -1
+        return new_output
     def make_response(self, env, kernel_id, cell_id):
         # pylint: disable=too-many-locals,too-many-statements
         super().make_response(env, kernel_id, cell_id)
