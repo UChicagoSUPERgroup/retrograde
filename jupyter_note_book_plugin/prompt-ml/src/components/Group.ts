@@ -74,12 +74,12 @@ export class Group {
   ) : HTMLParagraphElement {
     if (highlight == 1) {
       var elem = $.parseHTML(`
-        <p style="color:blue">${metric_name}: ${metric}</p>
+        <p style="color:#ff6666"><b>${metric_name}: ${metric}</b></p>
       `);
       return elem[1] as any as HTMLParagraphElement;
     } else if (highlight == -1) {
       var elem = $.parseHTML(`
-        <p style="color:green">${metric_name}: ${metric}</p>
+        <p style="color:#3366ff"><b>${metric_name}: ${metric}</b></p>
       `);
       return elem[1] as any as HTMLParagraphElement;
     } else {
