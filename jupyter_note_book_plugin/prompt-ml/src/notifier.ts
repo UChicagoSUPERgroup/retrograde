@@ -130,18 +130,22 @@ export class Prompter {
       var groups : Group[] = []
       for(var group in model["k_highest_error_rates"]) {
         for(var correspondingGroup in model["k_highest_error_rates"][group]) {
-          var thisGroup = model["k_highest_error_rates"][group][correspondingGroup]
+          var thisGroup = model["k_highest_error_rates"][group][correspondingGroup]["metrics"];
           // Round to 3 decimal places
           // To do: dedicated rounding method / global rounding config setting
           for(var x = 0; x < thisGroup.length; x++)
-            thisGroup[x] = Math.floor(model["k_highest_error_rates"][group][correspondingGroup][x] * 1000) / 1000
+            thisGroup[x] = Math.floor(model["k_highest_error_rates"][group][correspondingGroup]["metrics"][x] * 1000) / 1000
           // Backend sends information in a static, predefined order
           var precision : string = thisGroup[0],
           recall = thisGroup[1],
           f1score = thisGroup[2],
           fpr = thisGroup[3],
-          fnr = thisGroup[4];
-          groups.push(new Group(group+" : "+correspondingGroup, precision, recall, f1score, fpr, fnr))
+          fnr = thisGroup[4],
+          n = thisGroup[5];
+          console.log(model["k_highest_error_rates"][group][correspondingGroup]["highlight"]);
+          var highlights : number[] = model["k_highest_error_rates"][group][correspondingGroup]["highlight"];
+
+          groups.push(new Group(group+": "+correspondingGroup, precision, recall, f1score, fpr, fnr, n, highlights))
         }
       }
       // Attaching the data to the note itself

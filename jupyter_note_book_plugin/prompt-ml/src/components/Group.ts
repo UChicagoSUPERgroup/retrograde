@@ -20,7 +20,9 @@ export class Group {
     recall: string,
     f1Score: string,
     fpr: string,
-    fnr: string
+    fnr: string,
+    n : string,
+    highlights : number[]
   ) {
     this._content = this._generateBaseElement(
             name,
@@ -28,7 +30,9 @@ export class Group {
             recall,
             f1Score,
             fpr,
-            fnr
+            fnr,
+            n,
+            highlights
     );
   }
 
@@ -43,21 +47,48 @@ export class Group {
     recall: string,
     f1Score: string,
     fpr: string,
-    fnr: string
+    fnr: string,
+    n : string,
+    highlights : number[]
   ): HTMLDivElement {
     var elem = $.parseHTML(`
     <div class="group">
-        <h4>${name}</h4>
-        <p>Precision: ${precision}</p>
-        <p>Recall: ${recall}</p>
-        <p>F1 Score: ${f1Score}</p>
-        <p>FPR: ${fpr}</p>
-        <p>FNR: ${fnr}</p>
+        <h4 style="text-align:left">${name}<br/>n=${n}</h4>
     </div>`);
+    var metric_names : string[] = ["Precision", "Recall", "F1 Score", "FPR", "FNR"];
+    var metrics : string[] = [precision, recall, f1Score, fpr, fnr];
+
     var htmlElem = elem[1] as any as HTMLDivElement;
+    console.log(metric_names.length);
+    console.log(highlights); 
+    for (var i = 0; i < metric_names.length; i++) {
+      htmlElem.appendChild(this._generateMetric(metric_names[i], metrics[i], highlights[i]))
+    }
+     
     return htmlElem;
   }
-
+  private _generateMetric(
+    metric_name : string,
+    metric : string,
+    highlight : number   
+  ) : HTMLParagraphElement {
+    if (highlight == 1) {
+      var elem = $.parseHTML(`
+        <p style="color:#ff6666"><b>${metric_name}: ${metric}</b></p>
+      `);
+      return elem[1] as any as HTMLParagraphElement;
+    } else if (highlight == -1) {
+      var elem = $.parseHTML(`
+        <p style="color:#3366ff"><b>${metric_name}: ${metric}</b></p>
+      `);
+      return elem[1] as any as HTMLParagraphElement;
+    } else {
+      var elem = $.parseHTML(`
+        <p>${metric_name}: ${metric}</p>
+      `);
+      return elem[1] as any as HTMLParagraphElement;
+    }
+  }
 
   ////////////////////////////////////////////////////////////
   // Abstractions
