@@ -95,7 +95,7 @@ Then to run the webserver, run pipenv run python3 wsgi.py. This starts the webse
 
 To test the server, go to (hostname)>:5000/(USER_ID)/(MODE). (MODE) is either EXP_CTS or EXP_END and USER_ID can be anything you want. It's helpful to make it relatively unique as it will enable us to debug any issues that may arise. 
 	
-
+**Note**: the webapp runs the containers in host mode, where the containers and host share the same network interface. This allows the containers to access mysql on localhost, without requiring the mysql database be exposed on other IP addresses. 
 
 # Helpful examples
 
