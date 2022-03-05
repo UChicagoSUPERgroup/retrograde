@@ -378,14 +378,18 @@ class DbHandler:
             name = max_version["name"]
             version = max_version["MAX(version)"]
             self._cursor.execute(self.cmds["GET_VERSION_COLS"], (kernel, self.user, name, version))
-            values = self._cursor.fetchall()
+            row_values = self._cursor.fetchall()
+            values = []
 
-            for value in values:
+            for row_value in row_values:
                 # there must be a way to enforce these conversions in mysql-connector, but I
                 # can't find them.
-                value["is_sensitive"] = bool(value["is_sensitive"])
-                value["user_specified"] = bool(value["user_specified"])
-                value["checked"] = bool(value["checked"])
+                value = dict(row_value) 
+                value["is_sensitive"] = bool(row_value["is_sensitive"])
+                value["user_specified"] = bool(row_value["user_specified"])
+                value["checked"] = bool(row_value["checked"])
+                values.append(value)
+
             recent_cols.extend(values)
         
         return recent_cols        
