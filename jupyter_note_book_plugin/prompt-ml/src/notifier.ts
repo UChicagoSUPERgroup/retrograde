@@ -10,6 +10,7 @@ import { Group } from "./components/Group";
 import { Model } from "./components/Model";
 
 import $ = require("jquery");
+import { WelcomeNote } from "./components/WelcomeNote";
 
 // Global used to construct unique ID's
 // This is increased by 1 everytime that a group of notifications is received by the frontend
@@ -117,6 +118,11 @@ export class Prompter {
     }      
   }
 
+  public makeWelcomeMsg() {
+    var note = new WelcomeNote()
+    console.log("generating welcome")
+    this._appendNote(note.generateFormattedOutput(global_notification_count, 0))
+  }
 
   private _makeEqOdds(eqOdds: { [key: string]: any }[], note_count: number) {
     var note = new PopupNotification("modelReport", false, "Model Report Note");

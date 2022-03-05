@@ -155,6 +155,8 @@ const extension: JupyterFrontEndPlugin<void> = {
       }
       $(".prompt-ml-popup").each(function() {$(this).parent().css("overflow-y", "scroll")}); // override normal jquery styling
     })
+    // Load welcome message
+    prompter.makeWelcomeMsg()
     })
   }
 }
