@@ -12,11 +12,6 @@ import { Model } from "./components/Model";
 import $ = require("jquery");
 import { WelcomeNote } from "./components/WelcomeNote";
 
-// Global used to construct unique ID's
-// This is increased by 1 everytime that a group of notifications is received by the frontend
-// Allows us to have a unique ID for every notification so that repeat notes will open the same widget
-var global_notification_count: number = 0;
-
 interface ProxyColumnRelationships {
   predictive: string[];
   correlated: string[];
@@ -36,7 +31,6 @@ export class Prompter {
   }
 
   private _appendNote(note: any) {
-    console.log(note);
     this._appendMsg((note[0] as HTMLDivElement).outerHTML, note[1]);
   }
 
@@ -94,26 +88,27 @@ export class Prompter {
   // Main notification handling function
   private _onInfo(info_object: any) {
     var kernel_id = info_object["kernel_id"];
-    var note_count: number = 0;
     console.log("_onInfo");
     for (const notice_type in info_object) {
       var list_of_notes = info_object[notice_type];
-      if (notice_type == "proxy") {
-        this._handleProxies(list_of_notes, note_count);
-        note_count += 1;
-      } else if (notice_type == "error") {
-        this._makeErrorMessage(list_of_notes, note_count);
-        note_count += 1;
-      } else if (notice_type == "resemble") {
-        console.log("making resemble msg");
-        this._makeResembleMsg(list_of_notes, note_count, String(kernel_id));
-      } else if (notice_type == "missing") {
-        console.log("making missing data message");
-        this._handleMissing(list_of_notes, note_count);
-      } else if (notice_type == "model_report") {
-        this._makeEqOdds(list_of_notes, note_count)
-      } else {
-        console.log("Note type not recognized " + notice_type);
+      switch(notice_type) {
+        case "proxy":
+          this._handleProxies(list_of_notes);
+          break;
+        case "error":
+          this._makeErrorMessage(list_of_notes);
+          break;
+        case "resemble":
+          this._makeResembleMsg(list_of_notes, String(kernel_id));
+          break;
+        case "missing":
+          this._handleMissing(list_of_notes);
+          break;
+        case "model_report":
+          this._makeEqOdds(list_of_notes);
+          break;
+        default:
+          console.log(`Note type not recognized, ${notice_type}`);
       }
     }      
   }
@@ -121,10 +116,10 @@ export class Prompter {
   public makeWelcomeMsg() {
     var note = new WelcomeNote()
     console.log("generating welcome")
-    this._appendNote(note.generateFormattedOutput(global_notification_count, 0))
+    this._appendNote(note.generateFormattedOutput())
   }
 
-  private _makeEqOdds(eqOdds: { [key: string]: any }[], note_count: number) {
+  private _makeEqOdds(eqOdds: { [key: string]: any }[]) {
     var note = new PopupNotification("modelReport", false, "Model Report Note");
     note.addHeader("Model Report Note")
     console.log("eqodds length ",eqOdds.length); 
@@ -170,13 +165,12 @@ export class Prompter {
                        The plugin calculates the performance with respect to protected groups identified in the Protected Column note. 
                        The plugin calculates precision, recall, F1 Score, false positive rate (FPR) and false negative rate (FNR). More information about these metrics can be found <a href="https://towardsdatascience.com/performance-metrics-confusion-matrix-precision-recall-and-f1-score-a8fe076a2262">here</a></p>`);
     // Send to the Jupyterlab interface to render
-    var message = note.generateFormattedOutput(global_notification_count, note_count);
+    var message = note.generateFormattedOutput();
     this._appendNote(message);
   }
 
   private _handleProxies(
     proxies: { [key: string]: any }[],
-    note_count: number
   ) {
     var d: { [key: string]: { [key: string]: string[] } } = {};
     for (var x = 0; x < proxies.length; x++) {
@@ -187,37 +181,29 @@ export class Prompter {
       d[p["df"]]["sensitive_col_name"].push(p["sensitive_col_name"]);
       d[p["df"]]["p_vals"].push(p["p"]);
     }
-    var message = this._makeProxyMsg(d, note_count);
+    var message = this._makeProxyMsg(d);
     this._appendNote(message);
   }
 
   private _handleMissing(
     missing_notes: { [key: string] : any}[],
-    note_count: number
   ) {
-    var note = this._makeMissingMsg(missing_notes, note_count);
-    var message = note.generateFormattedOutput(
-      global_notification_count,
-      note_count
-    );
+    var note = this._makeMissingMsg(missing_notes);
+    var message = note.generateFormattedOutput();
     this._appendNote(message);
   }
 
   // To check
   private _makeResembleMsg(
     notices: any[],
-    note_count: number,
     kernel_id: string
   ) {
     var note = new ProtectedColumnNote(notices, kernel_id);
-    var message = note.generateFormattedOutput(
-      global_notification_count,
-      note_count
-    );
+    var message = note.generateFormattedOutput();
     this._appendNote(message);
   }
 
-  private _makeProxyMsg(d: any, note_count: number) {
+  private _makeProxyMsg(d: any) {
     var note = new PopupNotification("proxy", false, "Proxy Columns");
     note.addHeader("Proxy Columns");
 
@@ -292,12 +278,11 @@ export class Prompter {
     note.addRawHtmlElement(descriptionHtmlElement);
 
 
-    return note.generateFormattedOutput(global_notification_count, note_count);
+    return note.generateFormattedOutput();
   }
 
   private _makeMissingMsg(
     notice: { [key: string]: any }[],
-    note_count: number
   ) {
     var note: PopupNotification = new PopupNotification(
       "missing",
@@ -336,8 +321,6 @@ export class Prompter {
         );
         console.log("modes", modes);
         var cor_col = modes[0][0];
-        
-//        var percent = df["missing_columns"][col_name_index]["sens_col"][cor_col]["largest_percent"];
         var cor_mode = df["missing_columns"][col_name_index]["sens_col"][cor_col]["largest_missing_value"];
         var num_missing = df["missing_columns"][col_name_index]["sens_col"][cor_col]["n_missing"];
         var num_max = df["missing_columns"][col_name_index]["sens_col"][cor_col]["n_max"];
@@ -372,7 +355,6 @@ export class Prompter {
 
   private _makeErrorMessage(
     notices: { [key: string]: any }[],
-    note_count: number
   ) {
     var note = new PopupNotification("errors", false, "Errors");
     note.addHeader("Errors");
@@ -428,7 +410,6 @@ export class Prompter {
       var model_notes = models[model_name];
       if (model_notes["fpr"].length == 0 || model_notes["fnr"].length == 0)
         continue;
-      console.log("DEBUG1:", model_notes);
       var fprString = this._makeErrorNoteLists(
         model_notes["fpr"],
         `Assuming ${model_notes["fpr"][0]["pos_value"]} given the true value of ${model_notes["fpr"][0]["neg_value"]}`
@@ -443,10 +424,7 @@ export class Prompter {
       ]);
     }
     // Adding static content; creating response object
-    var message = note.generateFormattedOutput(
-      global_notification_count,
-      note_count
-    );
+    var message = note.generateFormattedOutput();
     this._appendNote(message);
   }
 

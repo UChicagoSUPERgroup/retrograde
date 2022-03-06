@@ -84,10 +84,11 @@ const extension: JupyterFrontEndPlugin<void> = {
       // Extract information from the event
       var payload = passed_args["payload"]
       var typeOfNote = payload["typeOfNote"]
-      console.log(openNotes)
       // Refresh openNotes by seeing if an element with that ID exists
       for(var note in openNotes) {
-        if(!($(`#jp-main-dock-panel #${openNotes[note]["id"]}`).length > 0)) delete openNotes[note]
+        if($(`#jp-main-dock-panel #${openNotes[note]["id"]}`).length == 0) {
+          delete openNotes[note]
+        }
       }
       // Find out if we already have had a note of this type displayed
       if(typeOfNote in openNotes) {
@@ -103,6 +104,11 @@ const extension: JupyterFrontEndPlugin<void> = {
           for(var x = 0; x < targetIndex - currentIndex; x++)
             app.commands.execute("application:activate-next-tab")
         }
+        // find the node of the note being opened
+        var node = openNotes[typeOfNote]["widget_content"].node
+        var note_container = $(node).find(`.${openNotes[typeOfNote]["elem_id"]}`)
+        // remove old children element and append the new, generated version
+        note_container.empty().append(payload["htmlContent"])
       } else {
         // Hasn't yet been opened or has since closed; creating the widget
         var popupContent = new Widget();
@@ -134,21 +140,19 @@ const extension: JupyterFrontEndPlugin<void> = {
             postAdditionChildren.push($(this).attr("id"))
           }) 
           postAdditionChildren = postAdditionChildren.filter(e => !preAdditionChildren.includes(e))
-          console.log("After filter:", postAdditionChildren)
           if(postAdditionChildren.length == 0) {
-            console.log("No id found")
-            console.log(postAdditionChildren)
+            console.error("Failed to find new note tab")
             // To do: Add error handling
           } else if(postAdditionChildren.length > 1) {
-            console.log("Multiple id's found")
-            console.log(postAdditionChildren)
+            console.error("More than one ID identified")
             // To do: Add error handling
           } else {
-            console.log(postAdditionChildren[0], " found as the id")
             // Saving this information for later reference
             openNotes[typeOfNote] = {
               "id": postAdditionChildren[0],
-              "widget": popupWidget
+              "elem_id": id,
+              "widget": popupWidget,
+              "widget_content": popupContent
             }
           }
         }, 150)

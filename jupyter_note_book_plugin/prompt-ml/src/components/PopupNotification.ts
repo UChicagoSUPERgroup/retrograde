@@ -173,14 +173,11 @@ export class PopupNotification {
     );
   }
 
-  generateFormattedOutput(
-    global_notification_count: number,
-    note_count: number
-  ): object[] {
+  generateFormattedOutput(): object[] {
     var payload: object = {
       title: this.title,
       htmlContent: this.export(),
-      typeOfNote: `${this.type}-${global_notification_count}-${note_count}`,
+      typeOfNote: this.type,
     };
     return new Array(this.generateCondensed(), payload);
   }
