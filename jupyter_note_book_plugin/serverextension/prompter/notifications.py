@@ -96,13 +96,11 @@ class ProtectedColumnNote(Notification):
             # env.log.debug("[ProtectedColumnNote] ({1}) protected by guess columns are {0}".format(guessed_columns, self.ncounter))
             protected_columns = self._merge_protected(protected_columns, guessed_columns)
       
-            env.log.debug("[ProtectedColumnNote] ({1}) protected columns are {0}".format(protected_columns, self.ncounter))
-  
-            if protected_columns != []:
-
-                protected_col_names = [c["original_name"] for c in protected_columns]
-                self.df_protected_cols[df_name] = protected_columns        
-                self.df_not_protected_cols[df_name] = [c for c in cols if c not in protected_col_names]
+            env.log.debug("[ProtectedColumnNote] ({1}) {2} protected columns are {0}".format(protected_columns, self.ncounter, df_name))
+              
+            protected_col_names = [c["original_name"] for c in protected_columns]
+            self.df_protected_cols[df_name] = protected_columns        
+            self.df_not_protected_cols[df_name] = [c for c in cols if c not in protected_col_names]
             
             self.ncounter += 1
 
@@ -249,17 +247,11 @@ class ProtectedColumnNote(Notification):
                 new_data[df_name] = old_protected_columns
                 continue
 
-            # check columns AND values
-            # set_env(env)
-            protected_cols = check_for_protected(dfs[df_name].columns)
-            guessed_protected_cols = guess_protected(dfs[df_name])
-            protected_cols = self._merge_protected(protected_cols, guessed_protected_cols)
+            protected_cols = guess_protected(dfs[df_name])
             self.df_protected_cols[df_name] = protected_cols
 
             col_data = self._make_col_info(dfs[df_name]) 
             df_version = self.db.get_data_version(df_name, col_data, env._kernel_id) 
-
-            # TODO: write _make_col_info method
 
             if not df_version:
                 env.log.warning(f"""[ProtectedColumnNote] no older version of {df_name} (this should never happen)""")
