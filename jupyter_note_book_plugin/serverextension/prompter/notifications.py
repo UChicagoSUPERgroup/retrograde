@@ -21,7 +21,7 @@ from scipy.stats import f_oneway, chi2_contingency, spearmanr
 from sklearn.base import ClassifierMixin
 from pandas.api.types import is_numeric_dtype
 
-from .string_compare import check_for_protected, guess_protected
+from .string_compare import check_for_protected, guess_protected, set_env
 from .sortilege import is_categorical
 from .slice_finder import err_slices
 
@@ -77,6 +77,7 @@ class ProtectedColumnNote(Notification):
         super().__init__(db)
         self.df_protected_cols = {}
         self.df_not_protected_cols = {}
+        self.ncounter = 0
 
     def check_feasible(self, cell_id, env, dfs, ns):
 
@@ -88,17 +89,20 @@ class ProtectedColumnNote(Notification):
         poss_cols = self.db.get_unmarked_columns(env._kernel_id)
 
         for df_name, cols in poss_cols.items():
-
+            # set_env(env)
             protected_columns = check_for_protected(cols)
-            protected_columns.extend(guess_protected(dfs[df_name][cols]))
+            # env.log.debug("[ProtectedColumnNote] ({1}) protected by name columns are {0}".format(protected_columns, self.ncounter))
+            guessed_columns = guess_protected(dfs[df_name][cols])
+            # env.log.debug("[ProtectedColumnNote] ({1}) protected by guess columns are {0}".format(guessed_columns, self.ncounter))
+            protected_columns = self._merge_protected(protected_columns, guessed_columns)
       
-            env.log.debug("[ProtectedColumnNote] protected columns are {0}".format(protected_columns))
-  
-            if protected_columns != []:
-
-                protected_col_names = [c["original_name"] for c in protected_columns]
-                self.df_protected_cols[df_name] = protected_columns        
-                self.df_not_protected_cols[df_name] = [c for c in cols if c not in protected_col_names]
+            env.log.debug("[ProtectedColumnNote] ({1}) {2} protected columns are {0}".format(protected_columns, self.ncounter, df_name))
+              
+            protected_col_names = [c["original_name"] for c in protected_columns]
+            self.df_protected_cols[df_name] = protected_columns        
+            self.df_not_protected_cols[df_name] = [c for c in cols if c not in protected_col_names]
+            
+            self.ncounter += 1
 
         return self.df_protected_cols != {}
 
@@ -109,6 +113,22 @@ class ProtectedColumnNote(Notification):
         noted_dfs = [note["df"] for note in note_subset]
         
         return noted_dfs
+
+    
+    # basically we want this function to merge with preference for 
+    # detection by name
+    def _merge_protected(self, by_name, by_guess):
+        name_originals = [v["original_name"] for v in by_name]
+        res = []
+        res.extend(by_name)
+        for v in by_guess:
+            # if this was already guessed by name, skip
+            if v["original_name"] in name_originals:
+                continue
+            # otherwise, include this
+            res.append(v)
+        return res
+
 
     def make_response(self, env, kernel_id, cell_id):
 
@@ -227,14 +247,11 @@ class ProtectedColumnNote(Notification):
                 new_data[df_name] = old_protected_columns
                 continue
 
-            # check columns AND values
             protected_cols = guess_protected(dfs[df_name])
             self.df_protected_cols[df_name] = protected_cols
 
             col_data = self._make_col_info(dfs[df_name]) 
             df_version = self.db.get_data_version(df_name, col_data, env._kernel_id) 
-
-            # TODO: write _make_col_info method
 
             if not df_version:
                 env.log.warning(f"""[ProtectedColumnNote] no older version of {df_name} (this should never happen)""")

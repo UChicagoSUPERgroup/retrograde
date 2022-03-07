@@ -9,12 +9,14 @@ from pandas.api.types import is_numeric_dtype
 PROTECTED_MATCH_THRESHOLD = 90
 PROTECTED_PROXY_MATCH_THRESHOLD = 80
 NATIONALITY_THRESHOLD = 85 # nationality threshold of 30 was too weak
-COLUMN_PATTERN_THRESHOLD = 0.5
+COLUMN_PATTERN_THRESHOLD = 0.75 # 0.5 was too low
 PATH_PROTECTED_JSON = './protected_columns.json'
 PATH_PROTECTED_JSON_FULL = 'evaluation_task/build/protected_columns.json'
 PATH_NATIONALITIES = './nationalities.txt'
 PATH_NATIONALITIES_FULL = 'evaluation_task/build/nationalities.txt'
 NATIONALITY_WORDS = None
+
+ENV = None
 
 # try to pre-load the nationalities file
 def load_nationalities():
@@ -28,6 +30,12 @@ def load_nationalities():
     NATIONALITY_WORDS = nationality_file.readlines()
 
 
+def set_env(e):
+    global ENV
+
+    ENV = e
+
+
 def check_for_protected(column_names):
     '''check to see if a list of column names contains any protected groups'''
     protected_corpus = _get_protected()
@@ -36,6 +44,7 @@ def check_for_protected(column_names):
         next_results = _fuzzy_string_across_dict(column_name.lower(), protected_corpus, PROTECTED_MATCH_THRESHOLD)
         results.extend(next_results)
     return results
+
 
 def guess_protected(dataframe):
         """
@@ -115,6 +124,10 @@ def get_nations(dataframe, column, v, PROTECTED_MATCH_THRESHOLD, log_sample=Fals
 
 
 def get_age(dataframe, colname, v, PROTECTED_MATCH_THRESHOLD, log_sample=False):
+    global ENV
+
+    can_print = ENV != None
+
     if not is_numeric_dtype(dataframe[colname]):
         return 0
 
@@ -145,8 +158,10 @@ def get_age(dataframe, colname, v, PROTECTED_MATCH_THRESHOLD, log_sample=False):
     # if the column is numeric and all the numbers are integers
     if is_numeric_dtype(use_df[colname]) and ints == n:
         # count the number of elements greater than 1 and less than 125
-        count = use_df[(use_df[colname] >= 1) & (use_df[colname] <= 125)].sum()
-        level_match = float(count) / n
+        count = len(use_df[(use_df[colname] >= 1) & (use_df[colname] <= 125)])
+        level_match = count / n
+        if can_print:
+            ENV.log.debug("[string_compare] get_age: in {0} saw {1}/{2}={3}".format(colname, count, n, level_match))
         return level_match
     else:
         # otherwise return a value that will fail any threshold, 0
@@ -172,6 +187,12 @@ def _fuzzy_string_across_dict(candidate_string, reference_dict, threshold):
         partial_match = fuzz.partial_ratio(v, candidate_string)
         if partial_match >= threshold:
             results.append({"protected_value" : k, 
+                            "protected_value_background" : v,
+                            "original_name" : candidate_string})
+        else:
+            # we want to exempt some guesses that contain common words
+            if k in candidate_string:
+                results.append({"protected_value" : k, 
                             "protected_value_background" : v,
                             "original_name" : candidate_string})
     return results
