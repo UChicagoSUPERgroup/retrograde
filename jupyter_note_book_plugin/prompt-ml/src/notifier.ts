@@ -123,12 +123,12 @@ export class Prompter {
     note.addHeader("Model Report Note")
     // preamble on MRN
     note.addParagraph(`<p><b>The Model Report Note</b> uses the sensitivity as marked in the Protected Column Note to determine
-                       the columns reported here. By parsing your code, the plugin is able to find the original dataframe
-                       your test dataframe was derived from (usually the one you initially loaded data in with) and uses the sensitive columns found in that dataframe to measure
-                       your model's performance across groups you may have excluded (or potentially included) in your test features.</p>`);
+                       the columns that will be considered in this model report. By parsing your code, the plugin is able to find the original dataframe
+                       your test dataframe was derived from and uses the sensitive columns found in that dataframe to measure
+                       your model's performance across groups you may have excluded in your test features.</p>`);
     // <p style="color:green"><i>${metric_name}: ${metric}</i></p>
-    note.addParagraph(`<p> <span style="color:green"><i>"metric_name": "value>"</i></span> will alert you to metrics which are performing some percent better than the median for that group.
-                       while <span style="color:red"><b>"metric_name": "metric"</b></span> will alert you to metrics which are performing some percent worse than the median for that group.</p>`)
+    note.addParagraph(`<br /><p> <span style="color:green"><i>"metric_name": "metric_value"</i></span> will alert you to metrics which are performing some percent better than the median for that group.
+                       <br /><span style="color:red"><b>"metric_name": "metric_value"</b></span> will alert you to metrics which are performing some percent worse than the median for that group.</p>`)
     console.log("eqodds length ",eqOdds.length); 
     for(var m = 0; m < eqOdds.length; m++) {
       var model : { [key: string] : any} = eqOdds[m];
