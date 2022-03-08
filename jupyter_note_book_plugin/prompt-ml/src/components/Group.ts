@@ -21,7 +21,7 @@ export class Group {
     f1Score: string,
     fpr: string,
     fnr: string,
-    n : string,
+    count : string,
     highlights : number[]
   ) {
     this._content = this._generateBaseElement(
@@ -31,7 +31,7 @@ export class Group {
             f1Score,
             fpr,
             fnr,
-            n,
+            count,
             highlights
     );
   }
@@ -48,12 +48,12 @@ export class Group {
     f1Score: string,
     fpr: string,
     fnr: string,
-    n : string,
+    count : string,
     highlights : number[]
   ): HTMLDivElement {
     var elem = $.parseHTML(`
     <div class="group">
-        <h4 style="text-align:left">${name}<br/>n=${n}</h4>
+        <h4 style="text-align:left">${name}<br/>count=${count}</h4>
     </div>`);
     var metric_names : string[] = ["Precision", "Recall", "F1 Score", "FPR", "FNR"];
     var metrics : string[] = [precision, recall, f1Score, fpr, fnr];

@@ -141,11 +141,11 @@ export class Prompter {
           f1score = thisGroup[2],
           fpr = thisGroup[3],
           fnr = thisGroup[4],
-          n = thisGroup[5];
+          count = thisGroup[5];
           console.log(model["k_highest_error_rates"][group][correspondingGroup]["highlight"]);
           var highlights : number[] = model["k_highest_error_rates"][group][correspondingGroup]["highlight"];
 
-          groups.push(new Group(group+": "+correspondingGroup, precision, recall, f1score, fpr, fnr, n, highlights))
+          groups.push(new Group(group+": "+correspondingGroup, precision, recall, f1score, fpr, fnr, count, highlights))
         }
       }
       // Attaching the data to the note itself
