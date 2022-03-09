@@ -762,7 +762,7 @@ class ModelReportNote(Notification):
 
     def prot_ancestors_found(self, env, curr_df_name, dfs, kernel_id):
         '''
-        Returns  prot_anc_found (bool), x_ancestor (DataFrame), x_ancestor_name (string), prot_col_names (list), prot_cols (DataFrame or Series)
+        Returns prot_anc_found (bool), x_ancestor (DataFrame), x_ancestor_name (string), prot_col_names (list), prot_cols (DataFrame or Series)
         '''
         # Query DB for ancestor df object
         prot_col_names, ancestor_df, version = self._get_prot_ancestor(env, curr_df_name, dfs, kernel_id)
@@ -779,6 +779,19 @@ class ModelReportNote(Notification):
             env.log.debug("[ModelReportNote] has no groups to compute error rates for")
             return False, None, None, None, None
 
+        # remove numerical prot_cols from prot_col sets
+        removed = []
+        for idx, prot in enumerate(prot_cols):
+            if is_numeric_dtype(prot):
+                prot_col_names.pop(idx)
+                removed.append(idx)
+        # remove from prot_cols as well
+        for idx in removed:
+            prot_cols.remove(idx)
+        # if there are only numerical prot_cols => return None
+        if len(prot_col_names) == 0 or len(prot_cols) == 0:
+            return False, None, None, None, None
+            
         return True, x_ancestor, ancestor_df, prot_col_names, prot_cols
 
         
@@ -813,7 +826,7 @@ class ModelReportNote(Notification):
                 # except ZeroDivisionError as e:
                 #     env.log.error("[ModelReport] Error for binary protected group {0}\nError: {1}\nlen(y_true)={2},len(y_pred)={3}".format(prot_group, e, len(y_true_member), len(y_pred_member)))
             # elif categorical
-            elif unique_values > 2: #and not is_numeric_dtype(group_col.dtype)
+            elif unique_values > 2 and not is_numeric_dtype(group_col.dtype):
                 # do categorical
                 for member in group_col.unique():
                     # boolean masking
@@ -843,7 +856,7 @@ class ModelReportNote(Notification):
                     error_rates_by_member[member] = error_rates(*acc_measures(y_true_member, y_pred_member))
                     # except ValueError as e:
                         # env.log.error("[ModelReport] ValueError for member {0} in group {1}\nError: {2}".format(member, prot_group, e))
-            # # TODO: add different functionality for numeric dtypes (fine as is)
+            # # TODO: add different functionality for numeric dtypes (fine as is) (postponed indefinitely)
             elif unique_values > 2 and is_numeric_dtype(group_col.dtype):
                 # ideas for numeric
                 # - make ranges of numeric values?
