@@ -89,7 +89,8 @@ class ProtectedColumnNote(Notification):
         poss_cols = self.db.get_unmarked_columns(env._kernel_id)
 
         for df_name, cols in poss_cols.items():
-            # set_env(env)
+            if df_name not in dfs:
+                continue # sometimes dfs are in database, but have been deleted
             protected_columns = check_for_protected(cols)
             # env.log.debug("[ProtectedColumnNote] ({1}) protected by name columns are {0}".format(protected_columns, self.ncounter))
             guessed_columns = guess_protected(dfs[df_name][cols])
