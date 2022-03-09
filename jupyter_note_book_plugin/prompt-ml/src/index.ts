@@ -39,11 +39,28 @@ const extension: JupyterFrontEndPlugin<void> = {
   autoStart: true,
   requires: [INotebookTracker, NotebookPanel.IContentFactory],
   activate: (app: JupyterFrontEnd, tracker : INotebookTracker, factory : NotebookPanel.IContentFactory) => {
+    // Maintains a list of all open notifications within the environment;
+    // Note: these notifications may or may not have been closed
+    var openNotes : { [key : string] : any } = [];
     const client = new CodeCellClient();
     app.restored.then(() => {
     const listener = new Listener(client, tracker);
     console.log("init listener", listener);
-    const prompter = new Prompter(listener, tracker, app, factory);
+    // Manage notification updates
+    // This function is called by Prompter.appendMsg when a notification
+    // had already been generated but more information is sent.
+    // Called whenever new information is sent from the backend AND when
+    // a note is re-appended to the front window.
+    var onUpdate = (payload : { [key : string] : any }, typeOfNote : string) => {
+      if(!(typeOfNote in openNotes))
+        return
+      // find the node of the note being opened
+      var node = openNotes[typeOfNote]["widget_content"].node
+      var note_container = $(node).find(`.${openNotes[typeOfNote]["elem_id"]}`)
+      // remove old children element and append the new, generated version
+      note_container.empty().append(payload["htmlContent"])
+    };
+    const prompter = new Prompter(listener, tracker, app, factory, onUpdate);
     console.log("init prompter", prompter);
     console.log("factory", factory);
     let widgets = app.shell.widgets("main");
@@ -58,8 +75,6 @@ const extension: JupyterFrontEndPlugin<void> = {
       console.log(widget); 
     }
 
-    /////////////////////////////////////////////////
-    /////////////////////////////////////////////////
     /////////////////////////////////////////////////
     // Preparing side panel
     const content = new Widget();
@@ -78,16 +93,16 @@ const extension: JupyterFrontEndPlugin<void> = {
     // Activate the widget
     app.shell.activateById(promptWidget.id);
     // Manage opening the expanded view of a widget
-    var openNotes : { [key : string] : any } = []
     $(".prompt-ml-container").on("prompt-ml:note-added", function(e, passed_args) { 
       // This event is fired (originates from notifier.ts) when "expand" is clicked
       // Extract information from the event
       var payload = passed_args["payload"]
       var typeOfNote = payload["typeOfNote"]
-      console.log(openNotes)
       // Refresh openNotes by seeing if an element with that ID exists
       for(var note in openNotes) {
-        if(!($(`#jp-main-dock-panel #${openNotes[note]["id"]}`).length > 0)) delete openNotes[note]
+        if($(`#jp-main-dock-panel #${openNotes[note]["id"]}`).length == 0) {
+          delete openNotes[note]
+        }
       }
       // Find out if we already have had a note of this type displayed
       if(typeOfNote in openNotes) {
@@ -103,6 +118,10 @@ const extension: JupyterFrontEndPlugin<void> = {
           for(var x = 0; x < targetIndex - currentIndex; x++)
             app.commands.execute("application:activate-next-tab")
         }
+        // Send the new information to update the note
+        // This code is run when the user re-opens a notification
+        // on the right side panel but the large window is already open
+        onUpdate(payload, typeOfNote)
       } else {
         // Hasn't yet been opened or has since closed; creating the widget
         var popupContent = new Widget();
@@ -134,27 +153,27 @@ const extension: JupyterFrontEndPlugin<void> = {
             postAdditionChildren.push($(this).attr("id"))
           }) 
           postAdditionChildren = postAdditionChildren.filter(e => !preAdditionChildren.includes(e))
-          console.log("After filter:", postAdditionChildren)
           if(postAdditionChildren.length == 0) {
-            console.log("No id found")
-            console.log(postAdditionChildren)
+            console.error("Failed to find new note tab")
             // To do: Add error handling
           } else if(postAdditionChildren.length > 1) {
-            console.log("Multiple id's found")
-            console.log(postAdditionChildren)
+            console.error("More than one ID identified")
             // To do: Add error handling
           } else {
-            console.log(postAdditionChildren[0], " found as the id")
             // Saving this information for later reference
             openNotes[typeOfNote] = {
               "id": postAdditionChildren[0],
-              "widget": popupWidget
+              "elem_id": id,
+              "widget": popupWidget,
+              "widget_content": popupContent
             }
           }
         }, 150)
       }
       $(".prompt-ml-popup").each(function() {$(this).parent().css("overflow-y", "scroll")}); // override normal jquery styling
     })
+    // Load welcome message
+    prompter.makeWelcomeMsg()
     })
   }
 }
