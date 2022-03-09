@@ -18,13 +18,27 @@ interface ProxyColumnRelationships {
 }
 
 export class Prompter {
+  // Maintains a list of previously-sent information
+  // Distinct from the index.ts `openNotes` as this stores content -- not
+  // information about the DOM node itself.
+  // Structure:
+  // oldContent = {
+  //     <String type of notification> : <String content of the notification> 
+  // }
+  oldContent: { [key: string]: String }
+  notificationUpdate: Function
   // This generates prompts for notebook cells on notification of new data or a new model
   constructor(
     listener: Listener,
     tracker: INotebookTracker,
     app: JupyterFrontEnd,
-    factory: NotebookPanel.IContentFactory
+    factory: NotebookPanel.IContentFactory,
+    notificationUpdate: Function // holds the pointer to the `onUpdate` index.ts function
   ) {
+    this.oldContent = {};
+    // This function is executed whenever new information is received from
+    // the backend but a notification has already been generated
+    this.notificationUpdate = notificationUpdate;
     listener.infoSignal.connect((sender: Listener, output: any) => {
       this._onInfo(output);
     });
@@ -36,6 +50,14 @@ export class Prompter {
 
   private _appendMsg(msg: string, handedPayload: any) {
     var newNote = $.parseHTML(msg);
+    // Check if this note has been executed before
+    if("typeOfNote" in handedPayload && handedPayload["typeOfNote"] in this.oldContent) {
+      // If it's already been rendered, try to update the open view.
+      // index.ts checks if the notification exists
+      this.notificationUpdate(handedPayload, handedPayload["typeOfNote"]);
+    }
+    // Record what notifications have been sent (most recent version)
+    this.oldContent[handedPayload["typeOfNote"]] = handedPayload["htmlContent"].innerHTML;
     $(".prompt-ml-container").prepend(newNote);
     $(newNote).on("mouseup", function () {
       if (handedPayload == {}) {
