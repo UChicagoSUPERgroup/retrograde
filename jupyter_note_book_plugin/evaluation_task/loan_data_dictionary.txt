@@ -1,0 +1,18 @@
+Data Dictionary
+
+loan_data.csv represents loan applications to a loan provider. Each row 
+represents an individual applying for a loan to this loan provider, and each 
+column provides information about said individual's application.
+
+
+race      - The race of the applicant.
+gender    - The gender identity of the applicant.
+zip       - The zipcode of the applicant's permanent address.
+income    - The household income of the applicant.
+type      - The type of loan requested.
+term      - Duration of the loan being applied for, in months, until paid off.
+interest  - The price of taking the loan in percent.
+principal - The initial size of the loan in USD.
+approved  - Whether the loan provider approved the loan application.
+adj_bls_2 - An adjustment factor internal to the loan provider.
+id        - An identifier internal to the loan provider.
