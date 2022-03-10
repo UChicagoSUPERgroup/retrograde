@@ -119,8 +119,8 @@ export class Prompter {
 
 
   private _makeEqOdds(eqOdds: { [key: string]: any }[], note_count: number) {
-    var note = new PopupNotification("modelReport", false, "Model Report Note");
-    note.addHeader("Model Report Note")
+    var note = new PopupNotification("modelReport", false, "Model Report");
+    note.addHeader("Model Report")
     console.log("eqodds length ",eqOdds.length); 
     for(var m = 0; m < eqOdds.length; m++) {
       var model : { [key: string] : any} = eqOdds[m];
@@ -162,7 +162,7 @@ export class Prompter {
     note.addParagraph(`<br /><p><b>How was it detected?</b> The performance metrics shown here are derived from the plugin's best guess at the protected columns associated with the model's testing data. 
                        Because of this they may not perfectly match a manual evaluation. 
                        The plugin calculates the performance with respect to protected groups identified in the Protected Column note. 
-                       The plugin calculates precision, recall, F1 Score, false positive rate (FPR) and false negative rate (FNR). More information about these metrics can be found <a href="https://towardsdatascience.com/performance-metrics-confusion-matrix-precision-recall-and-f1-score-a8fe076a2262">here</a></p>`);
+                       The plugin calculates precision, recall, F1 Score, false positive rate (FPR) and false negative rate (FNR). More information about these metrics can be found <a style="color:blue" href="https://towardsdatascience.com/performance-metrics-confusion-matrix-precision-recall-and-f1-score-a8fe076a2262">here</a></p>`);
     // Send to the Jupyterlab interface to render
     var message = note.generateFormattedOutput(global_notification_count, note_count);
     this._appendNote(message);
