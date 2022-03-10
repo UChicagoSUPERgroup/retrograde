@@ -142,8 +142,8 @@ export class Prompter {
   }
 
   private _makeEqOdds(eqOdds: { [key: string]: any }[]) {
-    var note = new PopupNotification("modelReport", false, "Model Report Note");
-    note.addHeader("Model Report Note")
+    var note = new PopupNotification("modelReport", false, "Model Report");
+    note.addHeader("Model Report")
     // preamble on MRN
     note.addParagraph(`<p><b>The Model Report Note</b> uses the sensitivity as marked in the Protected Column Note to determine
                        the columns that will be considered in this model report. By parsing your code, the plugin is able to find the original dataframe
@@ -152,7 +152,6 @@ export class Prompter {
     // <p style="color:green"><i>${metric_name}: ${metric}</i></p>
     note.addParagraph(`<br /><p> <span style="color:green"><i>"metric_name": "metric_value"</i></span> indicates that a metric is performing some percent better than the median for that group while
                        <span style="color:red"><b>"metric_name": "metric_value"</b></span> does the same for metrics performing some percent worse than the median for that group.</p>`)
-    console.log("eqodds length ",eqOdds.length); 
     for(var m = 0; m < eqOdds.length; m++) {
       var model : { [key: string] : any} = eqOdds[m];
       console.log("eqodds model ", model["model_name"], "m ",m);
@@ -193,7 +192,7 @@ export class Prompter {
     note.addParagraph(`<br /><p><b>How was it detected?</b> The performance metrics shown here are derived from the plugin's best guess at the protected columns associated with the model's testing data. 
                        Because of this they may not perfectly match a manual evaluation. 
                        The plugin calculates the performance with respect to protected groups identified in the Protected Column note. 
-                       The plugin calculates precision, recall, F1 Score, false positive rate (FPR) and false negative rate (FNR). More information about these metrics can be found <a href="https://towardsdatascience.com/performance-metrics-confusion-matrix-precision-recall-and-f1-score-a8fe076a2262">here</a>.</p>`);
+                       The plugin calculates precision, recall, F1 Score, false positive rate (FPR) and false negative rate (FNR). More information about these metrics can be found <a style="color:blue" href="https://towardsdatascience.com/performance-metrics-confusion-matrix-precision-recall-and-f1-score-a8fe076a2262">here</a></p>`);
     // Send to the Jupyterlab interface to render
     var message = note.generateFormattedOutput();
     this._appendNote(message);
