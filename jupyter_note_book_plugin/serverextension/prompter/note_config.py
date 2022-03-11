@@ -12,11 +12,20 @@ if MODE == "EXP_CTS":
     }
 if MODE == "EXP_END":
     NOTE_RULES = {
+        "all" : [],
         "intro" :[],
         "tutorial" : [],
         "null_clean" : [],
-        "model" : [],
-        "end" : [ProtectedColumnNote, ProxyColumnNote, OutliersNote, ModelReportNote]
+        "model" : [ProtectedColumnNote, MissingDataNote, ProxyColumnNote, ModelReportNote],
+        "end" : []
     }
-
+if MODE == "EXP_NONE":
+    NOTE_RULES = {
+        "all" : [],
+        "intro" : [],
+        "tutorial" : [],
+        "null_clean" : [],
+        "model" : [],
+        "end" : []
+    }
 SLICE_K = 2 # number of error slices to show users for each FPR/FNR
