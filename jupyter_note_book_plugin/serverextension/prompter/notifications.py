@@ -296,6 +296,21 @@ class ProtectedColumnNote(Notification):
 
         self.data = new_data
 
+class WelcomeNote(Notification):
+    def __init__(self, db):
+        self.sent = False
+    
+    def check_feasible(self, cell_id, env, dfs, ns):
+        return not self.sent # Don't want it to be sent >1 time
+
+    def make_response(self, env, kernel_id, cell_id):
+        env.log.debug("[WelcomeNote] Making response")
+        resp = {"dummy": [{"type": "welcome"}]}
+        self.data = resp    
+    
+    def update(self, env, kernel_id, cell_id, dfs, ns):
+        self.data = self.data
+
 class ProxyColumnNote(ProtectedColumnNote):
     """
     A notification that measures whether there exists a column that is a proxy

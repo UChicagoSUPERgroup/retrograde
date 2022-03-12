@@ -6,11 +6,11 @@ import { Listener } from "./cell-listener";
 
 import { PopupNotification } from "./components/PopupNotification";
 import { ProtectedColumnNote } from "./components/ProtectedColumnNote";
+import { WelcomeNote } from "./components/WelcomeNote";
 import { Group } from "./components/Group";
 import { Model } from "./components/Model";
 
 import $ = require("jquery");
-import { WelcomeNote } from "./components/WelcomeNote";
 
 interface ProxyColumnRelationships {
   predictive: string[];
@@ -129,13 +129,16 @@ export class Prompter {
         case "model_report":
           this._makeEqOdds(list_of_notes);
           break;
+        case "welcome":
+          this.makeWelcomeMsg();
+          break;
         default:
           console.log(`Note type not recognized, ${notice_type}`);
       }
     }      
   }
 
-  public makeWelcomeMsg() {
+  private makeWelcomeMsg() {
     var note = new WelcomeNote()
     console.log("generating welcome")
     this._appendNote(note.generateFormattedOutput())
