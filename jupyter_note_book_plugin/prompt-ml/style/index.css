@@ -591,3 +591,7 @@ th {
   -ms-user-select: none;
   user-select: none;
 }
+
+.note-clicked {
+  background-color: rgb(200, 200, 200) !important;
+}

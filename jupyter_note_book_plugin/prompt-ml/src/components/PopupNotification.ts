@@ -11,6 +11,7 @@ export class PopupNotification {
   type: string;
   interactive: boolean;
   title: string;
+  originalMessage: { [key: string]: String }[];
   // Dynamic
   protected _content: HTMLDivElement;
 
@@ -101,7 +102,8 @@ export class PopupNotification {
   // Help provide note-level functionality, such as export, wipe, etc.
   ////////////////////////////////////////////////////////////
 
-  constructor(type: string, interactive: boolean, title: string) {
+  constructor(type: string, interactive: boolean, title: string, originalMessage : { [key: string]: String }[]) {
+    this.originalMessage = originalMessage;
     this.type = type;
     this.interactive = interactive;
     this.title = title;
@@ -178,6 +180,7 @@ export class PopupNotification {
       title: this.title,
       htmlContent: this.export(),
       typeOfNote: this.type,
+      originalMessage: this.originalMessage
     };
     return new Array(this.generateCondensed(), payload);
   }

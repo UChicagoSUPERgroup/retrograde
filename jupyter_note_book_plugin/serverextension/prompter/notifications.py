@@ -288,7 +288,7 @@ class ProtectedColumnNote(Notification):
                                                       "user_specified" : False, "fields" : field}
                     new_entry["columns"][col_name] = {"sensitive" : True, "user_specified" : False, "field" : field} 
                 else:
-                    new_entry["columns"][col_name] = {"is_sensitive" : False,
+                    new_entry["columns"][col_name] = {"sensitive" : False,
                                                       "user_specified" : False,
                                                       "field" : None}
             new_data[df_name] = [new_entry]
