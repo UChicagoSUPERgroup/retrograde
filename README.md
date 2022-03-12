@@ -41,9 +41,12 @@ Once your conda environment is created, run the `test_build.sh` script to build 
 	source ./test_build.sh
 
 This will open a Jupyter lab instance. You may be prompted to enter your password for your MySQL server to create the database and tables.
-**If you are running this for the first time, or making modifications to the frontend code** you should set ```BUILD_FRONTEND=1``` before executing the test_build script.
-This causes the frontend components to build, which can take up to two minutes. 
-If you are running this after making changes to the backend, you can reset the bash variable to save some time.
+**If you are running this for the first time, or making modifications to the frontend code** you should set an environment variable to build the frontend components before executing the test_build script, which may take up to two minutes. 
+
+If you've never built the plugin before, set ```INSTALL_FRONTEND=1``` 
+If you are running this after making changes to the backend, set ```BUILD_FRONTEND=1```
+
+After building the plugin or making changes you can reset the bash variable to save some time.
 
 Once the Jupyter lab window opens, you may need to reload the page if it does not open with an open notebook.
 Running this locally, you must select the ```prompter``` kernel from the dropdown menu in order for the plugin to work. 
