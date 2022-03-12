@@ -306,6 +306,7 @@ class WelcomeNote(Notification):
     def make_response(self, env, kernel_id, cell_id):
         env.log.debug("[WelcomeNote] Making response")
         resp = {"dummy": [{"type": "welcome"}]}
+        self.sent = True
         self.data = resp    
     
     def update(self, env, kernel_id, cell_id, dfs, ns):
