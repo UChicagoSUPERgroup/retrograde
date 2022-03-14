@@ -184,16 +184,11 @@ textarea {
 
 /* Svg to handle note closing */
 
-.prompt-ml-close-svg-path,
 .dropdown-path {
   stroke: #000;
   stroke-linecap: round;
   stroke-width: 25px;
   fill-rule: evenodd;
-}
-
-.prompt-ml-close-svg-path {
-  fill: none;
 }
 
 .dropdown-svg {
@@ -203,16 +198,6 @@ textarea {
 
 .dropdown-path {
   fill: #000;
-}
-
-.close {
-  transform: scale(0.75);
-}
-
-.close svg {
-  width: 80%;
-  min-width: 25px;
-  max-height: 60%;
 }
 
 svg.expanded,
