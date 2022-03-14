@@ -306,13 +306,29 @@ class ProtectedColumnNote(Notification):
                                                       "user_specified" : False, "fields" : field}
                     new_entry["columns"][col_name] = {"sensitive" : True, "user_specified" : False, "field" : field} 
                 else:
-                    new_entry["columns"][col_name] = {"is_sensitive" : False,
+                    new_entry["columns"][col_name] = {"sensitive" : False,
                                                       "user_specified" : False,
                                                       "field" : None}
             new_data[df_name] = [new_entry]
         self.db.update_marked_columns(kernel_id, update_data)
 
         self.data = new_data
+
+class WelcomeNote(Notification):
+    def __init__(self, db):
+        self.sent = False
+    
+    def check_feasible(self, cell_id, env, dfs, ns):
+        return not self.sent # Don't want it to be sent >1 time
+
+    def make_response(self, env, kernel_id, cell_id):
+        env.log.debug("[WelcomeNote] Making response")
+        resp = {"dummy": [{"type": "welcome"}]}
+        self.sent = True
+        self.data = resp    
+    
+    def update(self, env, kernel_id, cell_id, dfs, ns):
+        self.data = self.data
 
 class ProxyColumnNote(ProtectedColumnNote):
     """

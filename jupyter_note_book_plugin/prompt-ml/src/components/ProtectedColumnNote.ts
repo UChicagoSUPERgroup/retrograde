@@ -16,8 +16,8 @@ export class ProtectedColumnNote extends PopupNotification {
   // Constructor
   ////////////////////////////////////////////////////////////
 
-  constructor(notices: any[], kernel_id: string) {
-    super("protected", true, "Protected Columns");
+  constructor(notices: any[], kernel_id: string, originalMessage : { string : any}[]) {
+    super("protected", true, "Protected Columns", originalMessage);
     this._data = [];
     this._dfs = [];
     console.log(notices);
