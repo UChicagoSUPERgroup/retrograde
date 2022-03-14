@@ -21,7 +21,7 @@ from scipy.stats import f_oneway, chi2_contingency, spearmanr
 from sklearn.base import ClassifierMixin
 from pandas.api.types import is_numeric_dtype
 
-from .string_compare import check_for_protected, guess_protected
+from .string_compare import check_for_protected, guess_protected, set_env
 from .sortilege import is_categorical
 from .slice_finder import err_slices
 
@@ -77,6 +77,7 @@ class ProtectedColumnNote(Notification):
         super().__init__(db)
         self.df_protected_cols = {}
         self.df_not_protected_cols = {}
+        self.ncounter = 0
 
     def check_feasible(self, cell_id, env, dfs, ns):
 
@@ -88,17 +89,21 @@ class ProtectedColumnNote(Notification):
         poss_cols = self.db.get_unmarked_columns(env._kernel_id)
 
         for df_name, cols in poss_cols.items():
-
+            if df_name not in dfs:
+                continue # sometimes dfs are in database, but have been deleted
             protected_columns = check_for_protected(cols)
-            protected_columns.extend(guess_protected(dfs[df_name][cols]))
+            # env.log.debug("[ProtectedColumnNote] ({1}) protected by name columns are {0}".format(protected_columns, self.ncounter))
+            guessed_columns = guess_protected(dfs[df_name][cols])
+            # env.log.debug("[ProtectedColumnNote] ({1}) protected by guess columns are {0}".format(guessed_columns, self.ncounter))
+            protected_columns = self._merge_protected(protected_columns, guessed_columns)
       
-            env.log.debug("[ProtectedColumnNote] protected columns are {0}".format(protected_columns))
-  
-            if protected_columns != []:
-
-                protected_col_names = [c["original_name"] for c in protected_columns]
-                self.df_protected_cols[df_name] = protected_columns        
-                self.df_not_protected_cols[df_name] = [c for c in cols if c not in protected_col_names]
+            env.log.debug("[ProtectedColumnNote] ({1}) {2} protected columns are {0}".format(protected_columns, self.ncounter, df_name))
+              
+            protected_col_names = [c["original_name"] for c in protected_columns]
+            self.df_protected_cols[df_name] = protected_columns        
+            self.df_not_protected_cols[df_name] = [c for c in cols if c not in protected_col_names]
+            
+            self.ncounter += 1
 
         return self.df_protected_cols != {}
 
@@ -109,6 +114,22 @@ class ProtectedColumnNote(Notification):
         noted_dfs = [note["df"] for note in note_subset]
         
         return noted_dfs
+
+    
+    # basically we want this function to merge with preference for 
+    # detection by name
+    def _merge_protected(self, by_name, by_guess):
+        name_originals = [v["original_name"] for v in by_name]
+        res = []
+        res.extend(by_name)
+        for v in by_guess:
+            # if this was already guessed by name, skip
+            if v["original_name"] in name_originals:
+                continue
+            # otherwise, include this
+            res.append(v)
+        return res
+
 
     def make_response(self, env, kernel_id, cell_id):
 
@@ -227,14 +248,11 @@ class ProtectedColumnNote(Notification):
                 new_data[df_name] = old_protected_columns
                 continue
 
-            # check columns AND values
             protected_cols = guess_protected(dfs[df_name])
             self.df_protected_cols[df_name] = protected_cols
 
             col_data = self._make_col_info(dfs[df_name]) 
             df_version = self.db.get_data_version(df_name, col_data, env._kernel_id) 
-
-            # TODO: write _make_col_info method
 
             if not df_version:
                 env.log.warning(f"""[ProtectedColumnNote] no older version of {df_name} (this should never happen)""")
@@ -761,7 +779,7 @@ class ModelReportNote(Notification):
 
     def prot_ancestors_found(self, env, curr_df_name, dfs, kernel_id):
         '''
-        Returns  prot_anc_found (bool), x_ancestor (DataFrame), x_ancestor_name (string), prot_col_names (list), prot_cols (DataFrame or Series)
+        Returns prot_anc_found (bool), x_ancestor (DataFrame), x_ancestor_name (string), prot_col_names (list), prot_cols (DataFrame or Series)
         '''
         # Query DB for ancestor df object
         prot_col_names, ancestor_df, version = self._get_prot_ancestor(env, curr_df_name, dfs, kernel_id)
@@ -778,6 +796,19 @@ class ModelReportNote(Notification):
             env.log.debug("[ModelReportNote] has no groups to compute error rates for")
             return False, None, None, None, None
 
+        # remove numerical prot_cols from prot_col sets
+        removed = []
+        for idx, prot in enumerate(prot_cols):
+            if is_numeric_dtype(prot):
+                prot_col_names.pop(idx)
+                removed.append(idx)
+        # remove from prot_cols as well
+        for idx in removed:
+            prot_cols.remove(idx)
+        # if there are only numerical prot_cols => return None
+        if len(prot_col_names) == 0 or len(prot_cols) == 0:
+            return False, None, None, None, None
+            
         return True, x_ancestor, ancestor_df, prot_col_names, prot_cols
 
         
@@ -812,7 +843,7 @@ class ModelReportNote(Notification):
                 # except ZeroDivisionError as e:
                 #     env.log.error("[ModelReport] Error for binary protected group {0}\nError: {1}\nlen(y_true)={2},len(y_pred)={3}".format(prot_group, e, len(y_true_member), len(y_pred_member)))
             # elif categorical
-            elif unique_values > 2: #and not is_numeric_dtype(group_col.dtype)
+            elif unique_values > 2 and not is_numeric_dtype(group_col.dtype):
                 # do categorical
                 for member in group_col.unique():
                     # boolean masking
@@ -842,7 +873,7 @@ class ModelReportNote(Notification):
                     error_rates_by_member[member] = error_rates(*acc_measures(y_true_member, y_pred_member))
                     # except ValueError as e:
                         # env.log.error("[ModelReport] ValueError for member {0} in group {1}\nError: {2}".format(member, prot_group, e))
-            # # TODO: add different functionality for numeric dtypes (fine as is)
+            # # TODO: add different functionality for numeric dtypes (fine as is) (postponed indefinitely)
             elif unique_values > 2 and is_numeric_dtype(group_col.dtype):
                 # ideas for numeric
                 # - make ranges of numeric values?
