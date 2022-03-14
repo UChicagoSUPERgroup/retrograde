@@ -164,12 +164,6 @@ export class PopupNotification {
             <div class="text">
                 <h1>${this.title}</h1> 
             </div> 
-            <div class="close">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500">
-                  <path class="prompt-ml-close-svg-path" d="M91.5,93.358L409.461,406.6" />
-                  <path class="prompt-ml-close-svg-path" d="M91.5,406.6L409.461,93.358" />
-                </svg>
-            </div> 
         </div> 
       </div> `
     );

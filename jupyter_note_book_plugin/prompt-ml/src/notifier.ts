@@ -131,32 +131,6 @@ export class Prompter {
         payload: payload,
       });
     });
-    // Add handling for the notification being "closed" (sent to bottom of list)
-    $(newNote)
-      .find(".close")
-      .on("mouseup", function (e) {
-        e.stopPropagation(); // ensure that the expanded event isn't called
-        var parentNote = $(this).parent().parent().parent(); // to do: pointer?
-        if (!$(parentNote).hasClass("wasClosed")) {
-          $(this)
-            .parent()
-            .parent()
-            .css("background-color", "#A3A3A3")
-            .find(".more h2")
-            .css("background-color", "#939393");
-          $(".prompt-ml-container").append($(parentNote));
-          $(parentNote).addClass("wasClosed");
-        } else {
-          $(this)
-            .parent()
-            .parent()
-            .css("background-color", "#F0B744")
-            .find(".more h2")
-            .css("background-color", "#F1A204");
-          $(".prompt-ml-container").prepend($(parentNote));
-          $(parentNote).removeClass("wasClosed");
-        }
-      });
     // Iterate over existing notes and ensure that repetitive
     // notes are removed from the interface
     var divs = $(".prompt-ml-container > div");

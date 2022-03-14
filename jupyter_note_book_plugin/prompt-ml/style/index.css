@@ -152,7 +152,7 @@ textarea {
 
 .note .essential {
   display: grid;
-  grid-template-columns: 15% 70% 15%;
+  grid-template-columns: 15% 85%;
   grid-template-rows: 1fr;
   border-radius: 35px;
 }
@@ -594,4 +594,8 @@ th {
 
 .note-clicked {
   background-color: rgb(200, 200, 200) !important;
+}
+
+.promptMl .df h1 {
+  cursor: pointer;
 }
