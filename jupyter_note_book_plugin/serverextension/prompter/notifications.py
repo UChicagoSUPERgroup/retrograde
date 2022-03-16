@@ -17,7 +17,7 @@ from pandas.api.types import is_numeric_dtype, is_unsigned_integer_dtype, is_int
 import numpy as np
 import dill
 
-from scipy.stats import f_oneway, chi2_contingency, spearmanr
+from scipy.stats import f_oneway, chi2_contingency, spearmanr, chisquare
 from sklearn.base import ClassifierMixin
 from pandas.api.types import is_numeric_dtype
 
@@ -606,12 +606,23 @@ class MissingDataNote(ProtectedColumnNote):
                     if sens_col == missing_col:
                         continue
                     sens_col_name = sens_col["col_name"]
+                    pr_missing = sum(is_na_col)/len(is_na_col)
+                    null_exp = pr_missing*df[sens_col_name].value_counts()
+                    missing_count_full = pd.Series(0, index=null_exp.index)
                     missing_counts = df[sens_col_name][is_na_col].value_counts()
-                    
+
+                    missing_count_full.loc[missing_counts.index] = missing_counts
+
                     if missing_counts.sum() == 0:
                         continue
- 
+                    # chisquare takes as input observed differences, and expected
+                    # null expectation is that missing is dist. unif. at random
+                    # across each category
+                    _,p = chisquare(missing_count_full, null_exp)                    
                     # largest missing value
+                    env.log.debug(f"[MissingDataNote] for {sens_col_name}, p value is {p}")
+                    if p > PVAL_CUTOFF:
+                        continue
                     max_value = missing_counts.idxmax()
                     lmv = str(max_value)
                     is_max_value = (df[sens_col_name] == missing_counts.idxmax())
@@ -625,8 +636,8 @@ class MissingDataNote(ProtectedColumnNote):
                                                     "largest_percent" : lp,
                                                     "n_missing" : str(num_missing),
                                                     "n_max" : str(num_max)}
-   
-                df_report["missing_columns"][missing_col]["sens_col"] = sens_col_dict
+                if len(sens_col_dict) > 0:
+                    df_report["missing_columns"][missing_col]["sens_col"] = sens_col_dict
             dfs.append(df_report)
  
         return dfs
