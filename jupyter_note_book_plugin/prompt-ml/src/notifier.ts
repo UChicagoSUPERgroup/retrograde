@@ -389,6 +389,9 @@ export class Prompter {
             }
           }
         );
+        if (modes.length == 0) {
+          continue;
+        }
         console.log("modes", modes);
         var cor_col = modes[0][0];
         var cor_mode = df["missing_columns"][col_name_index]["sens_col"][cor_col]["largest_missing_value"];
