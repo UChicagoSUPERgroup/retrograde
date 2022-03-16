@@ -10,15 +10,17 @@ if MODE == "EXP_CTS":
         "model" : [ProxyColumnNote, ModelReportNote],
         "end" : []
     }
+    SHOW = ["all", "intro", "tutorial", "null_clean", "model", "end"]
 if MODE == "EXP_END":
     NOTE_RULES = {
-        "all" : [],
+        "all" : [WelcomeNote, ProtectedColumnNote],
         "intro" :[],
         "tutorial" : [],
-        "null_clean" : [],
-        "model" : [ProtectedColumnNote, MissingDataNote, ProxyColumnNote, ModelReportNote],
+        "null_clean" : [MissingDataNote, ProxyColumnNote],
+        "model" : [ModelReportNote],
         "end" : []
     }
+    SHOW = ["end"]
 if MODE == "EXP_NONE":
     NOTE_RULES = {
         "all" : [],
@@ -28,4 +30,5 @@ if MODE == "EXP_NONE":
         "model" : [],
         "end" : []
     }
+    SHOW = []
 SLICE_K = 2 # number of error slices to show users for each FPR/FNR

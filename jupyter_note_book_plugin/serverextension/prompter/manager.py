@@ -13,7 +13,7 @@ from random import choice, randrange
 from .storage import DbHandler, RemoteDbHandler, load_dfs
 from .analysis import AnalysisEnvironment
 from .config import MODE, remote_config
-from .note_config import NOTE_RULES
+from .note_config import NOTE_RULES, SHOW
 
 
 class AnalysisManager:
@@ -41,7 +41,8 @@ class AnalysisManager:
 
         # mapping of notebook section -> notes to look for
         self.notes = {s : [note_type(self.db) for note_type in allowed_notes] for s, allowed_notes in NOTE_RULES.items()}
-
+        self.show = SHOW
+ 
     def handle_request(self, request):
         """
         handle a request (json object with "content", "id", and "kernel" fields)
@@ -107,12 +108,12 @@ class AnalysisManager:
             if r.feasible(cell_id, env, dfs, non_dfs):
                 r.make_response(env, kernel_id, cell_id) 
             r.update(env, kernel_id, cell_id, dfs, non_dfs)
-        response = self.send_notifications(kernel_id, cell_id, request["exec_ct"])
- 
+        if cell_mode in self.show:
+            response = self.send_notifications(kernel_id, cell_id, request["exec_ct"])
+            return response
 #        self._nb.log.info("[MANAGER] sending response {0}".format(response))
 
-        return response
-
+        return
     def handle_col_info(self, kernel_id, request):
         """Routes a request of type 'columnInformation' to DbHandler.provide_col_info()"""
         result = self.db.provide_col_info(kernel_id, request)
@@ -139,17 +140,17 @@ class AnalysisManager:
         {"kernel_id" : kernel_id, 
          <note_type> : [notes]}
         """
+        note_list = [note for note_list in self.notes.values() for note in note_list]
 
-        for notes in self.notes.values():
-            for note in notes:
-                for note_data in note.data.values():
-                    self._nb.log.debug("[send_notifications] note data {0}".format(note_data))
-                    for note_entry in note_data:
-                        
-                        if note_entry["type"] not in resp:
-                            resp[note_entry["type"]] = []
-                        resp[note_entry["type"]].append(note_entry)
-                        self.db.store_response(kernel_id, cell_id, exec_ct, note_entry)
+        for note in note_list:
+            for note_data in note.data.values():
+                self._nb.log.debug("[send_notifications] note data {0}".format(note_data))
+                for note_entry in note_data:
+                    
+                    if note_entry["type"] not in resp:
+                        resp[note_entry["type"]] = []
+                    resp[note_entry["type"]].append(note_entry)
+                    self.db.store_response(kernel_id, cell_id, exec_ct, note_entry)
 
         return resp 
 
