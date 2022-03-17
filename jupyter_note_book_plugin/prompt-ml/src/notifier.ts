@@ -179,10 +179,16 @@ export class Prompter {
     console.log("generating welcome")
     this._appendNote(note.generateFormattedOutput())
   }
-
+  private _round(group : any[]) : any[] {
+    var round_group : any[] = [];
+    for (var i = 0; i < group.length; i++) {
+      round_group.push(Math.floor(group[i]*1000)/1000)
+    }
+    return round_group;
+  }
   private _makeEqOdds(eqOdds: { [key: string]: any }[]) {
-    var note = new PopupNotification("modelReport", false, "Model Report Note", eqOdds);
-    note.addHeader("Model Report Note")
+    var note = new PopupNotification("modelReport", false, "Model Report", eqOdds);
+    note.addHeader("Model Report")
     console.log("eqodds length ",eqOdds.length); 
     // preamble on MRN
     note.addParagraph(`<p><b>The Model Report Note</b> uses the sensitivity as marked in the Protected Column Note to determine
@@ -197,7 +203,12 @@ export class Prompter {
       console.log("eqodds model ", model["model_name"], "m ",m);
       // Name and accuracy to the first decimal place (i.e. 10.3%)
       var name = "Model " + model["model_name"] + " (" + (Math.floor(1000 * model["acc_orig"]) / 10) + "% accuracy)"
-      var groups : Group[] = []
+      var groups : Group[] = [];
+
+      var overall = this._round(model["overall"]);
+
+      groups.push(new Group("Overall", overall[0], overall[1], overall[2], 
+                            overall[3], overall[4], overall[5], [0, 0, 0, 0, 0], true));
       for(var group in model["k_highest_error_rates"]) {
         for(var correspondingGroup in model["k_highest_error_rates"][group]) {
           var thisGroup = model["k_highest_error_rates"][group][correspondingGroup]["metrics"];
@@ -215,7 +226,7 @@ export class Prompter {
           console.log(model["k_highest_error_rates"][group][correspondingGroup]["highlight"]);
           var highlights : number[] = model["k_highest_error_rates"][group][correspondingGroup]["highlight"];
 
-          groups.push(new Group(group+": "+correspondingGroup, precision, recall, f1score, fpr, fnr, count, highlights))
+          groups.push(new Group(group+": "+correspondingGroup, precision, recall, f1score, fpr, fnr, count, highlights, false))
         }
       }
       // Attaching the data to the note itself

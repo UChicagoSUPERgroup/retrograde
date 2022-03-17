@@ -22,7 +22,8 @@ export class Group {
     fpr: string,
     fnr: string,
     count : string,
-    highlights : number[]
+    highlights : number[],
+    overall : boolean
   ) {
     this._content = this._generateBaseElement(
             name,
@@ -32,7 +33,8 @@ export class Group {
             fpr,
             fnr,
             count,
-            highlights
+            highlights,
+            overall
     );
   }
 
@@ -49,12 +51,21 @@ export class Group {
     fpr: string,
     fnr: string,
     count : string,
-    highlights : number[]
+    highlights : number[],
+    overall : boolean
   ): HTMLDivElement {
-    var elem = $.parseHTML(`
-    <div class="group">
+    var elem;
+    if (overall) {
+      elem = $.parseHTML(`;
+      <div class="group" style="background-color:rgba(0, 0, 256, 0.3) ! important;">
         <h4 style="text-align:left">${name}<br/>count=${count}</h4>
-    </div>`);
+      </div>`);
+    } else {
+      elem = $.parseHTML(`
+      <div class="group">
+        <h4 style="text-align:left">${name}<br/>count=${count}</h4>
+      </div>`);
+    }
     var metric_names : string[] = ["Precision", "Recall", "F1 Score", "FPR", "FNR"];
     var metrics : string[] = [precision, recall, f1Score, fpr, fnr];
 
