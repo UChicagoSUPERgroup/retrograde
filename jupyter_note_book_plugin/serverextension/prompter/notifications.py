@@ -759,8 +759,10 @@ class ModelReportNote(Notification):
 
             df, version = q.pop()
             protected_cols = self._check_prot(df, version, kernel_id)
-            if protected_cols != []:
-                return protected_cols, df, version
+            protected_cat_cols = [col for col in protected_cols if is_categorical(dfs[df][col])]
+
+            if protected_cat_cols != []:
+                return protected_cat_cols, df, version
 
             seen.add((df, version))
 
@@ -808,14 +810,16 @@ class ModelReportNote(Notification):
             return False, None, None, None, None
 
         # remove numerical prot_cols from prot_col sets
-        removed = []
-        for idx, prot in enumerate(prot_cols):
-            if is_numeric_dtype(prot):
-                prot_col_names.pop(idx)
-                removed.append(idx)
+#        removed = []
+#        for idx, prot in enumerate(prot_cols):
+#            if is_numeric_dtype(prot):
+#                prot_col_names.pop(idx)
+#                removed.append(idx)
         # remove from prot_cols as well
-        for idx in removed:
-            prot_cols.remove(idx)
+        # TODO: do this filtering in the search for protectedd Ancestor instead!
+#        env.log.debug(f"[ModelReportNote] {removed}, {prot_cols}")
+#        for idx in removed:
+#            prot_cols.remove(idx)
         # if there are only numerical prot_cols => return None
         if len(prot_col_names) == 0 or len(prot_cols) == 0:
             return False, None, None, None, None
