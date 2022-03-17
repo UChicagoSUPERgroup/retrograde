@@ -996,6 +996,7 @@ class ModelReportNote(Notification):
             orig_preds = model.predict(X)
             orig_preds = pd.Series(orig_preds, index=X.index)
 
+
             x_ancestor, x_ancestor_name, prot_col_names, prot_cols = self.get_prot_from_aligned(model_name)
 
             sorted_error_rates, k_highest_rates = self.get_sorted_k_highest_error_rates(env, 
@@ -1007,6 +1008,7 @@ class ModelReportNote(Notification):
            
 
             resp["acc_orig"] = acc_orig
+            resp["overall"] = error_rates(*acc_measures(y, orig_preds))
             resp["groups"] = prot_col_names
             resp["error_rates"] = sorted_error_rates
             resp["k_highest_rates"] = k_highest_rates
@@ -1093,6 +1095,7 @@ class ModelReportNote(Notification):
             # TODO: this needs to be changed over
             resp = {"type" : "model_report", "model_name" : model_name}
             resp["acc_orig"] = new_acc
+            resp["overall"] = error_rates(*acc_measures(y, new_preds))
             resp["groups"] = prot_col_names
             resp["error_rates"] = sorted_error_rates
             resp["k_highest_error_rates"] = k_highest_error_rates
