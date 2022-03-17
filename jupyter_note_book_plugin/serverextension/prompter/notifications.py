@@ -388,6 +388,9 @@ class ProxyColumnNote(ProtectedColumnNote):
        
         sens_col_type = resolve_col_type(df[sens_col])
         not_sense_col_type = resolve_col_type(df[not_sense_col])
+
+        # pre-calculate the pearson correlation coefficent for the dataframe
+        df_corr = df.corr()
         
         if sens_col_type == "unknown" or not_sense_col_type == "unknown":
             return None
@@ -395,22 +398,26 @@ class ProxyColumnNote(ProtectedColumnNote):
             p = self._apply_ANOVA(df, sens_col, not_sense_col)
             if p < PVAL_CUTOFF:
                 return {"sensitive_col_name" : sens_col, 
-                        "proxy_col_name" : not_sense_col, "p" : p}
+                        "proxy_col_name" : not_sense_col, "p" : p,
+                        "coefficient" : df_corr[not_sense_col][sens_col]}
         if sens_col_type == "categorical" and not_sense_col_type == "categorical":
             p = self._apply_chisq(df, sens_col, not_sense_col)
             if p < PVAL_CUTOFF:
                 return {"sensitive_col_name" : sens_col,
-                        "proxy_col_name" : not_sense_col, "p" : p}
+                        "proxy_col_name" : not_sense_col, "p" : p,
+                        "coefficient" : df_corr[not_sense_col][sens_col]}
         if sens_col_type == "numeric" and not_sense_col_type == "numeric":
             p = self._apply_spearman(df, sens_col, not_sense_col)
             if p < PVAL_CUTOFF:
                 return {"sensitive_col_name" : sens_col,
-                        "proxy_col_name" : not_sense_col, "p" : p} 
+                        "proxy_col_name" : not_sense_col, "p" : p,
+                        "coefficient" : df_corr[not_sense_col][sens_col]} 
         if sens_col_type == "numeric" and not_sense_col_type == "categorical":
             p = self._apply_ANOVA(df, not_sense_col, sens_col)
             if p < PVAL_CUTOFF:
                 return {"sensitive_col_name" : sens_col,
-                        "proxy_col_name" : not_sense_col, "p" : p} 
+                        "proxy_col_name" : not_sense_col, "p" : p,
+                        "coefficient" : df_corr[not_sense_col][sens_col]} 
         return None
     def make_response(self, env, kernel_id, cell_id):
         # pylint: disable=too-many-locals

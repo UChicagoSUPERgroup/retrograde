@@ -19,6 +19,8 @@ import deepEqual = require("fast-deep-equal")
 interface ProxyColumnRelationships {
   predictive: string[];
   correlated: string[];
+  pvals: string[];
+  coeffs: string[];
 }
 
 export class Prompter {
@@ -245,10 +247,11 @@ export class Prompter {
     for (var x = 0; x < proxies.length; x++) {
       var p: any = proxies[x];
       if (!(p["df"] in d))
-        d[p["df"]] = { proxy_col_name: [], sensitive_col_name: [], p_vals: [] };
-      d[p["df"]]["proxy_col_name"].push(p["proxy_col_name"]);
-      d[p["df"]]["sensitive_col_name"].push(p["sensitive_col_name"]);
-      d[p["df"]]["p_vals"].push(p["p"]);
+        d[p["df"]] = { proxy_col_name: [], sensitive_col_name: [], p_vals: [], pearsons: [] };
+        d[p["df"]]["proxy_col_name"].push(p["proxy_col_name"]);
+        d[p["df"]]["sensitive_col_name"].push(p["sensitive_col_name"]);
+        d[p["df"]]["p_vals"].push(p["p"]);
+        d[p["df"]]["pearsons"].push(p["coefficient"]);
     }
     var message = this._makeProxyMsg(d);
     this._appendNote(message);
@@ -286,6 +289,8 @@ export class Prompter {
           tableRows[columnName] = {
             predictive: [],
             correlated: [],
+            pvals: [],
+            coeffs: []
           };
         }
         if (df["p_vals"][idx] < 0.001) {
@@ -293,12 +298,16 @@ export class Prompter {
         } else {
           tableRows[columnName].predictive.push(df["proxy_col_name"][idx]);
         }
+        tableRows[columnName].pvals.push(df["p"][idx]);
+        tableRows[columnName].coeffs.push(df["coefficient"][idx]);
       });
       const tableHeader = `
         <thead>
           <tr>
             <th>Column name</th>
             <th>Highest correlated columns</th>
+            <th>p-value</th>
+            <th>Pearson coefficient</th>
             <th>Other correlated columns</th>
           </tr>
         </thead>
@@ -313,11 +322,19 @@ export class Prompter {
             relationships.correlated.length > 0
               ? relationships.correlated.join(", ")
               : " ";
+          const pValues = relationships.pvals.length > 0
+            ? relationships.pvals.join(", ")
+            : " ";
+          const pearsonCoefficients = relationships.coeffs.length > 0
+            ? relationships.coeffs.join(", ")
+            : " ";
           return `
           <tbody>
               <tr>
                   <td>${columnName}</td>
                   <td>${predictiveFeatures}</td>
+                  <td>${pValues}</td>
+                  <td>${pearsonCoefficients}</td>
                   <td>${correlatedFeatures}</td>
               </tr>
           </tbody>
