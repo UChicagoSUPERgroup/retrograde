@@ -51,6 +51,8 @@ export class Prompter {
     // Handler for the backend JSON object of notifications to generate
     listener.infoSignal.connect((sender: Listener, output: any) => {
       this._onInfo(output);
+      app.shell.activateById("prompt-ml");
+//      app.commands.execute("application:toggle-right-area")
     });
   }
 
