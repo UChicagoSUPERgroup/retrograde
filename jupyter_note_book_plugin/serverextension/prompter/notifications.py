@@ -400,7 +400,7 @@ class ProxyColumnNote(ProtectedColumnNote):
             if p < PVAL_CUTOFF:
                 return {"sensitive_col_name" : sens_col, 
                         "proxy_col_name" : not_sense_col, "p" : p,
-                        "coefficient" : coeff}
+                        "coefficient" : round(coeff, 2)}
         if sens_col_type == "categorical" and not_sense_col_type == "categorical":
             coeff,p = self._apply_chisq(df, sens_col, not_sense_col)
             if pd.isna(coeff):
@@ -408,7 +408,7 @@ class ProxyColumnNote(ProtectedColumnNote):
             if p < PVAL_CUTOFF:
                 return {"sensitive_col_name" : sens_col,
                         "proxy_col_name" : not_sense_col, "p" : p,
-                        "coefficient" : coeff}
+                        "coefficient" : round(coeff, 2)}
         if sens_col_type == "numeric" and not_sense_col_type == "numeric":
             coeff,p = self._apply_spearman(df, sens_col, not_sense_col)
             if pd.isna(coeff):
@@ -416,7 +416,7 @@ class ProxyColumnNote(ProtectedColumnNote):
             if p < PVAL_CUTOFF:
                 return {"sensitive_col_name" : sens_col,
                         "proxy_col_name" : not_sense_col, "p" : p,
-                        "coefficient" : coeff} 
+                        "coefficient" : round(coeff, 2)} 
         if sens_col_type == "numeric" and not_sense_col_type == "categorical":
             coeff,p = self._apply_ANOVA(df, not_sense_col, sens_col)
             if pd.isna(coeff):
@@ -424,7 +424,7 @@ class ProxyColumnNote(ProtectedColumnNote):
             if p < PVAL_CUTOFF:
                 return {"sensitive_col_name" : sens_col,
                         "proxy_col_name" : not_sense_col, "p" : p,
-                        "coefficient" : coeff} 
+                        "coefficient" : round(coeff, 2)} 
         return None
     def make_response(self, env, kernel_id, cell_id):
         # pylint: disable=too-many-locals
