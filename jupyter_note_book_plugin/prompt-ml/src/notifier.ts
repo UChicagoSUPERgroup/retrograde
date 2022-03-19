@@ -302,8 +302,8 @@ export class Prompter {
         <thead>
           <tr>
             <th>Column name</th>
-            <th>Highest correlated columns</th>
-            <th>Other correlated columns</th>
+            <th>Significantly correlated </br> columns (P < 0.001)</th>
+            <th>Potentially correlated </br> columns (P < 0.25)</th>
           </tr>
         </thead>
       `;
