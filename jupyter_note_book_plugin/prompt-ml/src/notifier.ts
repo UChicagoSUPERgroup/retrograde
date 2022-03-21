@@ -1,5 +1,5 @@
 // Jupyter imports
-import { JupyterFrontEnd } from "@jupyterlab/application";
+import { JupyterFrontEnd, LabShell } from "@jupyterlab/application";
 import { INotebookTracker, NotebookPanel } from "@jupyterlab/notebook";
 
 // PromptML plugin imports
@@ -34,16 +34,18 @@ export class Prompter {
   // the content of open notifications on the frontend.
   // Validation checks for open / closed notifications are handled by index.ts
   notificationUpdate: Function
+  shell: LabShell
   // This generates prompts for notebook cells on notification of new data or a new model
   constructor(
     listener: Listener,
     tracker: INotebookTracker,
     app: JupyterFrontEnd,
     factory: NotebookPanel.IContentFactory,
-    notificationUpdate: Function // holds the pointer to the `onUpdate` index.ts function
+    notificationUpdate: Function, // holds the pointer to the `onUpdate` index.ts function
+    shell: LabShell
   ) {
     this.oldContent = {}; // see structure above
-
+    this.shell = shell
     // This function is executed whenever new information is received from
     // the backend but a notification has already been generated
     this.notificationUpdate = notificationUpdate;
@@ -84,6 +86,8 @@ export class Prompter {
   // Converts the PopupNotification export format to a type-script allowed
   // version for appending to the JupyterLab interface
   private _appendNote(note: any) {
+    if(this.shell.rightCollapsed)
+      this.shell.expandRight()
     this._appendMsg((note[0] as HTMLDivElement).outerHTML, note[1]);
   }
 
@@ -198,36 +202,57 @@ export class Prompter {
     // <p style="color:green"><i>${metric_name}: ${metric}</i></p>
     note.addParagraph(`<br /><p> <span style="color:green"><i>"metric_name": "metric_value"</i></span> indicates that a metric is performing some percent better than the median for that group while
                        <span style="color:red"><b>"metric_name": "metric_value"</b></span> does the same for metrics performing some percent worse than the median for that group.</p>`)
+    // Render dynamic content, i.e. the error groups.
+    // Data (eqOdds) is an array of objects, with each object
+    // representing data from one model.
     for(var m = 0; m < eqOdds.length; m++) {
       var model : { [key: string] : any} = eqOdds[m];
       console.log("eqodds model ", model["model_name"], "m ",m);
       // Name and accuracy to the first decimal place (i.e. 10.3%)
       var name = "Model " + model["model_name"] + " (" + (Math.floor(1000 * model["acc_orig"]) / 10) + "% accuracy)"
       var groups : Group[] = [];
-
       var overall = this._round(model["overall"]);
-
       groups.push(new Group("Overall", overall[0], overall[1], overall[2], 
                             overall[3], overall[4], overall[5], [0, 0, 0, 0, 0], true));
+      // Accumulate all groups into a single array so that they can be sorted.
+      // Original format has:
+      // <group> : {
+      //    <corresponding group> : < metrics >,
+      //    <corresponding group> : < metrics >,
+      //    ...
+      // },
+      // <second group> : {
+      //    <corresponding group> : < metrics >,
+      //    ...
+      // Instead, we want [ {<corresponding group>}, {<corresponding group>}, ... ]
+      // with information of what groups were originally associated
+      var allGroups = [];
       for(var group in model["k_highest_error_rates"]) {
         for(var correspondingGroup in model["k_highest_error_rates"][group]) {
-          var thisGroup = model["k_highest_error_rates"][group][correspondingGroup]["metrics"];
-          // Round to 3 decimal places
-          // To do: dedicated rounding method / global rounding config setting
-          for(var x = 0; x < thisGroup.length; x++)
-            thisGroup[x] = Math.floor(model["k_highest_error_rates"][group][correspondingGroup]["metrics"][x] * 1000) / 1000
-          // Backend sends information in a static, predefined order
-          var precision : string = thisGroup[0],
-          recall = thisGroup[1],
-          f1score = thisGroup[2],
-          fpr = thisGroup[3],
-          fnr = thisGroup[4],
-          count = thisGroup[5];
-          console.log(model["k_highest_error_rates"][group][correspondingGroup]["highlight"]);
-          var highlights : number[] = model["k_highest_error_rates"][group][correspondingGroup]["highlight"];
-
-          groups.push(new Group(group+": "+correspondingGroup, precision, recall, f1score, fpr, fnr, count, highlights, false))
+          var tempGroup = model["k_highest_error_rates"][group][correspondingGroup];
+          tempGroup["group"] = group; // save what group this object was associated with
+          tempGroup["correspondingGroup"] = correspondingGroup;
+          allGroups.push(tempGroup);
         }
+      }
+      // Sorting and rendering the grouped notes
+      allGroups = this._sortErrorGroups(allGroups);
+      for(var i = 0; i < allGroups.length; i++) {
+        var thisGroup : { [key: string]: any } = allGroups[i];
+        // Round to 3 decimal places
+        // To do: dedicated rounding method / global rounding config setting
+        for(var x = 0; x < thisGroup["metrics"].length; x++)
+          thisGroup["metrics"][x] = Math.floor(thisGroup["metrics"][x] * 1000) / 1000
+        // Backend sends information in a static, predefined order
+        var precision : string = thisGroup["metrics"][0],
+        recall = thisGroup["metrics"][1],
+        f1score = thisGroup["metrics"][2],
+        fpr = thisGroup["metrics"][3],
+        fnr = thisGroup["metrics"][4],
+        count = thisGroup["metrics"][5];
+        console.log(thisGroup["highlight"]);
+        var highlights : number[] = thisGroup["highlight"];
+        groups.push(new Group(thisGroup["group"]+": "+thisGroup["correspondingGroup"], precision, recall, f1score, fpr, fnr, count, highlights, false))
       }
       // Attaching the data to the note itself
       note.addRawHtmlElement(new Model(name, model["current_df"], model["ancestor_df"], groups).export())
@@ -247,6 +272,17 @@ export class Prompter {
     // Send to the Jupyterlab interface to render
     var message = note.generateFormattedOutput();
     this._appendNote(message);
+  }
+
+  private _sortErrorGroups(array : { [key: string]: any }[]) {
+    const SORT_BY = 5; // Can change to whatever metrics index we'd like to sort by
+    // see: https://stackoverflow.com/questions/28311196/javascript-arguments-sort-throw-error-sort-is-not-a-function
+    // for an explanation of why we have to use [].slice.call(array)...
+    // instead of directly using array.sort
+    return [].slice.call(array).sort(function(a, b) {
+      var x = a["metrics"][SORT_BY]; var y = b["metrics"][SORT_BY];
+      return ((x < y) ? 1 : ((x > y) ? -1 : 0));
+    });
   }
 
   private _handleProxies(

@@ -3,7 +3,7 @@
 // } from '@jupyterlab/application';
 
 import {
-  JupyterFrontEnd, JupyterFrontEndPlugin
+  JupyterFrontEnd, JupyterFrontEndPlugin, LabShell
 } from '@jupyterlab/application';
 
 import {
@@ -38,7 +38,7 @@ const extension: JupyterFrontEndPlugin<void> = {
   id: 'prompt-ml',
   autoStart: true,
   requires: [INotebookTracker, NotebookPanel.IContentFactory],
-  activate: (app: JupyterFrontEnd, tracker : INotebookTracker, factory : NotebookPanel.IContentFactory) => {
+  activate: (app: JupyterFrontEnd, tracker : INotebookTracker, factory : NotebookPanel.IContentFactory, shell: LabShell) => {
     // Maintains a list of all open notifications within the environment;
     // Note: these notifications may or may not have been closed
     var openNotes : { [key : string] : any } = [];
@@ -60,7 +60,7 @@ const extension: JupyterFrontEndPlugin<void> = {
       // remove old children element and append the new, generated version
       note_container.empty().append(payload["htmlContent"])
     };
-    const prompter = new Prompter(listener, tracker, app, factory, onUpdate);
+    const prompter = new Prompter(listener, tracker, app, factory, onUpdate, app.shell as LabShell);
     console.log("init prompter", prompter);
     console.log("factory", factory);
     let widgets = app.shell.widgets("main");
