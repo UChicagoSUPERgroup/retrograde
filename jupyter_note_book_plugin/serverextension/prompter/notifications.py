@@ -13,13 +13,13 @@ import operator
 from tokenize import group
 
 import pandas as pd
-from pandas.api.types import is_numeric_dtype, is_unsigned_integer_dtype, is_integer_dtype, is_signed_integer_dtype
+from pandas.api.types import is_numeric_dtype
 import numpy as np
 import dill
 
 from scipy.stats import f_oneway, chi2_contingency, spearmanr, chisquare
+from scipy.stats.contingency import association
 from sklearn.base import ClassifierMixin
-from pandas.api.types import is_numeric_dtype
 
 from .string_compare import check_for_protected, guess_protected, set_env
 from .sortilege import is_categorical
@@ -388,29 +388,43 @@ class ProxyColumnNote(ProtectedColumnNote):
        
         sens_col_type = resolve_col_type(df[sens_col])
         not_sense_col_type = resolve_col_type(df[not_sense_col])
+
+        # pre-calculate the pearson correlation coefficent for the dataframe
         
         if sens_col_type == "unknown" or not_sense_col_type == "unknown":
             return None
         if sens_col_type == "categorical" and not_sense_col_type == "numeric":
-            p = self._apply_ANOVA(df, sens_col, not_sense_col)
+            coeff,p = self._apply_ANOVA(df, sens_col, not_sense_col)
+            if pd.isna(coeff):
+                raise Exception(f"na coeff {sens_col} {not_sense_col}")
             if p < PVAL_CUTOFF:
                 return {"sensitive_col_name" : sens_col, 
-                        "proxy_col_name" : not_sense_col, "p" : p}
+                        "proxy_col_name" : not_sense_col, "p" : p,
+                        "coefficient" : round(coeff, 2)}
         if sens_col_type == "categorical" and not_sense_col_type == "categorical":
-            p = self._apply_chisq(df, sens_col, not_sense_col)
+            coeff,p = self._apply_chisq(df, sens_col, not_sense_col)
+            if pd.isna(coeff):
+                raise Exception(f"na coeff {sens_col} {not_sense_col}")
             if p < PVAL_CUTOFF:
                 return {"sensitive_col_name" : sens_col,
-                        "proxy_col_name" : not_sense_col, "p" : p}
+                        "proxy_col_name" : not_sense_col, "p" : p,
+                        "coefficient" : round(coeff, 2)}
         if sens_col_type == "numeric" and not_sense_col_type == "numeric":
-            p = self._apply_spearman(df, sens_col, not_sense_col)
+            coeff,p = self._apply_spearman(df, sens_col, not_sense_col)
+            if pd.isna(coeff):
+                raise Exception(f"na coeff {sens_col} {not_sense_col}")
             if p < PVAL_CUTOFF:
                 return {"sensitive_col_name" : sens_col,
-                        "proxy_col_name" : not_sense_col, "p" : p} 
+                        "proxy_col_name" : not_sense_col, "p" : p,
+                        "coefficient" : round(coeff, 2)} 
         if sens_col_type == "numeric" and not_sense_col_type == "categorical":
-            p = self._apply_ANOVA(df, not_sense_col, sens_col)
+            coeff,p = self._apply_ANOVA(df, not_sense_col, sens_col)
+            if pd.isna(coeff):
+                raise Exception(f"na coeff {sens_col} {not_sense_col}")
             if p < PVAL_CUTOFF:
                 return {"sensitive_col_name" : sens_col,
-                        "proxy_col_name" : not_sense_col, "p" : p} 
+                        "proxy_col_name" : not_sense_col, "p" : p,
+                        "coefficient" : round(coeff, 2)} 
         return None
     def make_response(self, env, kernel_id, cell_id):
         # pylint: disable=too-many-locals
@@ -499,23 +513,30 @@ class ProxyColumnNote(ProtectedColumnNote):
         if len(sense_col_values) < 2:
             return 1.0
         value_cols = [df[num_col][df[sense_col] == v].dropna() for v in sense_col_values]
- 
+
+        total_var = df[num_col].var(ddof=0, skipna=True)
+        total_mean = df[num_col].mean()
+
+        corr_ratio_num = sum([len(subset)*(subset.mean() - total_mean)**2 for subset in value_cols])
+        corr_ratio = np.sqrt((corr_ratio_num/len(df[num_col]))/total_var)
+          
         result = f_oneway(*value_cols)
 
-        return result[1] # this returns the p-value
+        return corr_ratio,result[1] # this returns the p-value
  
     def _apply_chisq(self, df, sense_col, cat_col):
         # pylint: disable=no-self-use
         # contingency table
         table = pd.crosstab(df[sense_col], df[cat_col])
         result = chi2_contingency(table.to_numpy())
+        coeff = association(table.to_numpy(), method="cramer")
 
-        return result[1] # returns the p-value 
+        return coeff,result[1] # returns the p-value 
 
     def _apply_spearman(self, df, sens_col, not_sens_col):
         # pylint: disable=no-self-use
-        result = spearmanr(df[sens_col], df[not_sens_col], nan_policy="omit")
-        return result[1]
+        coeff,pval = spearmanr(df[sens_col], df[not_sens_col], nan_policy="omit")
+        return coeff,pval 
 
 class MissingDataNote(ProtectedColumnNote):
     """
@@ -607,17 +628,23 @@ class MissingDataNote(ProtectedColumnNote):
                         continue
                     sens_col_name = sens_col["col_name"]
                     pr_missing = sum(is_na_col)/len(is_na_col)
+
                     null_exp = pr_missing*df[sens_col_name].value_counts()
                     missing_count_full = pd.Series(0, index=null_exp.index)
                     missing_counts = df[sens_col_name][is_na_col].value_counts()
 
                     missing_count_full.loc[missing_counts.index] = missing_counts
 
+                    diff = (missing_count_full.sum() - null_exp.sum())/len(null_exp)
+                    null_exp = null_exp + diff
+ 
                     if missing_counts.sum() == 0:
                         continue
                     # chisquare takes as input observed differences, and expected
                     # null expectation is that missing is dist. unif. at random
                     # across each category
+                    env.log.debug(f"[MissingDataNote] {missing_count_full.sum()}, {null_exp.sum()}")
+
                     _,p = chisquare(missing_count_full, null_exp)                    
                     # largest missing value
                     env.log.debug(f"[MissingDataNote] for {sens_col_name}, p value is {p}")
