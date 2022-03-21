@@ -1,5 +1,5 @@
 // Jupyter imports
-import { JupyterFrontEnd } from "@jupyterlab/application";
+import { JupyterFrontEnd, LabShell } from "@jupyterlab/application";
 import { INotebookTracker, NotebookPanel } from "@jupyterlab/notebook";
 
 // PromptML plugin imports
@@ -34,16 +34,18 @@ export class Prompter {
   // the content of open notifications on the frontend.
   // Validation checks for open / closed notifications are handled by index.ts
   notificationUpdate: Function
+  shell: LabShell
   // This generates prompts for notebook cells on notification of new data or a new model
   constructor(
     listener: Listener,
     tracker: INotebookTracker,
     app: JupyterFrontEnd,
     factory: NotebookPanel.IContentFactory,
-    notificationUpdate: Function // holds the pointer to the `onUpdate` index.ts function
+    notificationUpdate: Function, // holds the pointer to the `onUpdate` index.ts function
+    shell: LabShell
   ) {
     this.oldContent = {}; // see structure above
-
+    this.shell = shell
     // This function is executed whenever new information is received from
     // the backend but a notification has already been generated
     this.notificationUpdate = notificationUpdate;
@@ -51,8 +53,6 @@ export class Prompter {
     // Handler for the backend JSON object of notifications to generate
     listener.infoSignal.connect((sender: Listener, output: any) => {
       this._onInfo(output);
-      app.shell.activateById("prompt-ml");
-//      app.commands.execute("application:toggle-right-area")
     });
   }
 
@@ -86,6 +86,8 @@ export class Prompter {
   // Converts the PopupNotification export format to a type-script allowed
   // version for appending to the JupyterLab interface
   private _appendNote(note: any) {
+    if(this.shell.rightCollapsed)
+      this.shell.expandRight()
     this._appendMsg((note[0] as HTMLDivElement).outerHTML, note[1]);
   }
 
