@@ -29,12 +29,13 @@ export class Prompter {
   // oldContent = {
   //     <String type of notification> : <String content of the notification> 
   // }
-  oldContent: { [key: string]: any[] }
+  private oldContent: { [key: string]: any[] }
   // Holds a pointer to an index.ts function that is able to manipulate
   // the content of open notifications on the frontend.
   // Validation checks for open / closed notifications are handled by index.ts
-  notificationUpdate: Function
-  shell: LabShell
+  private notificationUpdate: Function
+  private shell: LabShell
+  private listener: Listener
   // This generates prompts for notebook cells on notification of new data or a new model
   constructor(
     listener: Listener,
@@ -49,7 +50,7 @@ export class Prompter {
     // This function is executed whenever new information is received from
     // the backend but a notification has already been generated
     this.notificationUpdate = notificationUpdate;
-    
+    this.listener = listener
     // Handler for the backend JSON object of notifications to generate
     listener.infoSignal.connect((sender: Listener, output: any) => {
       this._onInfo(output);
@@ -86,8 +87,10 @@ export class Prompter {
   // Converts the PopupNotification export format to a type-script allowed
   // version for appending to the JupyterLab interface
   private _appendNote(note: any) {
-    if(this.shell.rightCollapsed)
+    if(this.shell.rightCollapsed) {
       this.shell.expandRight()
+      this.listener.getNotebook().activate()
+    }
     this._appendMsg((note[0] as HTMLDivElement).outerHTML, note[1]);
   }
 

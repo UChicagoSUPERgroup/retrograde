@@ -62,6 +62,10 @@ export class Listener {
     }
   }
 
+  public getNotebook() {
+    return this.notebook;
+  }
+
   private listen() {
     var cell: Cell;
     var contents: string;
