@@ -74,13 +74,17 @@ export class ProtectedColumnNote extends PopupNotification {
             </div>
         `);
     var htmlElem = elem[1] as any as HTMLElement;
-    $(elem).find(".df h1").on("click", e => {
-      var parentElem = $($(e.currentTarget).parent())
-      // Toggle basic visibility effects
-      parentElem.toggleClass("condensed");
-      // Change prefix to "+" or "-" depending on if the note is condensed
-      parentElem.find("h1 .prefix").text((parentElem.hasClass("condensed")) ? " + " : " - ");
-    })
+    // attach method to expand / contract the content to each individual df h1
+    var listOfDataframeHeaders : NodeListOf<Element> = htmlElem.querySelectorAll(".df h1")
+    for(var dataframeHeader of listOfDataframeHeaders) {
+      (dataframeHeader as HTMLElement).onmouseup = (e : Event) => {
+        var parentElem = $($(e.currentTarget).parent())
+        // Toggle basic visibility effects
+        parentElem.toggleClass("condensed");
+        // Change prefix to "+" or "-" depending on if the note is condensed
+        parentElem.find("h1 .prefix").text((parentElem.hasClass("condensed")) ? " + " : " - ");
+      }
+    }
     for (var x = 0; x < this._data.length; x++) {
       htmlElem
         .querySelector(`#${this._data[x]["df"]} .sensitivity`)
