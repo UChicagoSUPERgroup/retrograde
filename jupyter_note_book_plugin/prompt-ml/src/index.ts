@@ -25,6 +25,10 @@ import {
   Prompter,
 } from "./notifier";
 
+import {
+  BackendRequest
+} from './request';
+
 import { MainAreaWidget } from '@jupyterlab/apputils';
 
 import { CodeCellClient } from "./client";
@@ -74,7 +78,22 @@ const extension: JupyterFrontEndPlugin<void> = {
       }
       console.log(widget); 
     }
-
+    /////////////////////////////////////////////////
+    // Temporary user tracking implementation -- should be split into a separate class before final version
+    $(document).on("mouseup", function(e) {
+      if($(e.target).closest("[prompt-ml-tracking-enabled]").length != 0) {
+        var targetElem = $(e.target).closest("[prompt-ml-tracking-enabled]")
+        console.log(targetElem)
+        BackendRequest.sendTrackPoint("click", `User clicked element with description ${$(targetElem).attr("prompt-ml-tracker-interaction-description")}`)
+      }
+    });
+    (app.shell as LabShell).activeChanged.connect(e => {
+      console.log("changed", e)
+      if(e.currentWidget.node.classList.contains("prompt-ml-popup")) {
+        BackendRequest.sendTrackPoint("widget_changed", `User opened widget with label: ${e.currentWidget.title.label}`)
+        console.log("[UserTracking] Sending change request")
+      }
+    })
     /////////////////////////////////////////////////
     // Preparing side panel
     const content = new Widget();
@@ -128,8 +147,8 @@ const extension: JupyterFrontEndPlugin<void> = {
         var popupWidget = new MainAreaWidget({ "content": popupContent });
         var id = "prompt-ml-popup" + (Math.round(Math.random() * 1000))
         popupWidget.id = id;
+        popupWidget.node.classList.add("prompt-ml-popup")
         var popupContainer = document.createElement("div");
-        popupContainer.classList.add("prompt-ml-popup")
         popupContainer.classList.add(id)
         $(popupContainer.parentElement).css("overflow", "scroll")
         popupContent.node.appendChild(popupContainer);

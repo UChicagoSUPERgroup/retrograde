@@ -3,6 +3,7 @@ import { Column } from "./Column";
 import $ = require("jquery");
 import { ServerConnection } from "@jupyterlab/services";
 import { CodeCellClient } from "./../client";
+import { BackendRequest } from "../request";
 
 export class ProtectedData {
   ////////////////////////////////////////////////////////////
@@ -15,7 +16,7 @@ export class ProtectedData {
   explorer: Explorer;
   columns: Column[];
   df: string;
-  kernel_id: string;
+  kernelId: string;
   potentialSensitivities: string[] = [
     "none",
     "gender",
@@ -37,10 +38,10 @@ export class ProtectedData {
   // Constructor
   ////////////////////////////////////////////////////////////
 
-  constructor(notice: any, kernel_id: string) {
+  constructor(notice: any, kernelId: string) {
     var columnNames = this._findAllColumnNames(notice);
     this.df = notice["df"];
-    this.kernel_id = kernel_id;
+    this.kernelId = kernelId;
     this.columns = this._populateColumns(notice);
     this._client = new CodeCellClient();
     this.explorer = new Explorer(columnNames, this.df);
@@ -66,20 +67,14 @@ export class ProtectedData {
       .text();
     var explorer = $(".promptMl.protectedColumns").find(`#${dfName} .explorer`);
     explorer.find("summary").text(columnName);
-    this._client
-      .request(
-        "exec",
-        "POST",
-        JSON.stringify({
-          type: "columnInformation",
+    BackendRequest.userInput({
+          type: "user_input",
+          input_type: "columnInformation",
           df: dfName,
-          kernel: this.kernel_id,
+          kernel: this.kernelId,
           col: columnName,
-        }),
-        ServerConnection.makeSettings()
-      )
-      .then((res) => {
-        var res = JSON.parse(res);
+        }, (raw : string) => {
+        var res = JSON.parse(raw);
         explorer.find(".classification").text(res["sensitivity"]["fields"]);
         explorer.find(".value-container").html(this._columnInfoElement(res));
         explorer.find("details").prop("open", false);
@@ -118,10 +113,11 @@ export class ProtectedData {
         "exec",
         "POST",
         JSON.stringify({
-          type: "sensitivityModification",
+          type: "user_input",
+          input_type: "sensitivityModification",
           df: dfName,
           col: columnName,
-          kernel: this.kernel_id,
+          kernel: this.kernelId,
           sensitivity: newSensitivity,
         }),
         ServerConnection.makeSettings()

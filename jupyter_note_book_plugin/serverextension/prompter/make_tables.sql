@@ -58,3 +58,10 @@ CREATE TABLE IF NOT EXISTS UsersContainers(
     port INT,
     container_started_at DATETIME,
     running BOOL); 
+
+CREATE TABLE IF NOT EXISTS userTracking(
+    user VARCHAR(64) NOT NULL,
+    type VARCHAR(255),
+    description LONGTEXT,
+    time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

@@ -15,9 +15,14 @@ from tornado.routing import Rule, PathMatches
 from prompter.storage import DbHandler, RemoteDbHandler
 from prompter.analysis import AnalysisEnvironment, run_code, Aliases
 from prompter.visitors import DataFrameVisitor, ModelScoreVisitor
-from prompter.manager import AnalysisManager
 from prompter.forkingkernel import ForkingKernel
 from prompter.config import table_query # necessary for testing
+# imports the three different manager classes used to handle
+# requests and information from the frontend
+from prompter.managers.database import DatabaseManager
+from prompter.managers.request import RequestManager
+from prompter.managers.analysis import AnalysisManager
+from prompter.managers.tracking import TrackingManager
 
 #from prompter.handler import TSChannelHandler
 
@@ -31,18 +36,25 @@ class CodeExecHandler(APIHandler):
     
     def post(self):
 #        print(tornado.escape.json_decode(self.request.body))
-        resp_body = MANAGER.handle_request(tornado.escape.json_decode(self.request.body))
+        resp_body = REQUEST_MANAGER.handle_request(tornado.escape.json_decode(self.request.body))
         self.set_status(200)
         self.set_default_headers()
         self.finish(resp_body)
 
-def _jupyter_server_extension_paths():
+def _jupyter_serverrequest_extension_paths():
     return [{"module" : "prompter"}]
 
 def load_jupyter_server_extension(app):
-#    print("LOADING SERVER EXTENSIONS") 
-    global MANAGER
-    MANAGER = AnalysisManager(app)
+    # The three types of managers used to handle traffic
+    global DATABASE_MANAGER, ANALYSIS_MANAGER, REQUEST_MANAGER, TRACKING_MANAGER
+    # Manages setting up local and remote database handlers
+    DATABASE_MANAGER = DatabaseManager(app)
+    # Analysis manager intakes cell executions and user input
+    ANALYSIS_MANAGER = AnalysisManager(app, DATABASE_MANAGER)
+    # Tracking manager handles db storage of user interactions
+    TRACKING_MANAGER = TrackingManager(app, DATABASE_MANAGER)
+    # Request manager intakes and routes requests
+    REQUEST_MANAGER = RequestManager(ANALYSIS_MANAGER, TRACKING_MANAGER)
     handlers = [("/code_tracker/exec", CodeExecHandler)]
     base_url = app.web_app.settings["base_url"]
     handlers = [(url_path_join(base_url, x[0]), x[1]) for x in handlers]
