@@ -14,6 +14,5 @@ term      - Duration of the loan being applied for, in months, until paid off.
 interest  - The price of taking the loan in percent.
 principal - The initial size of the loan in USD.
 approved  - Whether the loan provider approved the loan application.
-default   - Whether the loan was paid back or not 
 adj_bls_2 - An adjustment factor internal to the loan provider.
 id        - An identifier internal to the loan provider.
