@@ -5,28 +5,28 @@ if MODE == "EXP_CTS":
     NOTE_RULES = {
         "all" : [WelcomeNote, ProtectedColumnNote], # should trigger always
         "intro" : [],
-        "tutorial" : [],
-        "null_clean" : [MissingDataNote],
-        "model" : [ProxyColumnNote, ModelReportNote],
-        "end" : []
-    }
-    SHOW = ["all", "intro", "tutorial", "null_clean", "model", "end"]
-if MODE == "EXP_END":
-    NOTE_RULES = {
-        "all" : [WelcomeNote, ProtectedColumnNote],
-        "intro" :[],
-        "tutorial" : [],
-        "null_clean" : [MissingDataNote, ProxyColumnNote],
+        "clean" : [MissingDataNote],
+        "feature_select" : [ProxyColumnNote],
         "model" : [ModelReportNote],
         "end" : []
+    }
+    SHOW = ["all", "intro", "clean", "feature_select", "model", "end"]
+if MODE == "EXP_END":
+    NOTE_RULES = {
+        "all" : [WelcomeNote],
+        "intro" :[],
+        "clean" : [],
+        "feature_select" : [],
+        "model" : [],
+        "end" : [WelcomeNote, ProtectedColumnNote, MissingDataNote, ProxyColumnNote, ModelReportNote]
     }
     SHOW = ["end"]
 if MODE == "EXP_NONE":
     NOTE_RULES = {
         "all" : [],
         "intro" : [],
-        "tutorial" : [],
-        "null_clean" : [],
+        "clean" : [],
+        "feature_select" : [],
         "model" : [],
         "end" : []
     }
