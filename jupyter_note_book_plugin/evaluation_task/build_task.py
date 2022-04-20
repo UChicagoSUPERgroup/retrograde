@@ -2,7 +2,7 @@ import json
 import os
 from shutil import copyfile
 
-TASK_NAME = 'notebook_dist'
+TASK_NAME = 'notebook_dist_v2'
 BUILD_DIR_NAME = 'build'
 
 data = {}
@@ -11,8 +11,8 @@ with open(f'{TASK_NAME}.ipynb', 'r') as f:
 
 SECTION_START_KEYS = {
 	'intro_start' : 'intro',
-    'tutorial_start' : 'tutorial',
-    'null_clean_start' : 'null_clean',
+    'clean_start' : 'clean',
+    'feature_select_start' : 'feature_select',
     'model_start' : 'model',
     'end_start' : 'end'
 }
