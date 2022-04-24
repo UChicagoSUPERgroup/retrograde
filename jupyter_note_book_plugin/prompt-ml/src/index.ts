@@ -55,7 +55,7 @@ const extension: JupyterFrontEndPlugin<void> = {
     // had already been generated but more information is sent.
     // Called whenever new information is sent from the backend AND when
     // a note is re-appended to the front window.
-    var onUpdate = (payload : { [key : string] : any }, typeOfNote : string) => {
+    var onUpdate = (payload : { [key : string] : any }, typeOfNote : string) => {        
       if(!(typeOfNote in openNotes))
         return
       // find the node of the note being opened
@@ -84,15 +84,15 @@ const extension: JupyterFrontEndPlugin<void> = {
       if($(e.target).closest("[prompt-ml-tracking-enabled]").length != 0) {
         var targetElem = $(e.target).closest("[prompt-ml-tracking-enabled]")
         console.log(targetElem)
-        BackendRequest.sendTrackPoint("click", `User clicked element with description ${$(targetElem).attr("prompt-ml-tracker-interaction-description")}`)
+        BackendRequest.sendTrackPoint("click", $(targetElem).attr("prompt-ml-tracker-interaction-description"))
       }
     });
     (app.shell as LabShell).activeChanged.connect(e => {
-      console.log("changed", e)
-      if(e.currentWidget.node.classList.contains("prompt-ml-popup")) {
-        BackendRequest.sendTrackPoint("widget_changed", `User opened widget with label: ${e.currentWidget.title.label}`)
+      if(e.currentWidget.node.classList.contains("prompt-ml-popup") || e.currentWidget.node.classList.contains("jp-NotebookPanel")) {
+        BackendRequest.sendTrackPoint("widget_changed", `Opened ${e.currentWidget.title.label}`)
         console.log("[UserTracking] Sending change request")
       }
+
     })
     /////////////////////////////////////////////////
     // Preparing side panel
@@ -142,6 +142,7 @@ const extension: JupyterFrontEndPlugin<void> = {
         // on the right side panel but the large window is already open
         onUpdate(payload, typeOfNote)
       } else {
+        BackendRequest.sendTrackPoint("appearance_change", `Rendered ${payload["title"]}`)
         // Hasn't yet been opened or has since closed; creating the widget
         var popupContent = new Widget();
         var popupWidget = new MainAreaWidget({ "content": popupContent });
@@ -154,6 +155,7 @@ const extension: JupyterFrontEndPlugin<void> = {
         popupContent.node.appendChild(popupContainer);
         popupWidget.title.label = payload["title"];
         popupWidget.title.closable = true;
+        popupWidget.disposed.connect( () => { BackendRequest.sendTrackPoint("widget_closed", `Closed ${payload["title"]}`) } )
         // Get a list of all the ids before the addition
         var preAdditionChildren : string[] = []
         $("#jp-main-dock-panel .lm-TabBar-content.p-TabBar-content > li.lm-TabBar-tab").each(function() {

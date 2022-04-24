@@ -38,7 +38,7 @@ export class ProtectedColumnNote extends PopupNotification {
     console.log(dfs);
     for (var x = 0; x < dfs.length; x++) {
       dfString += `<div class="dfs">
-            <div class="noselect condensed df shadowDefault" id=${dfs[x]}>
+            <div class="noselect condensed df shadowDefault" id=${dfs[x]} prompt-ml-tracking-enabled prompt-ml-tracker-interaction-description="toggled dropdown within protected column note">
                 <h1><span class="prefix"> + </span>Within <span class="code-snippet">${dfs[x]}</span></h1>
                 <div class="sensitivity">
                     <h2>Column Sensitivity</h2>
@@ -48,7 +48,7 @@ export class ProtectedColumnNote extends PopupNotification {
                     <!-- Dropdown from https://codepen.io/havardob/pen/KKqYGYj -->
                     <!-- All columns go here, append to "sensitivity" -->
                 </div>
-                <div class="column explorer shadowDefault">
+                <div class="column explorer shadowDefault" prompt-ml-tracking-enabled prompt-ml-tracker-interaction-description="data explorer interaction">
                 </div>
             </div>
         </div>`;

@@ -4,6 +4,9 @@ import { INotebookTracker, NotebookPanel } from "@jupyterlab/notebook";
 
 // PromptML plugin imports
 import { Listener } from "./cell-listener";
+import {
+  BackendRequest
+} from './request';
 
 // PromptML frontend components
 import { PopupNotification } from "./components/PopupNotification";
@@ -103,6 +106,7 @@ export class Prompter {
       // If it's already been rendered, try to update the content of the open view.
       // index.ts checks if the notification exists -- we don't need to handle that here
       this.notificationUpdate(handedPayload, handedPayload["typeOfNote"]);
+      BackendRequest.sendTrackPoint("appearance_change", `Re-rendered ${payload["title"]}`)
       // If the message is different, then we want to remove the "clicked" styling of the note,
       // signaling to the user that there is new information
       if(this._isMessageDifferent(handedPayload["originalMessage"], this.oldContent[handedPayload["typeOfNote"]])) {
@@ -123,7 +127,7 @@ export class Prompter {
       // and rendering the new content.
       // To see what data is sent, look at the export method in PopupNotification.ts
       if (handedPayload == {}) { // default case
-        var payload: object = {
+        var payload: { [key: string]: any } = {
           title: "Default Page",
           htmlContent: $.parseHTML("<h1>This note failed to generate.</h1>"),
           originalMessage: {}
