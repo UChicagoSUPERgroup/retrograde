@@ -106,7 +106,7 @@ export class Prompter {
       // If it's already been rendered, try to update the content of the open view.
       // index.ts checks if the notification exists -- we don't need to handle that here
       this.notificationUpdate(handedPayload, handedPayload["typeOfNote"]);
-      BackendRequest.sendTrackPoint("appearance_change", `Re-rendered ${payload["title"]}`)
+      BackendRequest.sendTrackPoint("appearance_change", `Re-rendered ${handedPayload["typeOfNote"]}`)
       // If the message is different, then we want to remove the "clicked" styling of the note,
       // signaling to the user that there is new information
       if(this._isMessageDifferent(handedPayload["originalMessage"], this.oldContent[handedPayload["typeOfNote"]])) {

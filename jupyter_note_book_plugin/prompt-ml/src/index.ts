@@ -80,6 +80,7 @@ const extension: JupyterFrontEndPlugin<void> = {
     }
     /////////////////////////////////////////////////
     // Temporary user tracking implementation -- should be split into a separate class before final version
+    var lastId : string;
     $(document).on("mouseup", function(e) {
       if($(e.target).closest("[prompt-ml-tracking-enabled]").length != 0) {
         var targetElem = $(e.target).closest("[prompt-ml-tracking-enabled]")
@@ -88,9 +89,12 @@ const extension: JupyterFrontEndPlugin<void> = {
       }
     });
     (app.shell as LabShell).activeChanged.connect(e => {
+      if(lastId == e.currentWidget.node.id)
+        return;
+      lastId = e.currentWidget.node.id;
       if(e.currentWidget.node.classList.contains("prompt-ml-popup") || e.currentWidget.node.classList.contains("jp-NotebookPanel")) {
         BackendRequest.sendTrackPoint("widget_changed", `Opened ${e.currentWidget.title.label}`)
-        console.log("[UserTracking] Sending change request")
+        console.log("[UserTracking] Sending change request,", e.currentWidget)
       }
 
     })
