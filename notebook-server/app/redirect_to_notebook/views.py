@@ -11,7 +11,7 @@ import time
 INVALID_PROLIFIC_ID_ERROR = 'Error, Invalid Prolific ID Specified'
 CONTAINER_STOPPED_MESSAGE = 'Container Stopped'
 CONTAINER_ALREADY_STOPPED_MESSAGE = 'Container was already stopped'
-NOTEBOOK_NAME = "notebook_dist.ipynb"
+NOTEBOOK_NAME = "notebook_dist_v2.ipynb"
 
 
 class MainView(FlaskView):

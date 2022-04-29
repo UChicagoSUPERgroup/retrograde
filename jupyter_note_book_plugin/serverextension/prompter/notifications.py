@@ -517,7 +517,7 @@ class ProxyColumnNote(ProtectedColumnNote):
         total_var = df[num_col].var(ddof=0, skipna=True)
         total_mean = df[num_col].mean()
 
-        corr_ratio_num = sum([len(subset)*(subset.mean() - total_mean)**2 for subset in value_cols])
+        corr_ratio_num = sum([len(subset)*(subset.mean() - total_mean)**2 for subset in value_cols if len(subset) > 0])
         corr_ratio = np.sqrt((corr_ratio_num/len(df[num_col]))/total_var)
           
         result = f_oneway(*value_cols)

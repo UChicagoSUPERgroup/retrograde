@@ -6,9 +6,9 @@ if MODE == "EXP_CTS":
         "all" : [WelcomeNote, ProtectedColumnNote], # should trigger always
         "intro" : [],
         "clean" : [MissingDataNote],
-        "feature_select" : [ProxyColumnNote],
-        "model" : [ModelReportNote],
-        "end" : []
+        "feature_select" : [MissingDataNote, ProxyColumnNote],
+        "model" : [MissingDataNote, ProxyColumnNote, ModelReportNote],
+        "end" : []  
     }
     SHOW = ["all", "intro", "clean", "feature_select", "model", "end"]
 if MODE == "EXP_END":
