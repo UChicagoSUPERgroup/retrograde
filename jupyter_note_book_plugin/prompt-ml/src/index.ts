@@ -84,7 +84,7 @@ const extension: JupyterFrontEndPlugin<void> = {
     $(document).on("mouseup", function(e) {
       if($(e.target).closest("[prompt-ml-tracking-enabled]").length != 0) {
         var targetElem = $(e.target).closest("[prompt-ml-tracking-enabled]")
-        console.log(targetElem)
+        console.log("clicked:", e.target, targetElem[0])
         BackendRequest.sendTrackPoint("click", $(targetElem).attr("prompt-ml-tracker-interaction-description"))
       }
     });
@@ -146,7 +146,6 @@ const extension: JupyterFrontEndPlugin<void> = {
         // on the right side panel but the large window is already open
         onUpdate(payload, typeOfNote)
       } else {
-        BackendRequest.sendTrackPoint("appearance_change", `Rendered ${payload["title"]}`)
         // Hasn't yet been opened or has since closed; creating the widget
         var popupContent = new Widget();
         var popupWidget = new MainAreaWidget({ "content": popupContent });
@@ -154,7 +153,8 @@ const extension: JupyterFrontEndPlugin<void> = {
         popupWidget.id = id;
         popupWidget.node.classList.add("prompt-ml-popup")
         var popupContainer = document.createElement("div");
-        popupContainer.classList.add(id)
+        popupContainer.classList.add(id);
+        popupContainer.classList.add("prompt-ml-popup-lock-height");
         $(popupContainer.parentElement).css("overflow", "scroll")
         popupContent.node.appendChild(popupContainer);
         popupWidget.title.label = payload["title"];

@@ -79,6 +79,7 @@ export class ProtectedData {
         explorer.find(".value-container").html(this._columnInfoElement(res));
         explorer.find("details").prop("open", false);
       });
+      BackendRequest.sendTrackPoint("user_input", `User requested information for ${columnName}`);
   }
 
   _onColumnChange(
@@ -125,6 +126,7 @@ export class ProtectedData {
       .then((res) => {
         console.log("Backend responded to the update request with:", res);
       });
+      BackendRequest.sendTrackPoint("user_input", `User updated sensitivity for col ${columnName} to ${newSensitivity}`);
   }
 
   private _populateColumns(notice: any): Column[] {

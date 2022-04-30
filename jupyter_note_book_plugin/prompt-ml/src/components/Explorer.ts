@@ -48,7 +48,7 @@ export class Explorer {
           <h3>Classification</h3>
           <p class="classification">Please select a column to begin.</p>
           <h3>Value Distributions</h3>
-          <div class="value-container">
+          <div class="value-container" prompt-ml-tracking-enabled prompt-ml-tracker-interaction-description="Toggled explorer dropdown">
             <p class="values">Please select a column to begin.</p>
           </div>
         </div>`);
@@ -65,7 +65,7 @@ export class Explorer {
   private _generateListOfColumns(): HTMLDivElement {
     var generatedString = "<div>";
     for (var x = 0; x < this.columns.length; x++) {
-      generatedString += `<label"><input type="radio" name="${x}" /><span class="columnOption" id=${x}>${this.columns[x]}</span></label>`;
+      generatedString += `<label"><input type="radio" name="${x}" /><span class="columnOption" prompt-ml-tracking-enabled prompt-ml-tracker-interaction-description="Attempted to search for column ${this.columns[x]}" id=${x}>${this.columns[x]}</span></label>`;
     }
     generatedString += "</div>";
     return $.parseHTML(generatedString)[0] as HTMLDivElement;
@@ -73,8 +73,6 @@ export class Explorer {
 
   private _explorerChanged(explorer: Explorer, event: any) {
     var fireOnChanged: Function = explorer._onClickEvent;
-    console.log(fireOnChanged);
-    console.log(event.target.classList);
     if (event.target.classList.contains("columnOption")) {
       var targetId = event.target.id;
       fireOnChanged(targetId, explorer.df);
