@@ -2,7 +2,7 @@ import json
 import os
 from shutil import copyfile
 
-TASK_NAME = 'notebook_dist_v2'
+TASK_NAME = 'notebook_dist'
 BUILD_DIR_NAME = 'build'
 
 data = {}
