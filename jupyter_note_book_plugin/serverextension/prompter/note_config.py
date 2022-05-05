@@ -18,7 +18,7 @@ if MODE == "EXP_END":
         "clean" : [],
         "feature_select" : [],
         "model" : [],
-        "end" : [WelcomeNote, ProtectedColumnNote, MissingDataNote, ProxyColumnNote, ModelReportNote]
+        "end" : [ModelReportNote, ProxyColumnNote, MissingDataNote, ProtectedColumnNote, WelcomeNote]
     }
     SHOW = ["end"]
 if MODE == "EXP_NONE":
