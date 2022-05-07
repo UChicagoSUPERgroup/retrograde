@@ -55,7 +55,7 @@ export class Column {
 
   private _generateBaseElement(): HTMLDivElement {
     var elem = $.parseHTML(`
-      <div class="dfColumn">
+      <div class="dfColumn" prompt-ml-tracking-enabled prompt-ml-tracker-interaction-description="Attemped sensitivity modification for ${this.name}">
         <h3>${this.name}</h3>
         <fieldset>
           <details>

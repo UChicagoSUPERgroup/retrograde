@@ -584,3 +584,8 @@ th {
 .promptMl .df h1 {
   cursor: pointer;
 }
+
+.prompt-ml-popup-lock-height {
+  max-height: 100%;
+  overflow: scroll;
+}

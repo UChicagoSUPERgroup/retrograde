@@ -139,7 +139,7 @@ export class PopupNotification {
     return this._generateElement(
       "div",
       `
-        <div class="note condensed">
+        <div class="note condensed" prompt-ml-tracking-enabled prompt-ml-tracker-interaction-description="Opened notification ${this.type} from sidebar">
           <div class="essential">
             <div class="dropDown"><svg xmlns="http://www.w3.org/2000/svg" width="50%" height="50%" viewBox="0 0 500 500">
               <g id="Artboard_1" data-name="Artboard 1">
@@ -167,6 +167,10 @@ export class PopupNotification {
         </div> 
       </div> `
     );
+  }
+
+  public getOriginalMessage() {
+    return this.originalMessage
   }
 
   generateFormattedOutput(): object[] {

@@ -25,6 +25,10 @@ import {
   Prompter,
 } from "./notifier";
 
+import {
+  BackendRequest
+} from './request';
+
 import { MainAreaWidget } from '@jupyterlab/apputils';
 
 import { CodeCellClient } from "./client";
@@ -51,7 +55,7 @@ const extension: JupyterFrontEndPlugin<void> = {
     // had already been generated but more information is sent.
     // Called whenever new information is sent from the backend AND when
     // a note is re-appended to the front window.
-    var onUpdate = (payload : { [key : string] : any }, typeOfNote : string) => {
+    var onUpdate = (payload : { [key : string] : any }, typeOfNote : string) => {        
       if(!(typeOfNote in openNotes))
         return
       // find the node of the note being opened
@@ -74,7 +78,26 @@ const extension: JupyterFrontEndPlugin<void> = {
       }
       console.log(widget); 
     }
+    /////////////////////////////////////////////////
+    // Temporary user tracking implementation -- should be split into a separate class before final version
+    var lastId : string;
+    $(document).on("mouseup", function(e) {
+      if($(e.target).closest("[prompt-ml-tracking-enabled]").length != 0) {
+        var targetElem = $(e.target).closest("[prompt-ml-tracking-enabled]")
+        console.log("clicked:", e.target, targetElem[0])
+        BackendRequest.sendTrackPoint("click", $(targetElem).attr("prompt-ml-tracker-interaction-description"))
+      }
+    });
+    (app.shell as LabShell).activeChanged.connect(e => {
+      if(lastId == e.currentWidget.node.id)
+        return;
+      lastId = e.currentWidget.node.id;
+      if(e.currentWidget.node.classList.contains("prompt-ml-popup") || e.currentWidget.node.classList.contains("jp-NotebookPanel")) {
+        BackendRequest.sendTrackPoint("widget_changed", `Opened ${e.currentWidget.title.label}`)
+        console.log("[UserTracking] Sending change request,", e.currentWidget)
+      }
 
+    })
     /////////////////////////////////////////////////
     // Preparing side panel
     const content = new Widget();
@@ -128,13 +151,15 @@ const extension: JupyterFrontEndPlugin<void> = {
         var popupWidget = new MainAreaWidget({ "content": popupContent });
         var id = "prompt-ml-popup" + (Math.round(Math.random() * 1000))
         popupWidget.id = id;
+        popupWidget.node.classList.add("prompt-ml-popup")
         var popupContainer = document.createElement("div");
-        popupContainer.classList.add("prompt-ml-popup")
-        popupContainer.classList.add(id)
+        popupContainer.classList.add(id);
+        popupContainer.classList.add("prompt-ml-popup-lock-height");
         $(popupContainer.parentElement).css("overflow", "scroll")
         popupContent.node.appendChild(popupContainer);
         popupWidget.title.label = payload["title"];
         popupWidget.title.closable = true;
+        popupWidget.disposed.connect( () => { BackendRequest.sendTrackPoint("widget_closed", `Closed ${payload["title"]}`) } )
         // Get a list of all the ids before the addition
         var preAdditionChildren : string[] = []
         $("#jp-main-dock-panel .lm-TabBar-content.p-TabBar-content > li.lm-TabBar-tab").each(function() {

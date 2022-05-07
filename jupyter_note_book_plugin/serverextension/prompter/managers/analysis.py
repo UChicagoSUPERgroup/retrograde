@@ -2,18 +2,14 @@
 we need a global session manager which handles
 routing of code analyses and handles failures
 """
-import sys, os, re
+import sys
 import json
 
-import mysql.connector
 import dill
 
-from random import choice, randrange
-
-from .storage import DbHandler, RemoteDbHandler, load_dfs
-from .analysis import AnalysisEnvironment
-from .config import MODE, remote_config
-from .note_config import NOTE_RULES, SHOW
+from ..storage import load_dfs
+from ..analysis import AnalysisEnvironment
+from ..note_config import NOTE_RULES, SHOW
 
 
 class AnalysisManager:
@@ -23,27 +19,35 @@ class AnalysisManager:
     for resurrecting past sessions and error handling
     """
 
-    def __init__(self, nbapp):
-        
-        try:
-
-            remote_config["nb_user"] = os.getenv("JP_PLUGIN_USER")
-            if not remote_config["nb_user"]: remote_config["nb_user"] = "DEFAULT_USER"
-            nbapp.log.debug("[MANAGER] user is {0}".format(remote_config["nb_user"]))
-            self.db = RemoteDbHandler(**remote_config)
-            nbapp.log.debug("[MANAGER] db local cursor: {0}".format(self.db._local_cursor))
-
-        except mysql.connector.Error as e:
-            nbapp.log.warning("[MANAGER] Unable to connect to remote db, creating local backup. Error {0}".format(e))
-            self.db = DbHandler()
+    def __init__(self, nbapp, database_manager):
+        self.database_manager = database_manager
         self.analyses = {}
         self._nb = nbapp
 
         # mapping of notebook section -> notes to look for
-        self.notes = {s : [note_type(self.db) for note_type in allowed_notes] for s, allowed_notes in NOTE_RULES.items()}
+        self.notes = {s : [note_type(self.db()) for note_type in allowed_notes] for s, allowed_notes in NOTE_RULES.items()}
         self.show = SHOW
+
+    def handle_user_input(self, request):
+        req_type = request["input_type"] if "input_type" in request else ""
+        kernel_id = request["kernel"] if "kernel" in request else ""
+        if req_type == "sensitivityModification":
+            self._nb.log.info("[MANAGER] handling updated sensitivity modification request {0}".format(request))
+            col_info = {"is_sensitive" : request["sensitivity"] != "none",
+                        "user_specified" : True,
+                        "fields" : request["sensitivity"]}
+            update_data = {request["df"] : {request["col"] : col_info}}
+            self.db().update_marked_columns(kernel_id, update_data) # Q?: what is the name of the key holding the input data dict? (not in luca's design google doc)
+            return "Updated"
+        elif req_type == "columnInformation":
+            self._nb.log.info("[MANAGAER] handling request for column information {0}".format(request))
+            result = self.handle_col_info(kernel_id, request)
+            self._nb.log.debug("[MANAGER] returning result {0}".format(result))
+            return result
+        self._nb.log.info("[MANAGER] received non-execution request {0}".format(request))
+        return
  
-    def handle_request(self, request):
+    def handle_execution(self, request):
         """
         handle a request (json object with "content", "id", and "kernel" fields)
         """
@@ -57,24 +61,6 @@ class AnalysisManager:
         if "kernel" in request:
             kernel_id = request["kernel"]
 
-        if req_type != "execute":
-            if req_type == "sensitivityModification":
-                self._nb.log.info("[MANAGER] handling updated sensitivity modification request {0}".format(request))
-                col_info = {"is_sensitive" : request["sensitivity"] != "none",
-                            "user_specified" : True,
-                            "fields" : request["sensitivity"]}
-                update_data = {request["df"] : {request["col"] : col_info}}
-                
-                self.db.update_marked_columns(kernel_id, update_data) # Q?: what is the name of the key holding the input data dict? (not in luca's design google doc)
-                return "Updated"
-            elif req_type == "columnInformation":
-                self._nb.log.info("[MANAGAER] handling request for column information {0}".format(request))
-                result = self.handle_col_info(kernel_id, request)
-                self._nb.log.debug("[MANAGER] returning result {0}".format(result))
-                return result
-            self._nb.log.info("[MANAGER] received non-execution request {0}".format(request))
-            return
-
         cell_id = request["cell_id"]
         code = request["contents"]
         metadata = json.loads(request["metadata"])
@@ -85,17 +71,16 @@ class AnalysisManager:
         if kernel_id not in self.analyses:
 
             self._nb.log.info("[MANAGER] Starting new analysis environment for kernel {0}".format(kernel_id))
-            self.analyses[kernel_id] = AnalysisEnvironment(self._nb, kernel_id, self.db)
+            self.analyses[kernel_id] = AnalysisEnvironment(self._nb, kernel_id, self.db())
         
         env = self.analyses[kernel_id]
-        self.db.add_entry(request) 
-
+        self.db().add_entry(request) 
         try:
             env.cell_exec(code, kernel_id, cell_id, request["exec_ct"])
         except RuntimeError as e:
             self._nb.log.error("[MANAGER] Analysis environment encountered exception {0}, call back {1}".format(e, sys.exc_info()[0]))
 
-        ns = self.db.recent_ns()
+        ns = self.db().recent_ns()
         dfs = load_dfs(ns)
 
         non_dfs = dill.loads(ns["namespace"])
@@ -116,7 +101,7 @@ class AnalysisManager:
         return
     def handle_col_info(self, kernel_id, request):
         """Routes a request of type 'columnInformation' to DbHandler.provide_col_info()"""
-        result = self.db.provide_col_info(kernel_id, request)
+        result = self.db().provide_col_info(kernel_id, request)
         if "error" in result:
             self._nb.log.warning("[MANAGER] Unable to provide columnInformation.\nRequest: {0}\nError: {1}".format(request, result))
 
@@ -150,7 +135,11 @@ class AnalysisManager:
                     if note_entry["type"] not in resp:
                         resp[note_entry["type"]] = []
                     resp[note_entry["type"]].append(note_entry)
-                    self.db.store_response(kernel_id, cell_id, exec_ct, note_entry)
+                    self.db().store_response(kernel_id, cell_id, exec_ct, note_entry)
 
         return resp 
 
+    # considering how often db is called, this allows us to
+    # make db references without absurdly long calls
+    def db(self):
+        return self.database_manager.getDb()
