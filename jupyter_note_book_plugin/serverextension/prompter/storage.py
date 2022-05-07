@@ -35,6 +35,7 @@ SQL_CMDS = {
   "STORE_RESP" : """INSERT INTO notifications(kernel, user, cell, resp, exec_ct) VALUES (?, ?, ?, ?, ?)""",
   "GET_RESPS" : """SELECT cell, resp FROM notifications WHERE kernel = ? AND user = ?""",
   "GET_DATA_VERSION": "SELECT * from data WHERE exec_ct = ? AND name = ?", # NOTE: unused, probably wrong
+  "USER_TRACKING": """INSERT INTO userTracking(user, type, description) VALUES(?, ?, ?)""",
   "LINK_CELL" : """"""
 }
 
@@ -542,6 +543,11 @@ class DbHandler:
         sensitivity_field = results[0]
 
         return {"valueCounts": col_val_counts, "col_name" : col_name, "sensitivity": sensitivity_field} # how to get note text here?
+
+    def addTrack(self, type, description):
+        self.renew_connection()
+        self._cursor.execute(self.cmds["USER_TRACKING"], (self.user, type, description))
+        self._conn.commit()
 
 class RemoteDbHandler(DbHandler):
     """when we want the database to be remote"""
