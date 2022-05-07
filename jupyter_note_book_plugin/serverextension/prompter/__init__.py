@@ -41,7 +41,7 @@ class CodeExecHandler(APIHandler):
         self.set_default_headers()
         self.finish(resp_body)
 
-def _jupyter_serverrequest_extension_paths():
+def _jupyter_server_extension_paths():
     return [{"module" : "prompter"}]
 
 def load_jupyter_server_extension(app):
