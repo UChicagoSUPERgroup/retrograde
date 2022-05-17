@@ -49,6 +49,7 @@ def start_notebook(docker_image, prolific_id=None, mode=None, test_configuration
           command="bash ./run_image.sh",
           detach = True,
           environment = env, 
+          user = "A"
         )
     else:
         #run docker in host mode and run on notebook port
