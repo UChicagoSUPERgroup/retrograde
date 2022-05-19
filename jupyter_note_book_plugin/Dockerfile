@@ -9,7 +9,7 @@ RUN rm -rf /usr/bin/apt-get
 RUN rm -rf /usr/bin/apt
 #Install pipenv and run the build script
 ADD . /
-RUN chmod +x docker_build.sh
+# RUN chmod +x docker_build.sh
 #run the docker image in jupyter_note_book_plugin/evaluation_task/
 RUN chmod +x run_image.sh
 #Run the installation script

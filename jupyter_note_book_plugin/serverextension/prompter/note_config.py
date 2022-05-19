@@ -8,7 +8,7 @@ if MODE == "EXP_CTS":
         "clean" : [MissingDataNote],
         "feature_select" : [MissingDataNote, ProxyColumnNote],
         "model" : [MissingDataNote, ProxyColumnNote, ModelReportNote],
-        "end" : []  
+        "end" : [MissingDataNote, ProxyColumnNote, ModelReportNote]  
     }
     SHOW = ["all", "intro", "clean", "feature_select", "model", "end"]
 if MODE == "EXP_END":
