@@ -1,5 +1,5 @@
 from flask_classy import FlaskView, route
-from flask import Flask, redirect, current_app, render_template
+from flask import Flask, redirect, current_app, render_template, request
 import requests
 from app.make_notebook import start_notebook, stop_notebook
 from .models import UsersContainers
@@ -17,8 +17,9 @@ NOTEBOOK_NAME = "notebook_dist.ipynb"
 class MainView(FlaskView):
     route_base = '/'
 
-    @route('/<prolific_id>/<mode>', methods=['GET'])
-    def handle_request(self, prolific_id, mode):
+    # Expects two GET parameters, specifically <URL>?prolific_id=<PROLIFIC ID>&mode=<EXP MODE>
+    @route('/', methods=['GET'])
+    def handle_request(self,):
         '''
         Handles getting and creating containers and corresponding db entry
 
@@ -28,7 +29,10 @@ class MainView(FlaskView):
         a prolific ID's container is not running, then it is assumed that the user
         has completed the survey.
         '''
-
+        if not ("prolific_id" in request.args and "mode" in request.args):
+            return render_template('bad_req.html')
+        prolific_id = request.args["id"]
+        mode = request.args["mode"]
         hostname = current_app.config['HOSTNAME']
         is_testing = current_app.config['TESTING']
         if is_testing.lower() == 'true':
