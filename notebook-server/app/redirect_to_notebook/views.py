@@ -1,5 +1,7 @@
 from flask_classy import FlaskView, route
-from flask import Flask, redirect, current_app, render_template, request
+from flask import Flask, redirect, current_app, render_template, request, abort
+import random
+import string
 import requests
 from app.make_notebook import start_notebook, stop_notebook
 from .models import UsersContainers
@@ -16,10 +18,11 @@ NOTEBOOK_NAME = "notebook_dist.ipynb"
 
 class MainView(FlaskView):
     route_base = '/'
+    tokens = []
 
     # Expects two GET parameters, specifically <URL>?prolific_id=<PROLIFIC ID>&mode=<EXP MODE>
     @route('/', methods=['GET'])
-    def handle_request(self,):
+    def handle_request(self):
         '''
         Handles getting and creating containers and corresponding db entry
 
@@ -29,8 +32,10 @@ class MainView(FlaskView):
         a prolific ID's container is not running, then it is assumed that the user
         has completed the survey.
         '''
-        if not ("prolific_id" in request.args and "mode" in request.args):
+        if not ("id" in request.args and "mode" in request.args and "auth_token" in request.args):
             return render_template('bad_req.html')
+        if not self.auth_token(request.args["auth_token"]):
+            return render_template('bad_auth.html')
         prolific_id = request.args["id"]
         mode = request.args["mode"]
         hostname = current_app.config['HOSTNAME']
@@ -91,3 +96,26 @@ class MainView(FlaskView):
                 return CONTAINER_ALREADY_STOPPED_MESSAGE, 200
 
         return INVALID_PROLIFIC_ID_ERROR, 404
+
+    @route('/auth/', methods=['POST'])
+    def handle_auth_request(self):
+        val = request.form.get("backend_token")
+        if val == None:
+            abort(400, "Malformed format.")
+        if  val != "Ggfkhltoh0U9vJt4":
+            abort(403, "False auth.")
+        new_token = self.gen_token()
+        return new_token
+
+    def gen_token(self):
+        x = ''.join(random.choice(string.ascii_uppercase + string.ascii_lowercase + string.digits) for _ in range(16))
+        while x in self.tokens:
+            x = ''.join(random.choice(string.ascii_uppercase + string.ascii_lowercase + string.digits) for _ in range(16))
+        self.tokens.append(x)
+        return x
+
+    def auth_token(self, token):
+        if not token in self.tokens:
+            return False
+        self.tokens.remove(token)
+        return True
