@@ -10,6 +10,7 @@ from random import choice
 
 import math
 import operator
+from ssl import VERIFY_X509_TRUSTED_FIRST
 from tokenize import group
 
 import pandas as pd
@@ -784,8 +785,10 @@ class ModelReportNote(Notification):
         q = [(df_name, df_version)]
         seen = set() # since there may be cycles, want to avoid infinite loops
 
-        last_seen_prot = None, None, None
-
+        prot_cat_cols_list = []
+        df_list = []
+        version_list = []
+        last_seen_prot = (prot_cat_cols_list, df_list, version_list)
         while q != []:
 
             df, version = q.pop()
@@ -797,7 +800,27 @@ class ModelReportNote(Notification):
 
             if protected_cat_cols != []:
                 env.log.debug(f"[ModelReportNote._get_prot_ancestor] returning df:{df}, version:{version}, prot_cat_cols:{protected_cat_cols}")
-                return protected_cat_cols, df, version
+                # TODO: find nearest ancestor with prot, then continue for other ancestors with dif prot values represented
+                # resolve collisions of prot cols
+                new_prot_results = check_for_protected(protected_cat_cols)
+                val_to_remove = set()
+                if len(prot_cat_cols_list) > 0:
+                    old_prot_results = check_for_protected(prot_cat_cols_list[-1])
+                    for idx, new_res in enumerate(new_prot_results):
+                        for old_res in old_prot_results:
+                            if new_res['protected_value'] == old_res['protected_value']:
+                                col_name = new_res['original_name']
+                                val_to_remove.add(col_name)
+                
+                for val in val_to_remove:
+                    protected_cat_cols.remove(val)
+                
+                # save the good ones to a list
+                if len(protected_cat_cols) > 0:
+                    prot_cat_cols_list.append(protected_cat_cols)
+                    df_list.append(df)
+                    version_list.append(version)
+                # return protected_cat_cols, df, version
 
             seen.add((df, version))
 
@@ -819,31 +842,38 @@ class ModelReportNote(Notification):
 
     def get_prot_from_aligned(self, model_name):
         '''
-        Returns x_ancestor (DataFrame), x_ancestor_name (string), prot_col_names (list), prot_cols (DataFrame or Series)
+        Returns x_ancestor (List<DataFrame>), x_ancestor_name (List<string>), prot_col_names (List<list>), prot_cols (List<List<Series>>)
         '''
         if model_name in self.aligned_models:
             match = self.aligned_models[model_name]["match"]
             return match["x_ancestor"], match["x_ancestor_name"], match["prot_col_names"], match["prot_cols"]
-        return None, None, None, None
+        # return None, None, None, None
+        return [], [], [], []
 
     def prot_ancestors_found(self, env, curr_df_name, dfs, kernel_id):
         '''
-        Returns prot_anc_found (bool), x_ancestor (DataFrame), x_ancestor_name (string), prot_col_names (list), prot_cols (DataFrame or Series)
+        Returns prot_anc_found (bool), x_ancestor (List<DataFrame>), x_ancestor_name (List<string>), prot_col_names (List<List<string>>), prot_cols (List<DataFrame or Series>)
         '''
         # Query DB for ancestor df object
-        prot_col_names, ancestor_df, version = self._get_prot_ancestor(env, curr_df_name, dfs, kernel_id)
-        x_ancestor = self.db.get_dataframe_version({"name" : ancestor_df, "kernel" : kernel_id}, version)
-
-        if isinstance(x_ancestor, pd.DataFrame):
-            env.log.debug("[ModelReportNote] has found an ancestor df. shape: {1}, cols: {0}".format(x_ancestor.columns, x_ancestor.shape))
-        else:
-            env.log.error("[ModelReportNote] ancestors not found")
-            return False, None, None, None, None
-
-        prot_cols = [x_ancestor[col] for col in prot_col_names]
+        prot_col_names, ancestor_dfs, versions = self._get_prot_ancestor(env, curr_df_name, dfs, kernel_id)
+        
         if prot_col_names is None or len(prot_col_names) == 0: 
             env.log.debug("[ModelReportNote] has no groups to compute error rates for")
-            return False, None, None, None, None
+            return False, [], [], [], []
+
+        # get df objects
+        x_ancestor = []
+        for ancestor_df, version in zip(ancestor_dfs, versions):
+            x_ancestor.append(self.db.get_dataframe_version({"name" : ancestor_df, "kernel" : kernel_id}, version))
+
+        # log df objects
+        for x_a in x_ancestor:
+            env.log.debug("[ModelReportNote] has found an ancestor df. shape: {1}, cols: {0}".format(x_a.columns, x_a.shape))
+
+        # prot_cols is a list of series corresponding to each df in x_ancestor
+        prot_cols = []
+        for prot_col_list, x_a in zip(prot_col_names, x_ancestor):
+            prot_cols.append([x_a[col] for col in prot_col_list])
 
         # remove numerical prot_cols from prot_col sets
 #        removed = []
@@ -852,15 +882,14 @@ class ModelReportNote(Notification):
 #                prot_col_names.pop(idx)
 #                removed.append(idx)
         # remove from prot_cols as well
-        # TODO: do this filtering in the search for protectedd Ancestor instead!
 #        env.log.debug(f"[ModelReportNote] {removed}, {prot_cols}")
 #        for idx in removed:
 #            prot_cols.remove(idx)
         # if there are only numerical prot_cols => return None
         if len(prot_col_names) == 0 or len(prot_cols) == 0:
-            return False, None, None, None, None
+            return False, [], [], [], []
             
-        return True, x_ancestor, ancestor_df, prot_col_names, prot_cols
+        return True, x_ancestor, ancestor_dfs, prot_col_names, prot_cols
 
         
     def group_based_error_rates(self, env, prot_group, df, y_true, y_pred):
@@ -995,6 +1024,9 @@ class ModelReportNote(Notification):
                 env.log.debug("[ModelReportNote] has failed to compute error ratees for this group: {0}".format(group))
         sorted_one_hot_rates, sorted_cat_rates = self.sort_error_rates(all_error_rates)
 
+        # env.log.debug(f"[ModelReportNote] columns: {col_names}, one hot error rates {sorted_one_hot_rates}")
+        # env.log.debug(f"[ModelReportNote columns: {col_names}, cat error rates {sorted_cat_rates}")
+
         k_sorted_one_hot_rates = {}
         k_sorted_cat_rates = {}
         if len(sorted_one_hot_rates) > 0:
@@ -1006,7 +1038,7 @@ class ModelReportNote(Notification):
             k_sorted_cat_rates = {group: {} for group in sorted_cat_rates}
             for group in sorted_cat_rates:
                 k_sorted_cat_rates[group] = {key: val for n, (key, val) in enumerate(sorted_cat_rates[group].items()) if n < self.k and len(val) > 0}
-        k_highest_rates = {**k_sorted_one_hot_rates, **k_sorted_one_hot_rates}
+        k_highest_rates = {**k_sorted_one_hot_rates, **k_sorted_cat_rates}
         sorted_error_rates = {**sorted_one_hot_rates, **sorted_cat_rates}
         return sorted_error_rates, k_highest_rates
     def filter_and_select(self, error_rates, n, env):
@@ -1069,23 +1101,27 @@ class ModelReportNote(Notification):
             orig_preds = pd.Series(orig_preds, index=X.index)
 
 
-            x_ancestor, x_ancestor_name, prot_col_names, prot_cols = self.get_prot_from_aligned(model_name)
-
-            sorted_error_rates, k_highest_rates = self.get_sorted_k_highest_error_rates(env, 
-                                                                                    prot_col_names, 
-                                                                                    model_name, 
-                                                                                    x_ancestor, 
-                                                                                    X, y, 
-                                                                                    orig_preds) 
+            x_ancestors, x_ancestor_names, prot_col_names, prot_cols = self.get_prot_from_aligned(model_name)
+            sorted_error_rates = {}
+            k_highest_error_rates = {}
+            for x_ancestor, x_ancestor_name, prot_col_name, prot_col in zip(x_ancestors, x_ancestor_names, prot_col_names, prot_cols):
+                sorted_error_rate, k_highest_error_rate = self.get_sorted_k_highest_error_rates(env, 
+                                                                                        prot_col_name, 
+                                                                                        model_name, 
+                                                                                        x_ancestor, 
+                                                                                        X, y, 
+                                                                                        orig_preds) 
+                sorted_error_rates = {**sorted_error_rates, **sorted_error_rate}
+                k_highest_error_rates = {**k_highest_error_rates, **k_highest_error_rate}
            
 
             resp["acc_orig"] = acc_orig
             resp["overall"] = error_rates(*acc_measures(y, orig_preds))
-            resp["groups"] = prot_col_names
+            resp["groups"] = list(set().union(*prot_col_names))
             resp["error_rates"] = sorted_error_rates
-            resp["k_highest_rates"] = k_highest_rates
+            resp["k_highest_error_rates"] = k_highest_error_rates
             resp["current_df"] = self.aligned_models[model_name]["match"]["name"]
-            resp["ancestor_df"] = x_ancestor_name
+            resp["ancestor_df"] = x_ancestor_names
 
             env.log.debug("[ModelReportNote] response is \n{0}".format(resp))
             self._info_cache[model_name] = self.aligned_models[model_name] 
@@ -1149,8 +1185,6 @@ class ModelReportNote(Notification):
 
             # check if still sensitive
 
-#            x_ancestor, x_ancestor_name, prot_col_names, prot_cols = self.get_prot_from_aligned(model_name)
-
             if x_ancestor is None or prot_col_names is None or len(prot_col_names) == 0:
                 env.log.error("[ModelReportNote] has no groups to compute errors for, something went wrong.")
                 # form some empty response? return? idk
@@ -1158,12 +1192,19 @@ class ModelReportNote(Notification):
             else:
                 env.log.debug("[ModelReportNote] (update) is retrieving error rates for these columns: {0}."
                     .format(prot_col_names))
-                sorted_error_rates, k_highest_error_rates = self.get_sorted_k_highest_error_rates(env, 
-                                                                                            prot_col_names, 
+                x_ancestors, x_ancestor_names, prot_col_names, prot_cols = self.get_prot_from_aligned(model_name)
+                sorted_error_rates = {}
+                k_highest_error_rates = {}
+                for x_ancestor, x_ancestor_name, prot_col_name, prot_col in zip(x_ancestors, x_ancestor_names, prot_col_names, prot_cols):
+                    sorted_error_rate, k_highest_error_rate = self.get_sorted_k_highest_error_rates(env, 
+                                                                                            prot_col_name, 
                                                                                             model_name, 
                                                                                             x_ancestor, 
                                                                                             X, y, 
-                                                                                            new_preds)
+                                                                                            new_preds) 
+                    sorted_error_rates = {**sorted_error_rates, **sorted_error_rate}
+                    k_highest_error_rates = {**k_highest_error_rates, **k_highest_error_rate}
+
             resp = {"type" : "model_report", "model_name" : model_name}
             resp["acc_orig"] = new_acc
             resp["overall"] = error_rates(*acc_measures(y, new_preds))
@@ -1171,7 +1212,7 @@ class ModelReportNote(Notification):
             resp["error_rates"] = sorted_error_rates
             resp["k_highest_error_rates"] = k_highest_error_rates
             resp["current_df"] = df_name
-            resp["ancestor_df"] = x_ancestor_name
+            resp["ancestor_df"] = x_ancestor_names
             updated_data[model_name] = [resp]
             env.log.debug("[ModelReportNote] response is \n{0}".format(updated_data[model_name]))
             

@@ -19,7 +19,7 @@ export class Model {
   constructor(
     name: string,
     currentDf: string,
-    originalDf: string,
+    originalDf: string[],
     groups: Group[]
   ) {
     this._content = this._generateBaseElement(
@@ -38,13 +38,28 @@ export class Model {
   private _generateBaseElement(
     name: string,
     currentDf: string,
-    originalDf: string,
+    originalDf: string[],
     groups: Group[]
   ): HTMLDivElement {
+    // TODO: Handle the possibility of multiple originalDfs
+    var elem_text: string = ``;
+    var i: number = 0;
+    for (let df of originalDf){
+      if (i > 0 && i+1 != originalDf.length){
+        elem_text = elem_text.concat(`, ${df}`);
+      }
+      else if (i > 0){
+        elem_text = elem_text.concat(` and ${df}`);
+      }
+      else if (i == 0) {
+        elem_text = elem_text.concat(`${df}`);
+      }
+      i = i+1;
+    } 
     var elem = $.parseHTML(`
     <div class="model">
         <h3>${name}</h3>
-        <p>Model evaluated on: <span class="code-snippet-minor">${currentDf}</span>, using sensitive columns from <span class="code-snippet-minor">${originalDf}</span></p>
+        <p>Model evaluated on: <span class="code-snippet-minor">${currentDf}</span>, using sensitive columns from <span class="code-snippet-minor">${elem_text}</span></p>
         <div class="groups-container">
             
         </div>
