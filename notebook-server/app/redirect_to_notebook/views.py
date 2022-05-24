@@ -4,7 +4,7 @@ import random
 import string
 import requests
 from app.make_notebook import start_notebook, stop_notebook
-from .models import UsersContainers
+from .models import UsersContainers, TokensManager
 from datetime import date
 from requests.exceptions import ConnectionError
 import math
@@ -18,7 +18,6 @@ NOTEBOOK_NAME = "notebook_dist.ipynb"
 
 class MainView(FlaskView):
     route_base = '/'
-    tokens = []
 
     # Expects two GET parameters, specifically <URL>?prolific_id=<PROLIFIC ID>&mode=<EXP MODE>
     @route('/', methods=['GET'])
@@ -109,13 +108,13 @@ class MainView(FlaskView):
 
     def gen_token(self):
         x = ''.join(random.choice(string.ascii_uppercase + string.ascii_lowercase + string.digits) for _ in range(16))
-        while x in self.tokens:
+        while TokensManager.tokenExists(x):
             x = ''.join(random.choice(string.ascii_uppercase + string.ascii_lowercase + string.digits) for _ in range(16))
-        self.tokens.append(x)
+        TokensManager.addToken(x)
         return x
 
     def auth_token(self, token):
-        if not token in self.tokens:
+        if not TokensManager.tokenExists(token):
             return False
-        self.tokens.remove(token)
+        TokensManager.markTokenUsed(token)
         return True
