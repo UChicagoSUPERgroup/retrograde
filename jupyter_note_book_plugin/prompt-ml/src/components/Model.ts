@@ -41,7 +41,6 @@ export class Model {
     originalDf: string[],
     groups: Group[]
   ): HTMLDivElement {
-    // TODO: Handle the possibility of multiple originalDfs
     var elem_text: string = ``;
     var i: number = 0;
     for (let df of originalDf){

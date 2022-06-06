@@ -789,18 +789,19 @@ class ModelReportNote(Notification):
         df_list = []
         version_list = []
         last_seen_prot = (prot_cat_cols_list, df_list, version_list)
+        env.log.debug(f"[ModelReportNote._get_prot_ancestor] all ancestors: {env.ancestors}")
         while q != []:
 
             df, version = q.pop()
-            if (df, version) in env.ancestors:
-                env.log.debug(f"[ModelReportNote._get_prot_ancestor] df:{df} version:{version} was found in env.ancestors:{env.ancestors[(df, version)]}")
-                env.log.debug(f"[ModelReportNote._get_prot_ancestor] all ancestors: {env.ancestors}")
+            # if (df, version) in env.ancestors:
+            #     env.log.debug(f"[ModelReportNote._get_prot_ancestor] df:{df} version:{version} was found in env.ancestors:{env.ancestors[(df, version)]}")
+                
             protected_cols = self._check_prot(df, version, kernel_id)
             protected_cat_cols = [col for col in protected_cols if is_categorical(dfs[df][col])]
 
             if protected_cat_cols != []:
-                env.log.debug(f"[ModelReportNote._get_prot_ancestor] returning df:{df}, version:{version}, prot_cat_cols:{protected_cat_cols}")
-                # TODO: find nearest ancestor with prot, then continue for other ancestors with dif prot values represented
+                env.log.debug(f"[ModelReportNote._get_prot_ancestor] found new ancestor for {df_name} -> df:{df}, version:{version}, prot_cat_cols:{protected_cat_cols}")
+                # find nearest ancestor with prot, then continue for other ancestors with dif prot values represented
                 # resolve collisions of prot cols
                 new_prot_results = check_for_protected(protected_cat_cols)
                 val_to_remove = set()
@@ -817,6 +818,7 @@ class ModelReportNote(Notification):
                 
                 # save the good ones to a list
                 if len(protected_cat_cols) > 0:
+                    env.log.debug(f"[ModelReportNote._get_prot_ancestor] df:{df} version:{version} was found in env.ancestors:{env.ancestors[(df, version)]}")
                     prot_cat_cols_list.append(protected_cat_cols)
                     df_list.append(df)
                     version_list.append(version)
@@ -827,7 +829,6 @@ class ModelReportNote(Notification):
             if (df, version) in env.ancestors:
                 parents = env.ancestors[(df, version)]
                 q.extend(list(parents - seen))
-        env.log.debug(f"[ModelReportNote._get_prot_ancestor] df:{df_name} version:{df_version} found no protected cat cols:{last_seen_prot}")
         return last_seen_prot
 
     def _check_prot(self, df, version, kernel):
@@ -1031,7 +1032,29 @@ class ModelReportNote(Notification):
         k_sorted_cat_rates = {}
         if len(sorted_one_hot_rates) > 0:
             sorted_one_hot_rates = self.filter_and_select(sorted_one_hot_rates, len(X), env)
-            k_sorted_one_hot_rates = {key: val for n, (key, val) in enumerate(sorted_one_hot_rates.items()) if n < self.k and len(val) > 0}
+
+            # separate one hot rates from multiple protected categories (we want behavior to be identical
+            # for one hot and cat columns)
+            prot_vals = check_for_protected(list(sorted_one_hot_rates.keys()))
+            k_group_sorted_one_hot_rates = {}
+            for entry in prot_vals:
+                prot_val = entry['protected_value']
+                col_name = entry['original_name']
+                if prot_val not in k_group_sorted_one_hot_rates:
+                    k_group_sorted_one_hot_rates[prot_val] = [{col_name: sorted_one_hot_rates[col_name]}]
+                else:
+                    k_group_sorted_one_hot_rates[prot_val].append({col_name: sorted_one_hot_rates[col_name]})
+            
+            for prot_group_vals in k_group_sorted_one_hot_rates.values():
+                for n, member_dict in enumerate(prot_group_vals):
+                    if n < self.k:
+                        k_sorted_one_hot_rates = {**k_sorted_one_hot_rates, **member_dict}
+                    else:
+                        break
+
+
+            # k_sorted_one_hot_rates = {key: val for n, (key, val) in enumerate(sorted_one_hot_rates.items()) if n < self.k and len(val) > 0}
+
         if len(sorted_cat_rates) > 0: 
             sorted_cat_rates = self.filter_and_select(sorted_cat_rates, len(X), env)
             k_sorted_cat_rates = {key: val for n, (key, val) in enumerate(sorted_cat_rates.items()) if n < self.k and len(val) > 0}
@@ -1173,11 +1196,11 @@ class ModelReportNote(Notification):
             X = self._info_cache[model_name]["x"]
             y = self._info_cache[model_name]["y"]
             
-            match_name, match_cols, match_indexer = search_for_sensitive_cols(env, X, model_name,dfs)
+            # match_name, match_cols, match_indexer = search_for_sensitive_cols(env, X, model_name,dfs)
             model = non_dfs_ns[model_name]
 
             df_name = self._info_cache[model_name]["x_name"]
-            prot_anc_found, x_ancestor, x_ancestor_name, prot_col_names, prot_cols = self.prot_ancestors_found(env, df_name, dfs, env._kernel_id)
+            
 
             new_preds = model.predict(X)
             new_preds = pd.Series(new_preds, index=X.index)
@@ -1185,36 +1208,42 @@ class ModelReportNote(Notification):
 
             # check if still sensitive
 
-            if x_ancestor is None or prot_col_names is None or len(prot_col_names) == 0:
-                env.log.error("[ModelReportNote] has no groups to compute errors for, something went wrong.")
-                # form some empty response? return? idk
+            
+            prot_anc_found, x_ancestors, x_ancestor_names, prot_col_names, prot_cols = self.prot_ancestors_found(env, df_name, dfs, env._kernel_id)
+            if not prot_anc_found:
+                env.log.error(f"[ModelReportNote] (update) Error. no prot ancestors found in {x_ancestor_name} for current df {df_name}")
                 continue
-            else:
-                env.log.debug("[ModelReportNote] (update) is retrieving error rates for these columns: {0}."
-                    .format(prot_col_names))
-                x_ancestors, x_ancestor_names, prot_col_names, prot_cols = self.get_prot_from_aligned(model_name)
-                sorted_error_rates = {}
-                k_highest_error_rates = {}
-                for x_ancestor, x_ancestor_name, prot_col_name, prot_col in zip(x_ancestors, x_ancestor_names, prot_col_names, prot_cols):
-                    sorted_error_rate, k_highest_error_rate = self.get_sorted_k_highest_error_rates(env, 
-                                                                                            prot_col_name, 
-                                                                                            model_name, 
-                                                                                            x_ancestor, 
-                                                                                            X, y, 
-                                                                                            new_preds) 
-                    sorted_error_rates = {**sorted_error_rates, **sorted_error_rate}
-                    k_highest_error_rates = {**k_highest_error_rates, **k_highest_error_rate}
-
+            env.log.debug("[ModelReportNote] (update) is retrieving error rates for these columns: {0}."
+                .format(prot_col_names))
+            env.log.debug(f"[ModelReportNote] (update) checking vars for {df_name} and {model_name}")
+            env.log.debug(x_ancestors)
+            env.log.debug(x_ancestor_names)
+            env.log.debug(prot_col_names)
+            env.log.debug(prot_cols)
+            sorted_error_rates = {}
+            k_highest_error_rates = {}
+            for x_ancestor, x_ancestor_name, prot_col_name, prot_col in zip(x_ancestors, x_ancestor_names, prot_col_names, prot_cols):
+                sorted_error_rate, k_highest_error_rate = self.get_sorted_k_highest_error_rates(env, 
+                                                                                        prot_col_name, 
+                                                                                        model_name, 
+                                                                                        x_ancestor, 
+                                                                                        X, y, 
+                                                                                        new_preds) 
+                env.log.debug(f"[ModelReportNote] (update) new sorted_error_rate found for {x_ancestor_name} and {prot_col_name}", sorted_error_rate)
+                env.log.debug(f"[ModelReportNote] (update) new k_highest_error_rate found for {x_ancestor_name} and {prot_col_name}", k_highest_error_rate)
+                sorted_error_rates = {**sorted_error_rates, **sorted_error_rate}
+                k_highest_error_rates = {**k_highest_error_rates, **k_highest_error_rate}
+                
             resp = {"type" : "model_report", "model_name" : model_name}
             resp["acc_orig"] = new_acc
             resp["overall"] = error_rates(*acc_measures(y, new_preds))
-            resp["groups"] = prot_col_names
+            resp["groups"] = list(set().union(*prot_col_names))
             resp["error_rates"] = sorted_error_rates
             resp["k_highest_error_rates"] = k_highest_error_rates
             resp["current_df"] = df_name
             resp["ancestor_df"] = x_ancestor_names
             updated_data[model_name] = [resp]
-            env.log.debug("[ModelReportNote] response is \n{0}".format(updated_data[model_name]))
+            env.log.debug("[ModelReportNote] (update) response is \n{0}".format(updated_data[model_name]))
             
         # remember to clean up non-live elements of self.columns
         live_names = [model_name for model_name in live_resps]
@@ -1424,7 +1453,10 @@ def search_for_sensitive_cols(env, df, df_name_to_match, df_ns):
     """
     # pylint: disable=too-many-branches
     # first look in df inputs themself
-    protected_cols = check_for_protected(df.columns)
+    if isinstance(df, pd.DataFrame):
+        protected_cols = check_for_protected(df.columns)
+    elif isinstance(df, pd.Series):
+        protected_cols = check_for_protected(df.name)
 
     if len(protected_cols) > 0:
         return df_name_to_match, [df[p["original_name"]] for p in protected_cols], None
@@ -1547,7 +1579,7 @@ def check_call_dfs(dfs, non_dfs_ns, models, env):
                 "x_parent" : dfs[features_df_name],
                 "y_parent" : labels_obj
             }
-            env.log.debug("[check_call_df] defined model {0}".format(defined_models[model_name]))
+            env.log.debug("[check_call_df] defined model {1} - {0}".format(defined_models[model_name], model_name))
 
     return defined_models
 
