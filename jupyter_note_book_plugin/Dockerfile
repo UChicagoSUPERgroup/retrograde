@@ -10,9 +10,13 @@ RUN rm -rf /usr/bin/apt
 #Install pipenv and run the build script
 ADD . /
 RUN useradd -m -r -g users A && \
-chown -R A:users /evaluation_task
+chown -R A:users /evaluation_task && \
+chown -R A:users /etc/jupyter/lab/workspaces
 # RUN chmod +x docker_build.sh
 #run the docker image in jupyter_note_book_plugin/evaluation_task/
+RUN chmod o-r /Dockerfile
+RUN chmod o-r /Pipfile
+RUN chmod o-r /root /bin /dev /home /lib /lib64 /opt /prompt-ml /prompt_kernel /serverextension
 RUN chmod +x run_image.sh
 #Run the installation script
 RUN pip install -r /requirements.txt
