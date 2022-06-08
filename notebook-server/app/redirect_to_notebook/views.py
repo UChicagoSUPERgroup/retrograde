@@ -1,5 +1,5 @@
 from flask_classy import FlaskView, route
-from flask import Flask, redirect, current_app, render_template, request, abort
+from flask import Flask, redirect, current_app, render_template, request, abort, jsonify
 import random
 import string
 import requests
@@ -95,16 +95,24 @@ class MainView(FlaskView):
                 return CONTAINER_ALREADY_STOPPED_MESSAGE, 200
 
         return INVALID_PROLIFIC_ID_ERROR, 404
-
+    
     @route('/auth/', methods=['POST'])
     def handle_auth_request(self):
+        whitelist = ["https://l-uca.com", "https://uchicago.co1.qualtrics.com"]
+        print("auth request", request)
         val = request.form.get("backend_token")
         if val == None:
             abort(400, "Malformed format.")
         if  val != "Ggfkhltoh0U9vJt4":
             abort(403, "False auth.")
         new_token = self.gen_token()
-        return new_token
+        response = jsonify({"token" : new_token})
+
+        if request.url_root in whitelist:
+            response.headers.add("Access-Control-Allow-Origin", request.url_root)
+        print(response)
+        return response
+
 
     def gen_token(self):
         x = ''.join(random.choice(string.ascii_uppercase + string.ascii_lowercase + string.digits) for _ in range(16))

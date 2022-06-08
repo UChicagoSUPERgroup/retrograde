@@ -56,11 +56,13 @@ def start_notebook(docker_image, prolific_id=None, mode=None, test_configuration
     else:
         #run docker in host mode and run on notebook port
         env.update({"PLUGIN_PORT" : notebook_port})
-        container = client.containers.run(image=docker_image,
-      command="bash ./run_image.sh",
-      detach = True,
-      network_mode = "host",
-      environment = env, 
+        container = client.containers.run(
+                image=docker_image,
+                command="bash ./run_image.sh",
+                detach = True,
+                network_mode = "host",
+                environment = env, 
+                user = "A"
     )
     while (container.status == 'restarting' or container.status == 'created'):
         container.reload()
