@@ -107,7 +107,7 @@ const extension: JupyterFrontEndPlugin<void> = {
     promptContainer.classList.add("prompt-ml-container");
     content.node.appendChild(promptContainer);
     promptWidget.id = "prompt-ml";
-    promptWidget.title.label = "PromptML";
+    promptWidget.title.label = "Retrograde";
     promptWidget.title.closable = true;
     if (!promptWidget.isAttached) {
       // Attach the widget to the main work area if it's not there
