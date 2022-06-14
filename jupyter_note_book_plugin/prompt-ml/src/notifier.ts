@@ -198,6 +198,7 @@ export class Prompter {
     var note = new PopupNotification("modelReport", false, "Model Report", eqOdds);
     note.addHeader("Model Report")
     console.log("eqodds length ",eqOdds.length); 
+    eqOdds.reverse();
     // preamble on MRN
     note.addParagraph(`<p><b>The Model Report Note</b> uses the sensitivity as marked in the Protected Column Note to determine
                        the columns that will be considered in this model report. By parsing your code, the plugin is able to find the original dataframe

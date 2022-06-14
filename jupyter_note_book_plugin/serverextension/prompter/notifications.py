@@ -10,6 +10,7 @@ from random import choice
 
 import math
 import operator
+from ssl import VERIFY_X509_TRUSTED_FIRST
 from tokenize import group
 
 import pandas as pd
@@ -535,8 +536,10 @@ class ProxyColumnNote(ProtectedColumnNote):
 
     def _apply_spearman(self, df, sens_col, not_sens_col):
         # pylint: disable=no-self-use
-        coeff,pval = spearmanr(df[sens_col], df[not_sens_col], nan_policy="omit")
-        return coeff,pval 
+        coeff,pval = spearmanr(df[sens_col], df[not_sens_col], nan_policy="omit") 
+        # spearmanr requires non constant input 
+        coeff, pval = (0, 10000) if pd.isna(coeff) else (coeff, pval)
+        return coeff, pval
 
 class MissingDataNote(ProtectedColumnNote):
     """
@@ -722,7 +725,7 @@ class ModelReportNote(Notification):
         self._info_cache = {} # cache of notes used for generated note updating
         self.columns = {}
 
-        self.k = 2 #Q? what should k be? how can user change k? (this is k highest error rates to display)
+        self.k = 3 #Q? what should k be? how can user change k? (this is k highest error rates to display)
         self.BOUND = 0.1 # how much above/below median must a metric be to be highlighted
         self.GROUP_LIMIT = 0.01 # what fraction of data must a subgroup be before being highlighted?
 
@@ -752,7 +755,7 @@ class ModelReportNote(Notification):
         prot_anc_found = False
 
         for model_name in models_with_dfs:
-            match_name, match_cols, match_indexer = search_for_sensitive_cols(models_with_dfs[model_name]["x"], model_name, defined_dfs)
+            match_name, match_cols, match_indexer = search_for_sensitive_cols(env, models_with_dfs[model_name]["x"], model_name, defined_dfs)
             if not match_name:
                 continue
             env.log.debug("[ModelReportNote] model {0} has match {1}, additional info: {2}".format(model_name, match_name, models_with_dfs[model_name]))
@@ -781,22 +784,52 @@ class ModelReportNote(Notification):
         
         q = [(df_name, df_version)]
         seen = set() # since there may be cycles, want to avoid infinite loops
- 
+
+        prot_cat_cols_list = []
+        df_list = []
+        version_list = []
+        last_seen_prot = (prot_cat_cols_list, df_list, version_list)
+        env.log.debug(f"[ModelReportNote._get_prot_ancestor] all ancestors: {env.ancestors}")
         while q != []:
 
             df, version = q.pop()
+            # if (df, version) in env.ancestors:
+            #     env.log.debug(f"[ModelReportNote._get_prot_ancestor] df:{df} version:{version} was found in env.ancestors:{env.ancestors[(df, version)]}")
+                
             protected_cols = self._check_prot(df, version, kernel_id)
             protected_cat_cols = [col for col in protected_cols if is_categorical(dfs[df][col])]
 
             if protected_cat_cols != []:
-                return protected_cat_cols, df, version
+                env.log.debug(f"[ModelReportNote._get_prot_ancestor] found new ancestor for {df_name} -> df:{df}, version:{version}, prot_cat_cols:{protected_cat_cols}")
+                # find nearest ancestor with prot, then continue for other ancestors with dif prot values represented
+                # resolve collisions of prot cols
+                new_prot_results = check_for_protected(protected_cat_cols)
+                val_to_remove = set()
+                if len(prot_cat_cols_list) > 0:
+                    old_prot_results = check_for_protected(prot_cat_cols_list[-1])
+                    for idx, new_res in enumerate(new_prot_results):
+                        for old_res in old_prot_results:
+                            if new_res['protected_value'] == old_res['protected_value']:
+                                col_name = new_res['original_name']
+                                val_to_remove.add(col_name)
+                
+                for val in val_to_remove:
+                    protected_cat_cols.remove(val)
+                
+                # save the good ones to a list
+                if len(protected_cat_cols) > 0:
+                    env.log.debug(f"[ModelReportNote._get_prot_ancestor] df:{df} version:{version} was found in env.ancestors:{env.ancestors[(df, version)]}")
+                    prot_cat_cols_list.append(protected_cat_cols)
+                    df_list.append(df)
+                    version_list.append(version)
+                # return protected_cat_cols, df, version
 
             seen.add((df, version))
 
             if (df, version) in env.ancestors:
                 parents = env.ancestors[(df, version)]
                 q.extend(list(parents - seen))
-        return None, None, None
+        return last_seen_prot
 
     def _check_prot(self, df, version, kernel):
 
@@ -810,31 +843,38 @@ class ModelReportNote(Notification):
 
     def get_prot_from_aligned(self, model_name):
         '''
-        Returns x_ancestor (DataFrame), x_ancestor_name (string), prot_col_names (list), prot_cols (DataFrame or Series)
+        Returns x_ancestor (List<DataFrame>), x_ancestor_name (List<string>), prot_col_names (List<list>), prot_cols (List<List<Series>>)
         '''
         if model_name in self.aligned_models:
             match = self.aligned_models[model_name]["match"]
             return match["x_ancestor"], match["x_ancestor_name"], match["prot_col_names"], match["prot_cols"]
-        return None, None, None, None
+        # return None, None, None, None
+        return [], [], [], []
 
     def prot_ancestors_found(self, env, curr_df_name, dfs, kernel_id):
         '''
-        Returns prot_anc_found (bool), x_ancestor (DataFrame), x_ancestor_name (string), prot_col_names (list), prot_cols (DataFrame or Series)
+        Returns prot_anc_found (bool), x_ancestor (List<DataFrame>), x_ancestor_name (List<string>), prot_col_names (List<List<string>>), prot_cols (List<DataFrame or Series>)
         '''
         # Query DB for ancestor df object
-        prot_col_names, ancestor_df, version = self._get_prot_ancestor(env, curr_df_name, dfs, kernel_id)
-        x_ancestor = self.db.get_dataframe_version({"name" : ancestor_df, "kernel" : kernel_id}, version)
-
-        if isinstance(x_ancestor, pd.DataFrame):
-            env.log.debug("[ModelReportNote] has found an ancestor df. shape: {1}, cols: {0}".format(x_ancestor.shape, x_ancestor.columns))
-        else:
-            env.log.error("[ModelReportNote] ancestors not found")
-            return False, None, None, None, None
-
-        prot_cols = [x_ancestor[col] for col in prot_col_names]
+        prot_col_names, ancestor_dfs, versions = self._get_prot_ancestor(env, curr_df_name, dfs, kernel_id)
+        
         if prot_col_names is None or len(prot_col_names) == 0: 
             env.log.debug("[ModelReportNote] has no groups to compute error rates for")
-            return False, None, None, None, None
+            return False, [], [], [], []
+
+        # get df objects
+        x_ancestor = []
+        for ancestor_df, version in zip(ancestor_dfs, versions):
+            x_ancestor.append(self.db.get_dataframe_version({"name" : ancestor_df, "kernel" : kernel_id}, version))
+
+        # log df objects
+        for x_a in x_ancestor:
+            env.log.debug("[ModelReportNote] has found an ancestor df. shape: {1}, cols: {0}".format(x_a.columns, x_a.shape))
+
+        # prot_cols is a list of series corresponding to each df in x_ancestor
+        prot_cols = []
+        for prot_col_list, x_a in zip(prot_col_names, x_ancestor):
+            prot_cols.append([x_a[col] for col in prot_col_list])
 
         # remove numerical prot_cols from prot_col sets
 #        removed = []
@@ -843,25 +883,25 @@ class ModelReportNote(Notification):
 #                prot_col_names.pop(idx)
 #                removed.append(idx)
         # remove from prot_cols as well
-        # TODO: do this filtering in the search for protectedd Ancestor instead!
 #        env.log.debug(f"[ModelReportNote] {removed}, {prot_cols}")
 #        for idx in removed:
 #            prot_cols.remove(idx)
         # if there are only numerical prot_cols => return None
         if len(prot_col_names) == 0 or len(prot_cols) == 0:
-            return False, None, None, None, None
+            return False, [], [], [], []
             
-        return True, x_ancestor, ancestor_df, prot_col_names, prot_cols
+        return True, x_ancestor, ancestor_dfs, prot_col_names, prot_cols
 
         
     def group_based_error_rates(self, env, prot_group, df, y_true, y_pred):
         """
         Compute precision, recall and f1score for a protected group in the df
 
-        Returns: error rates for member in group : Dict{<member_value_from_group>: (precision, recall, f1score, fpr, fnr)}
+        Returns: error rates for member in group : Dict{<member_value_from_group>: (precision, recall, f1score, fpr, fnr, N)}
         """
         error_rates_by_member = {} 
-
+        df_size = len(df)
+        # check if member in group is some percent of the df
         env.log.debug("[ModelReport] prot_group: {0}".format(prot_group))
         if prot_group in df.columns:
             group_col = df[prot_group]
@@ -939,12 +979,31 @@ class ModelReportNote(Notification):
                                                 }    
                                         } 
         """
-        sorted_error_rates_by_group = {}
-        for group_key in error_rates_by_group.keys():
-            group = error_rates_by_group[group_key]
-            sorting_key = lambda x: (x[1][2], x[1][3], x[1][4], x[1][0], x[1][1])
-            sorted_error_rates_by_group[group_key] = dict(sorted(group.items(), key=sorting_key, reverse=True))
-        return sorted_error_rates_by_group
+        
+
+
+        one_hot = {}
+        cat = {}
+        for group, members in error_rates_by_group.items():
+            if len(members) < 2: # one hot encoding
+                one_hot.update(members)
+            else:
+                cat.update({group:members})
+        
+        # one hot
+        sorting_key = lambda x: (x[1][5], x[1][2], x[1][3], x[1][4], x[1][0], x[1][1])
+        sorted_one_hot = dict(sorted(one_hot.items(), key=sorting_key, reverse=True))
+        sorted_one_hot = {x: {x: sorted_one_hot[x]} for x in sorted_one_hot.keys() if sorted_one_hot[x][5]}
+
+        # cat
+        sorted_cat = {}
+        for group_key in cat.keys():
+            group = cat[group_key]
+            sorting_key = lambda x: (x[1][5], x[1][2], x[1][3], x[1][4], x[1][0], x[1][1])
+            sorted_cat[group_key] = dict(sorted(group.items(), key=sorting_key, reverse=True))
+
+
+        return sorted_one_hot, sorted_cat
 
     def get_sorted_k_highest_error_rates(self, env, col_names, model_name, x_parent_df, X, y, preds):
         """
@@ -958,16 +1017,52 @@ class ModelReportNote(Notification):
                 # log the error rates
                 for member in group_error_rates:
                     precision, recall, f1score, fpr, fnr, n = group_error_rates[member]
-                    env.log.debug("[ModelReportNote] has computed these error rates for member, {4}, in group: {0}\nPrecision: {1:.4g}\nRecall: {2:.4g}\nF1Score: {3:.4g}\nFalse Positive Rate: {5:.4g}\nFalse Negative Rate: {6:.4g}"\
-                                    .format(group, precision, recall, f1score, member, fpr, fnr))
+                    env.log.debug("[ModelReportNote] has computed these error rates for member, {4}, in group: {0}\nPrecision: {1:.4g}\nRecall: {2:.4g}\nF1Score: {3:.4g}\nFalse Positive Rate: {5:.4g}\nFalse Negative Rate: {6:.4g}\n Count: {7}"\
+                                    .format(group, precision, recall, f1score, member, fpr, fnr, n))
                 # save them
                 all_error_rates[group] = group_error_rates
             else:
                 env.log.debug("[ModelReportNote] has failed to compute error ratees for this group: {0}".format(group))
-        sorted_error_rates = self.sort_error_rates(all_error_rates)
-        sorted_error_rates = self.filter_and_select(sorted_error_rates, len(X), env)
-        # sort most important k error_rates (this is relative, no normative judgment here)
-        k_highest_rates = {key: val for n, (key, val) in enumerate(sorted_error_rates.items()) if n < self.k}
+        sorted_one_hot_rates, sorted_cat_rates = self.sort_error_rates(all_error_rates)
+
+        # env.log.debug(f"[ModelReportNote] columns: {col_names}, one hot error rates {sorted_one_hot_rates}")
+        # env.log.debug(f"[ModelReportNote columns: {col_names}, cat error rates {sorted_cat_rates}")
+
+        k_sorted_one_hot_rates = {}
+        k_sorted_cat_rates = {}
+        if len(sorted_one_hot_rates) > 0:
+            sorted_one_hot_rates = self.filter_and_select(sorted_one_hot_rates, len(X), env)
+
+            # separate one hot rates from multiple protected categories (we want behavior to be identical
+            # for one hot and cat columns)
+            prot_vals = check_for_protected(list(sorted_one_hot_rates.keys()))
+            k_group_sorted_one_hot_rates = {}
+            for entry in prot_vals:
+                prot_val = entry['protected_value']
+                col_name = entry['original_name']
+                if prot_val not in k_group_sorted_one_hot_rates:
+                    k_group_sorted_one_hot_rates[prot_val] = [{col_name: sorted_one_hot_rates[col_name]}]
+                else:
+                    k_group_sorted_one_hot_rates[prot_val].append({col_name: sorted_one_hot_rates[col_name]})
+            
+            for prot_group_vals in k_group_sorted_one_hot_rates.values():
+                for n, member_dict in enumerate(prot_group_vals):
+                    if n < self.k:
+                        k_sorted_one_hot_rates = {**k_sorted_one_hot_rates, **member_dict}
+                    else:
+                        break
+
+
+            # k_sorted_one_hot_rates = {key: val for n, (key, val) in enumerate(sorted_one_hot_rates.items()) if n < self.k and len(val) > 0}
+
+        if len(sorted_cat_rates) > 0: 
+            sorted_cat_rates = self.filter_and_select(sorted_cat_rates, len(X), env)
+            k_sorted_cat_rates = {key: val for n, (key, val) in enumerate(sorted_cat_rates.items()) if n < self.k and len(val) > 0}
+            k_sorted_cat_rates = {group: {} for group in sorted_cat_rates}
+            for group in sorted_cat_rates:
+                k_sorted_cat_rates[group] = {key: val for n, (key, val) in enumerate(sorted_cat_rates[group].items()) if n < self.k and len(val) > 0}
+        k_highest_rates = {**k_sorted_one_hot_rates, **k_sorted_cat_rates}
+        sorted_error_rates = {**sorted_one_hot_rates, **sorted_cat_rates}
         return sorted_error_rates, k_highest_rates
     def filter_and_select(self, error_rates, n, env):
         """
@@ -983,7 +1078,8 @@ class ModelReportNote(Notification):
             metric_list = ["precision", "recall", "f1score", "fpr", "fnr"]
 
             group_vals = [group_val for group_val in group_vals if error_rates[group][group_val][5] > n*self.GROUP_LIMIT]
- 
+            if len(group_vals) == 0:
+                continue
             for metric_idx, metric in enumerate(metric_list):
 
                 vals = np.array([error_rates[group][group_val][metric_idx] for group_val in group_vals])
@@ -1028,23 +1124,27 @@ class ModelReportNote(Notification):
             orig_preds = pd.Series(orig_preds, index=X.index)
 
 
-            x_ancestor, x_ancestor_name, prot_col_names, prot_cols = self.get_prot_from_aligned(model_name)
-
-            sorted_error_rates, k_highest_rates = self.get_sorted_k_highest_error_rates(env, 
-                                                                                    prot_col_names, 
-                                                                                    model_name, 
-                                                                                    x_ancestor, 
-                                                                                    X, y, 
-                                                                                    orig_preds) 
+            x_ancestors, x_ancestor_names, prot_col_names, prot_cols = self.get_prot_from_aligned(model_name)
+            sorted_error_rates = {}
+            k_highest_error_rates = {}
+            for x_ancestor, x_ancestor_name, prot_col_name, prot_col in zip(x_ancestors, x_ancestor_names, prot_col_names, prot_cols):
+                sorted_error_rate, k_highest_error_rate = self.get_sorted_k_highest_error_rates(env, 
+                                                                                        prot_col_name, 
+                                                                                        model_name, 
+                                                                                        x_ancestor, 
+                                                                                        X, y, 
+                                                                                        orig_preds) 
+                sorted_error_rates = {**sorted_error_rates, **sorted_error_rate}
+                k_highest_error_rates = {**k_highest_error_rates, **k_highest_error_rate}
            
 
             resp["acc_orig"] = acc_orig
             resp["overall"] = error_rates(*acc_measures(y, orig_preds))
-            resp["groups"] = prot_col_names
+            resp["groups"] = list(set().union(*prot_col_names))
             resp["error_rates"] = sorted_error_rates
-            resp["k_highest_rates"] = k_highest_rates
+            resp["k_highest_error_rates"] = k_highest_error_rates
             resp["current_df"] = self.aligned_models[model_name]["match"]["name"]
-            resp["ancestor_df"] = x_ancestor_name
+            resp["ancestor_df"] = x_ancestor_names
 
             env.log.debug("[ModelReportNote] response is \n{0}".format(resp))
             self._info_cache[model_name] = self.aligned_models[model_name] 
@@ -1096,11 +1196,11 @@ class ModelReportNote(Notification):
             X = self._info_cache[model_name]["x"]
             y = self._info_cache[model_name]["y"]
             
-            match_name, match_cols, match_indexer = search_for_sensitive_cols(X, model_name,dfs)
+            # match_name, match_cols, match_indexer = search_for_sensitive_cols(env, X, model_name,dfs)
             model = non_dfs_ns[model_name]
 
             df_name = self._info_cache[model_name]["x_name"]
-            prot_anc_found, x_ancestor, x_ancestor_name, prot_col_names, prot_cols = self.prot_ancestors_found(env, df_name, dfs, env._kernel_id)
+            
 
             new_preds = model.predict(X)
             new_preds = pd.Series(new_preds, index=X.index)
@@ -1108,32 +1208,42 @@ class ModelReportNote(Notification):
 
             # check if still sensitive
 
-#            x_ancestor, x_ancestor_name, prot_col_names, prot_cols = self.get_prot_from_aligned(model_name)
-
-            if x_ancestor is None or prot_col_names is None or len(prot_col_names) == 0:
-                env.log.error("[ModelReportNote] has no groups to compute errors for, something went wrong.")
-                # form some empty response? return? idk
+            
+            prot_anc_found, x_ancestors, x_ancestor_names, prot_col_names, prot_cols = self.prot_ancestors_found(env, df_name, dfs, env._kernel_id)
+            if not prot_anc_found:
+                env.log.error(f"[ModelReportNote] (update) Error. no prot ancestors found in {x_ancestor_name} for current df {df_name}")
                 continue
-            else:
-                env.log.debug("[ModelReportNote] (update) is retrieving error rates for these columns: {0}."
-                    .format(prot_col_names))
-                sorted_error_rates, k_highest_error_rates = self.get_sorted_k_highest_error_rates(env, 
-                                                                                            prot_col_names, 
-                                                                                            model_name, 
-                                                                                            x_ancestor, 
-                                                                                            X, y, 
-                                                                                            new_preds)
-            # TODO: this needs to be changed over
+            env.log.debug("[ModelReportNote] (update) is retrieving error rates for these columns: {0}."
+                .format(prot_col_names))
+            env.log.debug(f"[ModelReportNote] (update) checking vars for {df_name} and {model_name}")
+            env.log.debug(x_ancestors)
+            env.log.debug(x_ancestor_names)
+            env.log.debug(prot_col_names)
+            env.log.debug(prot_cols)
+            sorted_error_rates = {}
+            k_highest_error_rates = {}
+            for x_ancestor, x_ancestor_name, prot_col_name, prot_col in zip(x_ancestors, x_ancestor_names, prot_col_names, prot_cols):
+                sorted_error_rate, k_highest_error_rate = self.get_sorted_k_highest_error_rates(env, 
+                                                                                        prot_col_name, 
+                                                                                        model_name, 
+                                                                                        x_ancestor, 
+                                                                                        X, y, 
+                                                                                        new_preds) 
+                env.log.debug(f"[ModelReportNote] (update) new sorted_error_rate found for {x_ancestor_name} and {prot_col_name}", sorted_error_rate)
+                env.log.debug(f"[ModelReportNote] (update) new k_highest_error_rate found for {x_ancestor_name} and {prot_col_name}", k_highest_error_rate)
+                sorted_error_rates = {**sorted_error_rates, **sorted_error_rate}
+                k_highest_error_rates = {**k_highest_error_rates, **k_highest_error_rate}
+                
             resp = {"type" : "model_report", "model_name" : model_name}
             resp["acc_orig"] = new_acc
             resp["overall"] = error_rates(*acc_measures(y, new_preds))
-            resp["groups"] = prot_col_names
+            resp["groups"] = list(set().union(*prot_col_names))
             resp["error_rates"] = sorted_error_rates
             resp["k_highest_error_rates"] = k_highest_error_rates
             resp["current_df"] = df_name
-            resp["ancestor_df"] = x_ancestor_name
+            resp["ancestor_df"] = x_ancestor_names
             updated_data[model_name] = [resp]
-            env.log.debug("[ModelReportNote] response is \n{0}".format(updated_data[model_name]))
+            env.log.debug("[ModelReportNote] (update) response is \n{0}".format(updated_data[model_name]))
             
         # remember to clean up non-live elements of self.columns
         live_names = [model_name for model_name in live_resps]
@@ -1261,9 +1371,9 @@ def align_index(obj, values, locs):
     return np.take(obj, locs)
 
 def error_rates(tp, fp, tn, fn):
-    """Returns precision, recall, f1score, false positive rate and false negative rate """
+    """Returns precision, recall, f1score, false positive rate, false negative rate, and the number of rows """
     if tp < 0:
-        return -1, -1, -1, -1, -1
+        return -1, -1, -1, -1, -1, -1
     try:
         precision = tp / (tp+fp)
     except ZeroDivisionError:
@@ -1332,7 +1442,7 @@ def make_align(index, other_index):
             "loc" : index_subset.map(index_map),
             "o_loc" : index_subset.map(other_map)}
 
-def search_for_sensitive_cols(df, df_name_to_match, df_ns):
+def search_for_sensitive_cols(env, df, df_name_to_match, df_ns):
     """
     search through dataframes to see if there are sensitive columns that
     can be associated with the inputs
@@ -1343,7 +1453,10 @@ def search_for_sensitive_cols(df, df_name_to_match, df_ns):
     """
     # pylint: disable=too-many-branches
     # first look in df inputs themself
-    protected_cols = check_for_protected(df.columns)
+    if isinstance(df, pd.DataFrame):
+        protected_cols = check_for_protected(df.columns)
+    elif isinstance(df, pd.Series):
+        protected_cols = check_for_protected(df.name)
 
     if len(protected_cols) > 0:
         return df_name_to_match, [df[p["original_name"]] for p in protected_cols], None
@@ -1442,8 +1555,8 @@ def check_call_dfs(dfs, non_dfs_ns, models, env):
 
         if (features_df_name in dfs.keys()) and\
            ((labels_df_name in dfs.keys()) or labels_df_name in non_dfs_ns.keys()):
-            env.log.debug("[check_call_df] feature head")
-            dfs[features_df_name].head()
+            env.log.debug("[check_call_df] feature head:")
+            env.log.debug(dfs[features_df_name].head())
             # see: https://stackoverflow.com/questions/14984119/python-pandas-remove-duplicate-columns
             features_df = dfs[features_df_name]
             features_df = features_df.loc[:,~features_df.columns.duplicated()]
@@ -1466,7 +1579,7 @@ def check_call_dfs(dfs, non_dfs_ns, models, env):
                 "x_parent" : dfs[features_df_name],
                 "y_parent" : labels_obj
             }
-            env.log.debug("[check_call_df] defined model {0}".format(defined_models[model_name]))
+            env.log.debug("[check_call_df] defined model {1} - {0}".format(defined_models[model_name], model_name))
 
     return defined_models
 

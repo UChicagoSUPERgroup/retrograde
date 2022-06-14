@@ -20,6 +20,7 @@ export class ProtectedColumnNote extends PopupNotification {
     super("protected", true, "Protected Columns", originalMessage);
     this._data = [];
     this._dfs = [];
+    notices.reverse();
     console.log(notices);
     for (var x = 0; x < notices.length; x++) {
       this._data.push(new ProtectedData(notices[x], kernel_id));

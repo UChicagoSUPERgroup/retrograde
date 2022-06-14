@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS data(
     cell TEXT, 
     version INT NOT NULL, 
     source VARCHAR(255), 
-    name VARCHAR(160) NOT NULL, 
+    name VARCHAR(160) binary NOT NULL, 
     exec_ct INT,
     PRIMARY KEY(user, kernel, name, version));
 
@@ -33,9 +33,9 @@ CREATE TABLE IF NOT EXISTS data(
 CREATE TABLE IF NOT EXISTS columns(
     user VARCHAR(64), 
     kernel VARCHAR(36), 
-    name VARCHAR(160), 
+    name VARCHAR(160) binary,  -- binary allows for upper and lower case values to be distinguishable by selects and inserts.
     version INT, 
-    col_name VARCHAR(160),
+    col_name VARCHAR(160) binary,
     type TEXT,
     size INT,
     is_sensitive BOOLEAN DEFAULT FALSE,

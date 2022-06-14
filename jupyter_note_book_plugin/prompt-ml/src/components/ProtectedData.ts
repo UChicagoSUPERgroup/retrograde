@@ -31,6 +31,7 @@ export class ProtectedData {
     "disability",
     "genetic_information",
   ];
+  columnNames: string[];
   // Dynamic
   _client: CodeCellClient;
 
@@ -39,12 +40,12 @@ export class ProtectedData {
   ////////////////////////////////////////////////////////////
 
   constructor(notice: any, kernelId: string) {
-    var columnNames = this._findAllColumnNames(notice);
+    this.columnNames = this._findAllColumnNames(notice);
     this.df = notice["df"];
     this.kernelId = kernelId;
     this.columns = this._populateColumns(notice);
     this._client = new CodeCellClient();
-    this.explorer = new Explorer(columnNames, this.df);
+    this.explorer = new Explorer(this.columnNames, this.df);
     this.explorer.onChange((c: number, d: string) => {
       this._onExplorerChange(c, d, this);
     });
@@ -62,24 +63,28 @@ export class ProtectedData {
   }
 
   _onExplorerChange(columnIndex: number, dfName: string, elem: ProtectedData) {
-    var columnName = $(`.promptMl.protectedColumns #${dfName} .explorer span`)
-      .eq(columnIndex)
-      .text();
+    var columnName = this.columnNames[columnIndex];
     var explorer = $(".promptMl.protectedColumns").find(`#${dfName} .explorer`);
     explorer.find("summary").text(columnName);
-    BackendRequest.userInput({
-          type: "user_input",
-          input_type: "columnInformation",
-          df: dfName,
-          kernel: this.kernelId,
-          col: columnName,
-        }, (raw : string) => {
+    BackendRequest.userInput(
+      {
+        type: "user_input",
+        input_type: "columnInformation",
+        df: dfName,
+        kernel: this.kernelId,
+        col: columnName,
+      },
+      (raw: string) => {
         var res = JSON.parse(raw);
         explorer.find(".classification").text(res["sensitivity"]["fields"]);
         explorer.find(".value-container").html(this._columnInfoElement(res));
         explorer.find("details").prop("open", false);
-      });
-      BackendRequest.sendTrackPoint("user_input", `User requested information for ${columnName}`);
+      }
+    );
+    BackendRequest.sendTrackPoint(
+      "user_input",
+      `User requested information for ${columnName}`
+    );
   }
 
   _onColumnChange(
@@ -126,7 +131,10 @@ export class ProtectedData {
       .then((res) => {
         console.log("Backend responded to the update request with:", res);
       });
-      BackendRequest.sendTrackPoint("user_input", `User updated sensitivity for col ${columnName} to ${newSensitivity}`);
+    BackendRequest.sendTrackPoint(
+      "user_input",
+      `User updated sensitivity for col ${columnName} to ${newSensitivity}`
+    );
   }
 
   private _populateColumns(notice: any): Column[] {

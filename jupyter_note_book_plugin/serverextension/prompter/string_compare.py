@@ -41,7 +41,7 @@ def check_for_protected(column_names):
     protected_corpus = _get_protected()
     results = []
     for column_name in column_names:
-        next_results = _fuzzy_string_across_dict(column_name.lower(), protected_corpus, PROTECTED_MATCH_THRESHOLD)
+        next_results = _fuzzy_string_across_dict(column_name, protected_corpus, PROTECTED_MATCH_THRESHOLD)
         results.extend(next_results)
     return results
 
@@ -184,14 +184,14 @@ def _fuzzy_string_across_dict(candidate_string, reference_dict, threshold):
     for k,v in reference_dict.items():
         #see source for explanation of partial ratio
         #https://github.com/seatgeek/fuzzywuzzy/blob/9a4bc22c7483198fcb96afacc42f5f700fb803ed/fuzzywuzzy/fuzz.py#L59-L100
-        partial_match = fuzz.partial_ratio(v, candidate_string)
+        partial_match = fuzz.partial_ratio(v, candidate_string.lower())
         if partial_match >= threshold:
             results.append({"protected_value" : k, 
                             "protected_value_background" : v,
                             "original_name" : candidate_string})
         else:
             # we want to exempt some guesses that contain common words
-            if k in candidate_string:
+            if k in candidate_string.lower():
                 results.append({"protected_value" : k, 
                             "protected_value_background" : v,
                             "original_name" : candidate_string})
