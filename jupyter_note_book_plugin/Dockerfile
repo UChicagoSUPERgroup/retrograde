@@ -14,7 +14,7 @@ ADD . /
 RUN chmod +x run_image.sh
 #Run the installation script
 RUN pip install -r /requirements.txt
-RUN echo '{"argv" : ["python3", "'"$PWD"'/forking_kernel.py", "-f", "{connection_file}"], "display_name" : "prompter"}' > ./prompt_kernel/kernel.json
+RUN echo '{"argv" : ["python3", "'"$PWD"'/forking_kernel.py", "-f", "{connection_file}"], "display_name" : "retrograde"}' > ./prompt_kernel/kernel.json
 RUN cd ./evaluation_task && python3 build_task.py
 RUN cd ./prompt-ml && jlpm install && jupyter labextension install
 WORKDIR "./serverextension"
