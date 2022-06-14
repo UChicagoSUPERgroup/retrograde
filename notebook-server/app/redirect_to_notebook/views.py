@@ -99,7 +99,6 @@ class MainView(FlaskView):
     @route('/auth/', methods=['POST'])
     def handle_auth_request(self):
         whitelist = ["https://l-uca.com", "https://uchicago.co1.qualtrics.com"]
-        print("auth request", request)
         val = request.form.get("backend_token")
         if val == None:
             abort(400, "Malformed format.")
@@ -108,8 +107,8 @@ class MainView(FlaskView):
         new_token = self.gen_token()
         response = jsonify({"token" : new_token})
 
-        if 'HTTP_ORIGIN' in request.environ and request.environ['HTTP_ORIGIN']  in whitelist:
-            response.headers.add('Access-Control-Allow-Origin', request.environ['HTTP_ORIGIN'] )
+        if request.url_root in whitelist:
+            response.headers.add('Access-Control-Allow-Origin', request.url_root)
         return response
 
 
