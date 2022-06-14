@@ -45,7 +45,7 @@ export class ProtectedData {
     this.kernelId = kernelId;
     this.columns = this._populateColumns(notice);
     this._client = new CodeCellClient();
-    this.explorer = new Explorer(columnNames, this.df);
+    this.explorer = new Explorer(this.columnNames, this.df);
     this.explorer.onChange((c: number, d: string) => {
       this._onExplorerChange(c, d, this);
     });
