@@ -3,7 +3,25 @@ from app.app import db
 from datetime import datetime
 
 
+class TokensManager(db.Model):
+    __tablename__= 'tokens'
+    token = db.Column(db.String, primary_key=True)
+    used = db.Column(db.Boolean, default=False)
 
+    def tokenExists(token):
+        result = db.session.query(TokensManager.used).filter(TokensManager.token == token).first()
+        return True if result != None and not result.used else False
+
+    def addToken(token):
+        new_token = TokensManager(token=token)
+        db.session.add(new_token)
+        db.session.commit()
+        return True
+
+    def markTokenUsed(token):
+        token_row = TokensManager.query.filter_by(token=token).first()
+        token_row.used = True
+        db.session.commit()
 
 class UsersContainers(db.Model):
     '''

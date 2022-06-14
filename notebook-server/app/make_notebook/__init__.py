@@ -3,6 +3,8 @@ import psutil
 from random import randint
 import time
 import secrets
+from flask import current_app as app
+
 
 def get_free_port():
     lower_port = 8000
@@ -28,7 +30,7 @@ def start_notebook(docker_image, prolific_id=None, mode=None, test_configuration
     notebook_port = get_free_port()
     client = docker.from_env()
 
-    env = {"DOCKER_HOST_IP" : "127.0.0.1"}
+    env = {"DOCKER_HOST_IP" : app.config["SQL"]["host"]}
      
     if not prolific_id:
         env["JP_PLUGIN_USER"] = "UNTRACKED_USER-"+str(notebook_port)+str(randint(0,50))
@@ -49,15 +51,18 @@ def start_notebook(docker_image, prolific_id=None, mode=None, test_configuration
           command="bash ./run_image.sh",
           detach = True,
           environment = env, 
+          user = "A"
         )
     else:
         #run docker in host mode and run on notebook port
         env.update({"PLUGIN_PORT" : notebook_port})
-        container = client.containers.run(image=docker_image,
-      command="bash ./run_image.sh",
-      detach = True,
-      network_mode = "host",
-      environment = env, 
+        container = client.containers.run(
+                image=docker_image,
+                command="bash ./run_image.sh",
+                detach = True,
+                network_mode = "host",
+                environment = env, 
+                user = "A"
     )
     while (container.status == 'restarting' or container.status == 'created'):
         container.reload()

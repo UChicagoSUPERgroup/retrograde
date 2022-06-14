@@ -1,8 +1,10 @@
 from flask_classy import FlaskView, route
-from flask import Flask, redirect, current_app, render_template
+from flask import Flask, redirect, current_app, render_template, request, abort, jsonify
+import random
+import string
 import requests
 from app.make_notebook import start_notebook, stop_notebook
-from .models import UsersContainers
+from .models import UsersContainers, TokensManager
 from datetime import date
 from requests.exceptions import ConnectionError
 import math
@@ -17,8 +19,9 @@ NOTEBOOK_NAME = "notebook_dist.ipynb"
 class MainView(FlaskView):
     route_base = '/'
 
-    @route('/<prolific_id>/<mode>', methods=['GET'])
-    def handle_request(self, prolific_id, mode):
+    # Expects two GET parameters, specifically <URL>?prolific_id=<PROLIFIC ID>&mode=<EXP MODE>
+    @route('/', methods=['GET'])
+    def handle_request(self):
         '''
         Handles getting and creating containers and corresponding db entry
 
@@ -28,7 +31,12 @@ class MainView(FlaskView):
         a prolific ID's container is not running, then it is assumed that the user
         has completed the survey.
         '''
-
+        if not ("id" in request.args and "mode" in request.args and "auth_token" in request.args):
+            return render_template('bad_req.html')
+        if not self.auth_token(request.args["auth_token"]):
+            return render_template('bad_auth.html')
+        prolific_id = request.args["id"]
+        mode = request.args["mode"]
         hostname = current_app.config['HOSTNAME']
         is_testing = current_app.config['TESTING']
         if is_testing.lower() == 'true':
@@ -87,3 +95,32 @@ class MainView(FlaskView):
                 return CONTAINER_ALREADY_STOPPED_MESSAGE, 200
 
         return INVALID_PROLIFIC_ID_ERROR, 404
+    
+    @route('/auth/', methods=['POST'])
+    def handle_auth_request(self):
+        whitelist = ["https://l-uca.com", "https://uchicago.co1.qualtrics.com"]
+        val = request.form.get("backend_token")
+        if val == None:
+            abort(400, "Malformed format.")
+        if  val != "Ggfkhltoh0U9vJt4":
+            abort(403, "False auth.")
+        new_token = self.gen_token()
+        response = jsonify({"token" : new_token})
+
+        if request.url_root in whitelist:
+            response.headers.add('Access-Control-Allow-Origin', request.url_root)
+        return response
+
+
+    def gen_token(self):
+        x = ''.join(random.choice(string.ascii_uppercase + string.ascii_lowercase + string.digits) for _ in range(16))
+        while TokensManager.tokenExists(x):
+            x = ''.join(random.choice(string.ascii_uppercase + string.ascii_lowercase + string.digits) for _ in range(16))
+        TokensManager.addToken(x)
+        return x
+
+    def auth_token(self, token):
+        if not TokensManager.tokenExists(token):
+            return False
+        TokensManager.markTokenUsed(token)
+        return True
