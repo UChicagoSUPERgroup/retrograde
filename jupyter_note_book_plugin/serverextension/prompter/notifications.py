@@ -1370,6 +1370,29 @@ def align_index(obj, values, locs):
     # then it's either a list or an np array
     return np.take(obj, locs)
 
+class UncertaintyNote(Notification):
+    def __init__(self, db):
+        super().__init__(db)
+        self.sent_count = 1
+    
+    def check_feasible(self, cell_id, env, dfs, ns):
+        return True
+    
+    def make_response(self, env, kernel_id, cell_id):
+        # Data is sent to the frontend with a list of data objects for each model. This can be changed,
+        # but I had imagined one model would have a list of different uncertainty groups.
+        # 
+        # This is probably wrong-- feel free to delete and format however you'd like, and we'll work it
+        # out on the frontend :)
+        self.data["example_model_name"] = []
+        self.data["example_model_name"].append({"type" : "uncertainty", "message" : "{0} time sent!".format(self.sent_count), "count" : self.sent_count})
+        self.data["second_example_model_name"] = [{"type" : "uncertainty", "message" : "this is a second message!"}]
+        # Note that the "example_model_name" dictionary keys are not sent to the frontend-- they only help organize
+        # the backend. If we need df names on the frontend, then we can add it to the actual data object
+    
+    def update(self, env, kernel_id, cell_id, dfs, ns):
+        self.sent_count += 1
+
 def error_rates(tp, fp, tn, fn):
     """Returns precision, recall, f1score, false positive rate, false negative rate, and the number of rows """
     if tp < 0:

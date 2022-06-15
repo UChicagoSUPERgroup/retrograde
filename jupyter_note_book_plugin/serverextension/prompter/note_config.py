@@ -1,9 +1,9 @@
-from .notifications import WelcomeNote, ProtectedColumnNote, MissingDataNote, ProxyColumnNote, ErrorSliceNote, ModelReportNote
+from .notifications import WelcomeNote, ProtectedColumnNote, MissingDataNote, ProxyColumnNote, ErrorSliceNote, ModelReportNote, UncertaintyNote
 from .config import MODE
 
 if MODE == "EXP_CTS":
     NOTE_RULES = {
-        "all" : [WelcomeNote, ProtectedColumnNote], # should trigger always
+        "all" : [WelcomeNote, ProtectedColumnNote, UncertaintyNote], # should trigger always
         "intro" : [],
         "clean" : [MissingDataNote],
         "feature_select" : [ProxyColumnNote],

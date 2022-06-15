@@ -11,6 +11,7 @@ import {
 // PromptML frontend components
 import { PopupNotification } from "./components/PopupNotification";
 import { ProtectedColumnNote } from "./components/ProtectedColumnNote";
+import { UncertaintyNote } from "./components/UncertaintyNote"
 import { WelcomeNote } from "./components/WelcomeNote";
 import { Group } from "./components/Group";
 import { Model } from "./components/Model";
@@ -175,6 +176,9 @@ export class Prompter {
           break;
         case "welcome":
           this._makeWelcomeMsg();
+          break;
+        case "uncertainty":
+          this._makeUncertainty(list_of_notes);
           break;
         default:
           console.log(`Note type not recognized, ${notice_type}`);
@@ -585,4 +589,11 @@ export class Prompter {
     }
     return returnArray;
   }
+
+  private _makeUncertainty(uncertaintyNotes: { [key: string]: any }[]) {
+    var note = new UncertaintyNote(uncertaintyNotes)
+    this._appendNote(note.generateFormattedOutput())
+    
+  }
+
 }
