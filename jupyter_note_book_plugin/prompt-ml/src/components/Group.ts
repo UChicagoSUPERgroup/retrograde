@@ -9,13 +9,15 @@ export class Group {
 
   // Dynamic
   private _content: HTMLDivElement;
+  private groupName: string;
 
   ////////////////////////////////////////////////////////////
   // Constructor
   ////////////////////////////////////////////////////////////
 
   constructor(
-    name: string,
+    groupName: string,
+    valueName: string,
     precision: string,
     recall: string,
     f1Score: string,
@@ -25,6 +27,7 @@ export class Group {
     highlights : number[],
     overall : boolean
   ) {
+    var name = overall ? "Overall" : groupName + ": " + valueName
     this._content = this._generateBaseElement(
             name,
             precision,
@@ -36,6 +39,7 @@ export class Group {
             highlights,
             overall
     );
+    this.groupName = groupName
   }
 
   ////////////////////////////////////////////////////////////
@@ -78,6 +82,7 @@ export class Group {
      
     return htmlElem;
   }
+
   private _generateMetric(
     metric_name : string,
     metric : string,
@@ -99,6 +104,10 @@ export class Group {
       `);
       return elem[1] as any as HTMLParagraphElement;
     }
+  }
+
+  public getGroupName() {
+    return this.groupName;
   }
 
   ////////////////////////////////////////////////////////////
