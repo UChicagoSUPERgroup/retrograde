@@ -10,7 +10,6 @@ from random import choice
 
 import math
 import operator
-from ssl import VERIFY_X509_TRUSTED_FIRST
 from tokenize import group
 
 import pandas as pd
