@@ -16,7 +16,11 @@ export class ProtectedColumnNote extends PopupNotification {
   // Constructor
   ////////////////////////////////////////////////////////////
 
-  constructor(notices: any[], kernel_id: string, originalMessage : { string : any}[]) {
+  constructor(
+    notices: any[],
+    kernel_id: string,
+    originalMessage: { string: any }[]
+  ) {
     super("protected", true, "Protected Columns", originalMessage);
     this._data = [];
     this._dfs = [];
@@ -39,8 +43,8 @@ export class ProtectedColumnNote extends PopupNotification {
     console.log(dfs);
     for (var x = 0; x < dfs.length; x++) {
       dfString += `<div class="dfs">
-            <div class="noselect condensed df shadowDefault" id=${dfs[x]} prompt-ml-tracking-enabled prompt-ml-tracker-interaction-description="Toggled dataframe tab (${dfs[x]})">
-                <h1><span class="prefix"> + </span>Within <span class="code-snippet">${dfs[x]}</span></h1>
+            <div class="noselect df shadowDefault" id=${dfs[x]} prompt-ml-tracking-enabled prompt-ml-tracker-interaction-description="Toggled dataframe tab (${dfs[x]})">
+                <h1><span class="prefix"> - </span>Within <span class="code-snippet">${dfs[x]}</span></h1>
                 <div class="sensitivity">
                     <h2>Column Sensitivity</h2>
                     <p class="columnSensitivityExplanation">Below you can assign each of the columns
@@ -76,15 +80,18 @@ export class ProtectedColumnNote extends PopupNotification {
         `);
     var htmlElem = elem[1] as any as HTMLElement;
     // attach method to expand / contract the content to each individual df h1
-    var listOfDataframeHeaders : NodeListOf<Element> = htmlElem.querySelectorAll(".df h1")
-    for(var dataframeHeader of listOfDataframeHeaders) {
-      (dataframeHeader as HTMLElement).onmouseup = (e : Event) => {
-        var parentElem = $($(e.currentTarget).parent())
+    var listOfDataframeHeaders: NodeListOf<Element> =
+      htmlElem.querySelectorAll(".df h1");
+    for (var dataframeHeader of listOfDataframeHeaders) {
+      (dataframeHeader as HTMLElement).onmouseup = (e: Event) => {
+        var parentElem = $($(e.currentTarget).parent());
         // Toggle basic visibility effects
         parentElem.toggleClass("condensed");
         // Change prefix to "+" or "-" depending on if the note is condensed
-        parentElem.find("h1 .prefix").text((parentElem.hasClass("condensed")) ? " + " : " - ");
-      }
+        parentElem
+          .find("h1 .prefix")
+          .text(parentElem.hasClass("condensed") ? " + " : " - ");
+      };
     }
     for (var x = 0; x < this._data.length; x++) {
       htmlElem
