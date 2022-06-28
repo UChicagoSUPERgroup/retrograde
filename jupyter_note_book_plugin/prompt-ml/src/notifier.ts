@@ -297,11 +297,12 @@ export class Prompter {
     for (var x = 0; x < proxies.length; x++) {
       var p: any = proxies[x];
       if (!(p["df"] in d))
-        d[p["df"]] = { proxy_col_name: [], sensitive_col_name: [], p_vals: [],  coeff: []};
+        d[p["df"]] = { proxy_col_name: [], sensitive_col_name: [], p_vals: [],  coeff: [], stat_name : []};
       d[p["df"]]["proxy_col_name"].push(p["proxy_col_name"]);
       d[p["df"]]["sensitive_col_name"].push(p["sensitive_col_name"]);
       d[p["df"]]["p_vals"].push(p["p"]);
       d[p["df"]]["coeff"].push(p["coefficient"]);
+      d[p["df"]]["stat_name"].push(p["stat_name"]);
     }
     var message = this._makeProxyMsg(d);
     this._appendNote(message);
@@ -328,7 +329,6 @@ export class Prompter {
   private _makeProxyMsg(d: any) {
     var note = new PopupNotification("proxy", false, "Proxy Columns", d);
     note.addHeader("Proxy Columns");
-
     for (let df_name in d) {
       note.addHeader(`Within <span class="code-snippet">${df_name}</span></strong>`);
       var df = d[df_name];
@@ -342,7 +342,7 @@ export class Prompter {
           };
         }
 
-        var col_name = `${df["proxy_col_name"][idx]} (${df["coeff"][idx]})`;
+        var col_name = `${df["proxy_col_name"][idx]} (${df["stat_name"][idx]} = ${df["coeff"][idx]})`;
 
         if (df["p_vals"][idx] < 0.001) {
           tableRows[columnName].correlated.push(col_name);
