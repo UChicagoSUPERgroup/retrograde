@@ -217,7 +217,7 @@ export class Prompter {
       var name = "Model " + model["model_name"] + " (" + (Math.floor(1000 * model["acc_orig"]) / 10) + "% accuracy)"
       var groups : Group[] = [];
       var overall = this._round(model["overall"]);
-      groups.push(new Group("Overall", overall[0], overall[1], overall[2], 
+      groups.push(new Group("Overall", "Overall", overall[0], overall[1], overall[2], 
                             overall[3], overall[4], overall[5], [0, 0, 0, 0, 0], true));
       // Accumulate all groups into a single array so that they can be sorted.
       // Original format has:
@@ -257,7 +257,7 @@ export class Prompter {
         count = thisGroup["metrics"][5];
         console.log(thisGroup["highlight"]);
         var highlights : number[] = thisGroup["highlight"];
-        groups.push(new Group(thisGroup["group"]+": "+thisGroup["correspondingGroup"], precision, recall, f1score, fpr, fnr, count, highlights, false))
+        groups.push(new Group(thisGroup["group"], thisGroup["correspondingGroup"], precision, recall, f1score, fpr, fnr, count, highlights, false))
       }
       // Attaching the data to the note itself
       note.addRawHtmlElement(new Model(name, model["current_df"], model["ancestor_df"], groups).export())

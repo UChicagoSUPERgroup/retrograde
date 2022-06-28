@@ -64,8 +64,14 @@ export class Model {
         </div>
     </div>
     `);
+    var lastGroupName = undefined
     for(var group of groups) {
-        $(elem).find(".groups-container").append($(group.export()))
+      var groupName = group.getGroupName()
+      if(lastGroupName && groupName != lastGroupName) {
+        $(elem).find(".groups-container").append($.parseHTML("<br>"))
+      }
+      lastGroupName = groupName
+      $(elem).find(".groups-container").append($(group.export()))
     }
     var htmlElem = elem[1] as any as HTMLDivElement;
     return htmlElem;
