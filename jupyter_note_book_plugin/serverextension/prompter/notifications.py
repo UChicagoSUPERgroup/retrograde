@@ -1384,9 +1384,35 @@ class UncertaintyNote(Notification):
         # 
         # This is probably wrong-- feel free to delete and format however you'd like, and we'll work it
         # out on the frontend :)
-        self.data["example_model_name"] = []
-        self.data["example_model_name"].append({"type" : "uncertainty", "message" : "{0} time sent!".format(self.sent_count), "count" : self.sent_count})
-        self.data["second_example_model_name"] = [{"type" : "uncertainty", "message" : "this is a second message!"}]
+        self.data["lr"] = [{
+            "type": "uncertainty",
+            "model_name": "lr",
+            "columns": [ # omit predictions
+                "index", "income", "term", "race", "zip"
+            ],
+            "original_values": [
+                [1, 100000, 36, "", 60637],
+                [22, 60000, 36, "asian", 60637],
+                [57, 40000, 36, "asian", 60637],
+                [129, 80000, 36, "black", 60637],
+                [192, 90000, 36, "white", 60637],
+                [302, 300000, 36, "hispanic/latino", 60637],
+                [405, 15000, 36, "white", 60637],
+                [678, 300000, 36, "other", 60637],
+            ],
+             "modified_values": [
+                [1, 60000, 36, "asian", 60637],
+                [22, 40000, 36, "asian", 60637],
+                [57, 80000, 36, "black", 60637],
+                [129, 90000, 36, "white", 60637],
+                [192, 300000, 36, "hispanic/latino", 60637],
+                [302, 15000, 36, "white", 60637],
+                [405, 30000, 36, "other", 60637],
+                [678, 40, 36, "", 60637],
+            ],
+            "original_results": [True, False, False, False, True, True, False, True],
+            "modified_results": [True, True, False, False, True, False, False, True]
+        }]
         # Note that the "example_model_name" dictionary keys are not sent to the frontend-- they only help organize
         # the backend. If we need df names on the frontend, then we can add it to the actual data object
     
