@@ -12,7 +12,7 @@ import dill
 from timeit import default_timer as timer
 
 from .storage import load_dfs
-from .visitors import DataFrameVisitor, ModelScoreVisitor
+from .visitors import DataFrameVisitor, ModelScoreVisitor, ModelFitVisitor
 
 class AnalysisEnvironment:
     """
@@ -33,6 +33,7 @@ class AnalysisEnvironment:
         
         self._nbapp = nbapp
         self.models = {}
+        self.models_f = {}
 
         self.ptr_set = {}
         self.log = self._nbapp.log
@@ -66,10 +67,13 @@ class AnalysisEnvironment:
         df_visitor.visit(cell_code) 
         self.ptr_set.update(df_visitor.assign_map)  
 
-        model_visitor = ModelScoreVisitor(self.pandas_alias, model_names, full_ns, self.ptr_set) 
-        model_visitor.visit(cell_code)
+        model_score_visitor = ModelScoreVisitor(self.pandas_alias, model_names, full_ns, self.ptr_set) 
+        model_score_visitor.visit(cell_code)
+
+        model_fit_visitor = ModelFitVisitor(self.pandas_alias, model_names, full_ns, self.ptr_set)
+        model_fit_visitor.visit(cell_code)
        
-        # handle updates, update columns, model fit calls etc
+        # handle updates, update columns, model score + fit calls etc
         
         # check if new data in any way
         # of form {<df name> : {"source" : filename, "format" : format}}
@@ -111,9 +115,9 @@ class AnalysisEnvironment:
                     anc_max_version = max([anc["version"] for anc in anc_versions])
                 self.ancestors[child].add((ancestor, anc_max_version))
 
-        # new model fit calls? 
-        new_models = model_visitor.models
-        self.log.debug("[AnalysisEnv] new models are {0}".format(new_models)) 
+        # new model score calls? 
+        new_models = model_score_visitor.models
+        self.log.debug(f"[AnalysisEnv] new models discovered from score are {new_models}") 
         for model_name in new_models.keys():
             if model_name in self.models:
                 if ("x" in self.models[model_name] and\
@@ -125,6 +129,19 @@ class AnalysisEnvironment:
             else: 
                 self.models[model_name] = new_models[model_name]
                 self.models[model_name]["cell"] = cell_id
+        # new model fit calls?
+        fit_models = model_fit_visitor.models
+        self.log.debug(f"[AnalysisEnv] new models discovered from fit are {fit_models}")
+        for model_name in fit_models:
+            if model_name in self.models_f:
+                if ("X" in self.models_f[model_name] and "X" in fit_models[model_name]) or \
+                ("y" in self.models_f[model_name] and "y" in self.models_f[model_name]):
+                    self.models_f[model_name] = new_models[model_name]
+                    self.models_f[model_name]["cell"] = cell_id
+            else:
+                self.models_f[model_name] = new_models[model_name]
+                self.models_f[model_name]["cell"] = cell_id
+
     def _get_new_data(self, df_ns, cell_id):
         """find the new dataframe elements""" 
         new_dfs = {}

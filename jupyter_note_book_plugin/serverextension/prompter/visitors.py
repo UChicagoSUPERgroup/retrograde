@@ -194,16 +194,9 @@ class ModelScoreVisitor(BaseImportVisitor):
 
         return visitor.cols, visitor.df_name
 
-class ModelFitVisitor(BaseImportVisitor):
+class ModelFitVisitor(ModelScoreVisitor):
     def __init__(self, pd_alias, model_names, namespace, assign_map):
-        super().__init__(pd_alias)
-        # strings of known model variable names
-        self.model_names = model_names
-        self.ns = namespace # mapping of varname -> object
-        self.assignments = assign_map # map of name.id -> RHS of assign statement
-
-        self.models = {}
-        self.unmatched_call = None
+        super().__init__(pd_alias, model_names, namespace, assign_map)
     
     def is_model_fit(self, call_node):
         # if this is a function node, check to see if it is a call to 
@@ -213,12 +206,13 @@ class ModelFitVisitor(BaseImportVisitor):
             # if this fit call is a variable name, we want it
             if isinstance(call_node.func.value, Name) and call_node.func.value.id in self.model_names:
                 return True
+        elif isinstance(call_node.func, Call):
             # if it's not a variable, but still a SomethingClassifier.fit call, 
             # we want that too. Unfortunately, scikit learn is DuckTyped. 
             # Things that "fit" just happen to have a fit function without 
             # inheriting from the same base class
 
-            classname = str.lower(call_node.attr)
+            classname = str.lower(call_node.func.value.attr)
 
             # this should get most of them
             if "classifier" in classname or "regress" in classname or "forest" \
@@ -242,33 +236,11 @@ class ModelFitVisitor(BaseImportVisitor):
             
             if open_names:
                 name = open_names.pop()
-                self.models[name] = {"X" : X_cols, "y" : y_cols, 
-                                     "X_df" : X_df_name, "y_df" : y_df_name}
+                self.models[name] = {"X" : X_cols, "y" : y_cols if y_cols is not None else "__None", 
+                                     "X_df" : X_df_name, "y_df" : y_df_name if y_df_name is not None else "__None"}
             else:
-                self.unmatched_call = {"X" : X_cols, "y" : y_cols,
-                                       "x_df" : y_df_name, "y_df" : y_df_name}
-
-    def visit_Assign(self, node): 
-        self.generic_visit(node)
-        open_names = [n for n in self.models.keys() if self.models[n] == {}]
-
-        if open_names and self.unmatched_call: 
-
-            name = open_names.pop()
-            self.models[name] = self.unmatched_call
-            self.unmatched_call = None
- 
-    def visit_Name(self, node):
-        if node.id in self.model_names and node.id not in self.models.keys():
-            self.models[node.id] = {}
-
-    def get_columns(self, node):
-        visitor = ColumnVisitor(self.ns, self.assignments)
-        visitor.visit(node)
-
-        return visitor.cols, visitor.df_name
-
-    
+                self.unmatched_call = {"X" : X_cols, "y" : y_cols if y_cols is not None else "__None",
+                                       "X_df" : y_df_name, "y_df" : y_df_name if y_df_name is not None else "__None"}
 
 
 class ColumnVisitor(NodeVisitor):
