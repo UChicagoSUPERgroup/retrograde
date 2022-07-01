@@ -6,17 +6,18 @@ These are the classes that handle detecting when a notification may be
 sent, what its response is composed of, and updating response contents
 when relevant
 """
-from random import choice
-
+from random import choice, sample, random as random_number
+from re import compile
+from difflib import SequenceMatcher
 import math
 import operator
-from ssl import VERIFY_X509_TRUSTED_FIRST
-from tokenize import group
+from ast import literal_eval
 
 import pandas as pd
 from pandas.api.types import is_numeric_dtype
 import numpy as np
 import dill
+import json
 
 from scipy.stats import f_oneway, chi2_contingency, spearmanr, chisquare
 from scipy.stats.contingency import association
@@ -25,6 +26,7 @@ from sklearn.base import ClassifierMixin
 from .string_compare import check_for_protected, guess_protected, set_env
 from .sortilege import is_categorical
 from .slice_finder import err_slices
+from .storage import clean_json, NpEncoder
 
 PVAL_CUTOFF = 0.25 # cutoff for thinking that column is a proxy for a sensitive column
 
@@ -724,8 +726,7 @@ class ModelReportNote(Notification):
         self.aligned_models = {} # candidates for tabulating error types
         self._info_cache = {} # cache of notes used for generated note updating
         self.columns = {}
-
-        self.k = 3 #Q? what should k be? how can user change k? (this is k highest error rates to display)
+        self.k = 3
         self.BOUND = 0.1 # how much above/below median must a metric be to be highlighted
         self.GROUP_LIMIT = 0.01 # what fraction of data must a subgroup be before being highlighted?
 
@@ -1128,12 +1129,14 @@ class ModelReportNote(Notification):
             sorted_error_rates = {}
             k_highest_error_rates = {}
             for x_ancestor, x_ancestor_name, prot_col_name, prot_col in zip(x_ancestors, x_ancestor_names, prot_col_names, prot_cols):
-                sorted_error_rate, k_highest_error_rate = self.get_sorted_k_highest_error_rates(env, 
-                                                                                        prot_col_name, 
-                                                                                        model_name, 
-                                                                                        x_ancestor, 
-                                                                                        X, y, 
-                                                                                        orig_preds) 
+                sorted_error_rate, k_highest_error_rate = self.get_sorted_k_highest_error_rates(
+                    env, 
+                    prot_col_name, 
+                    model_name, 
+                    x_ancestor, 
+                    X, y, 
+                    orig_preds
+                ) 
                 sorted_error_rates = {**sorted_error_rates, **sorted_error_rate}
                 k_highest_error_rates = {**k_highest_error_rates, **k_highest_error_rate}
            
@@ -1223,12 +1226,14 @@ class ModelReportNote(Notification):
             sorted_error_rates = {}
             k_highest_error_rates = {}
             for x_ancestor, x_ancestor_name, prot_col_name, prot_col in zip(x_ancestors, x_ancestor_names, prot_col_names, prot_cols):
-                sorted_error_rate, k_highest_error_rate = self.get_sorted_k_highest_error_rates(env, 
-                                                                                        prot_col_name, 
-                                                                                        model_name, 
-                                                                                        x_ancestor, 
-                                                                                        X, y, 
-                                                                                        new_preds) 
+                sorted_error_rate, k_highest_error_rate = self.get_sorted_k_highest_error_rates(
+                    env, 
+                    prot_col_name, 
+                    model_name, 
+                    x_ancestor, 
+                    X, y, 
+                    new_preds
+                )
                 env.log.debug(f"[ModelReportNote] (update) new sorted_error_rate found for {x_ancestor_name} and {prot_col_name}", sorted_error_rate)
                 env.log.debug(f"[ModelReportNote] (update) new k_highest_error_rate found for {x_ancestor_name} and {prot_col_name}", k_highest_error_rate)
                 sorted_error_rates = {**sorted_error_rates, **sorted_error_rate}
@@ -1371,53 +1376,538 @@ def align_index(obj, values, locs):
     return np.take(obj, locs)
 
 class UncertaintyNote(Notification):
+    """
+    Something something uncertainty...
+
+    """
     def __init__(self, db):
         super().__init__(db)
         self.sent_count = 1
-    
+        self.T = 1 # num of trials allotted
+        # self.T = 10 # num of trials allotted
+        self._info_cache = {}
+        self.columns = {}
+
+    def _get_new_models(self, cell_id, env, non_dfs_ns): 
+        """
+        return dictionary of model names in cell that are defined in the namespace
+        and that do not already have a note issued about them
+        """  
+        poss_models = env.get_models()
+        models = {model_name : model_info for model_name, model_info in poss_models.items() if model_name in non_dfs_ns.keys()} 
+        old_models = list(self.data.keys())
+        
+        return {model_name : model_info for model_name, model_info in models.items() if model_name not in old_models}
+
     def check_feasible(self, cell_id, env, dfs, ns):
-        return True
+        # if there exists a model (prob similar to modelrepnote)
+        if "namespace" in ns:
+            non_dfs_ns = dill.loads(ns["namespae"])
+        else:
+            non_dfs_ns = ns
+
+        models = self._get_new_models(cell_id, env, non_dfs_ns)
+        defined_dfs = dfs
+
+        models_with_dfs = check_call_dfs(defined_dfs, non_dfs_ns, models, env)
+        found_models = {}
+        
+        for model_name in models_with_dfs:
+            found_models[model_name] = models_with_dfs[model_name]
+            
+        
+        if len(found_models) > 0:
+            self.found_models = found_models
+            return True
+        else:
+            return False
+
+    def choose_numeric(self, env, data, unique_vals, budget):
+        """
+
+        Parameters
+        ----------
+        env : _type_
+            _description_
+        unique_vals : _type_
+            _description_
+        budget : _type_
+            _description_
+
+        Returns
+        -------
+        list-like
+            Randomly chosen values chose
+        """
+        # Random Sampling
+        # chosen = sample(unique_vals, budget)
+        # or 
+        # max_val = np.max(unique_vals)
+        # max_range = range(max_val)
+        # chosen = sample(max_range, budget) # any numbers in the range from 0 
+        # or 
+        # quantiles = [choice(list(range(1, len(unique_vals))))/len
+        # (unique_vals) for _ in range(budget)]
+        # chosen = np.quantile(unique_vals, quantiles)
+
+        if isinstance(data, pd.Series):
+            values = data.values
+            indices = data.index
+        else:
+            # raise error
+            pass
+        # or 
+        std = data.std()
+        rng = np.random.default_rng()
+        deltas = np.asarray(rng.random(budget))
+        # regenerate deltas?
+
+        chosen = [data.copy() for _ in range(budget)] 
+        # modified copies of original data
+        for row, idx in zip(values, indices):
+            plus_minus = 1 if random_number() < 0.5 else -1
+            rand_samp = [row + (plus_minus * std * d) for d in deltas]
+            # instance value + (+- 1 * standard deviation * delta)
+            for b in range(budget):
+                chosen[b][idx] = rand_samp[b]
+        return chosen
+
+    def choose_categorical(self, env, data, unique_vals, budget, is_one_hot):
+        if isinstance(data, pd.Series):
+            values = data.values
+            indices = data.index
+        else:
+            # raise error
+            pass
+
+        
+        chosen = [data.copy() for _ in range(budget)] 
+        for row, idx in zip(values, indices):   
+            rand_samp = sample(list(set(unique_vals) - {row}), k=budget)
+            for b in range(budget):
+                chosen[b][idx] = rand_samp[b]
+
+        if is_one_hot:
+            for b in range(budget):
+                chosen[b] = pd.get_dummies(chosen[b])
+        return chosen
     
+    def generate_counterfactual(self, env, data, unique_vals, budget, is_one_hot):
+        """
+        Modifies a row instance for the given column, generates rows according to the given budget.
+
+
+        Parameters
+        ----------
+        data : pd.Series, np.ndarray
+             the data instance counterfactuals will be generated for
+        unique_vals : pd.Series, np.ndarray
+            set of unique values in the column_to_modify
+        budget : int
+            the maximum number of new rows to be generated
+
+        Returns 
+        -------
+        Array of counterfactual values
+
+        Raises
+        ------
+        """
+        ctf_instances = []
+
+
+        if is_categorical(data) or is_one_hot:
+            ctf_instances = self.choose_categorical(env, data,
+                unique_vals, budget, is_one_hot)
+            # ctf_instances = sample(unique_vals, budget)
+        elif is_numeric_dtype(data):
+            ctf_instances = self.choose_numeric(env, data, unique_vals, budget)
+        else:
+            env.log.error(f"[counterfactual] no data type found for unique_vals: {unique_vals}")
+            raise RuntimeError()
+        return ctf_instances
+
+    def ctf_predict(self, env, model, data, ctfs, y_true, is_one_hot):
+        """_summary_
+
+        Parameters
+        ----------
+        env : _type_
+            _description_
+        model : Classifier Model
+            the model used to make new classifications
+        data : DataFrame
+            original data tested on
+        ctfs : dict
+            the counter factuals \n            
+            {
+                col_name: [original_val', original_val'', ...],
+                col_name2: [...], \n
+                ...
+            }
+        y_true : Series
+            the true y labels
+            
+        Returns
+        -------
+        dict
+            New predictions \n
+            {
+                col_name: pd.Series(new_predictions), \n
+                ...
+            }
+            
+        """
+        new_preds = {column : {} for column in ctfs.keys()} # holds the new predictions
+        new_scores = {column : {} for column in ctfs.keys()} # holds the new accuracy scores
+        new_dfs = {column : {} for column in ctfs.keys()} # holds the new dataframes with the counterfactuals and other values
+        for column in ctfs.keys():
+            data_prime = data.copy()
+            for b in range(self.T):
+                if is_one_hot:
+                    # dataframe 
+                    orig_col_order = list(data_prime.columns)
+                    env.log.info(f"data_prime columns before: {data_prime.columns}\n shape: {data_prime.shape}")
+                    df_prime = pd.DataFrame(ctfs[column][b])
+                    env.log.info(f"df_prime cols: {df_prime.columns}\n shape: {df_prime.shape}")
+                    data_prime = data_prime.drop(columns=list(column))
+
+                    if df_prime.shape[1] != len(orig_col_order):
+                        env.log.info(f"column: {column}")
+                        empty_cols = set(list(column)) - set(df_prime.columns)
+                        empties = []
+                        env.log.info(f"empty_cols: {empty_cols}")
+                        for empty in empty_cols:
+                            empties.append(pd.Series([0] * df_prime.shape[0], name=empty, index=df_prime.index))
+                        df_prime = pd.concat([df_prime, *empties], axis=1)
+
+                    try:
+                        data_prime[list(column)] = df_prime
+                    except ValueError as v:
+                        env.log.error(f"{v} \ndata_prime columns: {data_prime.shape}, {data_prime.columns}, subset: {df_prime.shape} {list(column)}")
+                        raise ValueError(v.args)
+                    try:
+                        data_prime = data_prime[orig_col_order] 
+                    except ValueError as v:
+                        env.log.error(f"{v}")
+                        raise ValueError(v.args)
+                else:
+                    col_prime = pd.Series(ctfs[column][b])
+                    data_prime[column] = col_prime
+                new_dfs[column][b] = data_prime
+                new_preds[column][b] = pd.Series(model.predict(data_prime), index=data_prime.index)
+                new_scores[column][b] = model.score(data_prime, y_true)
+        return new_preds, new_scores, new_dfs
+
+    def determine_budget(self, env, data, mode="kevin"):
+        """
+
+        Parameters
+        ----------
+        env : _type_
+            _description_
+        kernel_id : _type_
+            _description_
+        cell_id : _type_
+            _description_
+        data : _type_
+            _description_
+
+        Returns
+        -------
+        _type_
+            _description_
+        """
+        return 1 if mode == "kevin" else self.T
+
+    def ctf_statistics(self, env, ctf_predictions, original_predictions, ctf_accuracy, 
+        original_accuracy):
+       
+        '''
+        want to calculate all the ctf specific data (for each feature's predictions) then
+        calculate some general uncertainty calculations
+        '''
+        statistics = {}
+        biggest_diff = {}
+        for ctf_key, value in ctf_predictions.items():
+            ctf_trials, ctf_accuracy = value
+            ctf_key = str(ctf_key)
+            if True: 
+                # Kev Mode
+                for ctf_pred in ctf_trials.values():
+                    # ctf_pred, ctf_accuracy = ctf_value
+                    env.log.info(f"generating stats for {ctf_key}")
+                    # log the key
+
+                    # get the indices of rows with different preds
+                    diff_indices = (original_predictions != ctf_pred).index.to_list()
+
+                    total = len(original_predictions)
+                    raw_diff = int((original_predictions != ctf_pred).sum() )
+                    # num of rows with diff predictions
+                    env.log.debug(f"original_preds: {original_predictions}")
+                    env.log.debug(f"ctf_preds: {ctf_pred}")
+                    
+                    try:
+                        true_to_False = int(ctf_pred[original_predictions==True].value_counts()[False])
+                    except KeyError:
+                        true_to_False = 0
+                    # num of rows where the prediction shifted from True -> False
+
+                    try:
+                        false_to_True = int(ctf_pred[original_predictions==False].value_counts()[True])
+                    except KeyError:
+                        false_to_True = 0
+                    # num of rows where the prediction shifted from False -> True
+
+                    env.log.debug(f"{ctf_key} true_to_False: {true_to_False}, false_to_True: {false_to_True}")
+                    if ctf_key not in statistics:
+                        statistics[ctf_key] = {
+                            'raw_diff': 0,
+                            'true_to_False': 0,
+                            'false_to_True': 0,
+                            'accuracy': ctf_accuracy,
+                            'diff_indices': diff_indices,
+                            'total': total
+                        }
+                    statistics[ctf_key]['raw_diff'] += raw_diff
+                    statistics[ctf_key]['true_to_False'] += true_to_False
+                    statistics[ctf_key]['false_to_True'] += false_to_True
+                    statistics[ctf_key]['total'] += total
+                    
+                    if "single_ctf" not in biggest_diff:
+                        biggest_diff["single_ctf"] = {
+                            "column": ctf_key,
+                            "raw_diff": statistics[ctf_key]['raw_diff'],
+                            "true_to_False": statistics[ctf_key]['true_to_False'],
+                            "false_to_True": statistics[ctf_key]['false_to_True'],
+                            "accuracy": statistics[ctf_key]['accuracy'],
+                            "diff_indices": statistics[ctf_key]['diff_indices'],
+                            "total": statistics[ctf_key]['total']
+                        }
+                    elif biggest_diff["single_ctf"]["raw_diff"] < raw_diff:
+                        biggest_diff["single_ctf"] = {
+                            "column": ctf_key,
+                            "raw_diff": statistics[ctf_key]['raw_diff'],
+                            "true_to_False":  statistics[ctf_key]['true_to_False'],
+                            "false_to_True": statistics[ctf_key]['false_to_True'],
+                            "accuracy": statistics[ctf_key]['accuracy'],
+                            "diff_indices": statistics[ctf_key]['diff_indices'],
+                            "total": statistics[ctf_key]['total']
+                        }
+            else: 
+                # Galen stats
+                pass
+        statistics["biggest_diff"] = biggest_diff
+        return statistics
+
+    def uncertainty(self, env, model_name, mode, updated_data={}):
+        resp = {"type" : "uncertainty", "model_name" : model_name, "trials" : self.T}
+        X = self.found_models[model_name]["x"]
+        y = self.found_models[model_name]["y"]
+        model = self.found_models[model_name]["model"]
+
+        orig_accuracy = model.score(X,y)
+        orig_predictions = pd.Series(model.predict(X), index=X.index)
+
+        # for each feature get the ctfs and put in a dict
+        # budget = self.determine_budget(env, kernel_id, cell_id, X)
+        counterfactuals = {}
+        new_predictions = {}
+        prefixes = get_one_hot_prefix(list(X.columns))
+        one_hots = [tuple(c for c in X.columns if c.startswith(pre)) for pre in prefixes]
+        # subsets of one hot columns (tuple for hashability)
+        while True:
+            try:
+                empty_elem = one_hots.index(()) # look for empty
+            except ValueError:
+                # no more
+                break
+            else:
+                # remove empty (i.e. this prefix was incorrect)
+                one_hots.pop(empty_elem)
+                prefixes.pop(empty_elem)
+        columns = []
+        datas = []
+        for c in X.columns:
+            is_one_hot = False
+            for pre in prefixes:
+                if c.startswith(pre):
+                    is_one_hot = True
+            if not is_one_hot:
+                columns.append(c)
+                datas.append(X[c])
+        one_hot_as_column = []
+        if len(one_hots) > 0:
+            env.log.debug(f"[uncertainty] one_hots: {list(one_hots)}")
+            one_hot_as_column = [X[list(one_hots[idx])].idxmax(axis=1) for idx in range(len(list(one_hots)))]
+
+        datas.extend(one_hot_as_column) 
+        columns.extend(one_hots)
+
+        env.log.debug(f"[uncertainty] prefixes: {prefixes}")
+        env.log.debug(f"[uncertainty] datas: {datas}")
+        env.log.debug(f"[uncertainty] columns: {columns}")
+        # TODO: predict all combinations up to N choose 2
+        for feature, data in zip(columns, datas):
+            # generate a list of possible counterfactual values
+            one_hot_feature = True if feature in one_hots else False
+            feature_ctfs = self.generate_counterfactual(env, 
+                data, data.unique(), budget=self.T, is_one_hot=one_hot_feature)
+            counterfactuals[feature] = feature_ctfs
+
+            # use the list of possible ctf values to make new predictions with 
+            # with just the generated values from this feature
+            ctf_preds, ctf_accuracy, ctf_dfs = self.ctf_predict(env, model, X, 
+                {feature: feature_ctfs}, y, is_one_hot=one_hot_feature)
+            for f in ctf_preds.keys():
+                # if multiple ctfs changed at once 
+                new_predictions[f] = (ctf_preds[f], ctf_accuracy[f])
+                counterfactuals[f] = ctf_dfs[f] 
+                env.log.info(f"[uncertainty] new preds for {feature} are:\n{new_predictions[f]}")
+        # calculate statistics about ctf predictions
+        ctf_statistics = self.ctf_statistics(env, new_predictions, orig_predictions,
+            ctf_accuracy, orig_accuracy)
+
+        # get the diff (only rows with different predictions)
+        diff_preds = {}
+        diff_data = {}
+        for f in ctf_statistics.keys():
+            if f == "biggest_diff":
+                continue
+            diff_indices = ctf_statistics[f]['diff_indices']
+            # trying to avoid key error from stringed tuple
+            try:
+                key_f = literal_eval(f)
+            except ValueError:
+                key_f = f
+
+            diff_ctf_preds, diff_counterfactuals = self.get_diff(diff_indices, 
+                new_predictions[key_f][0], counterfactuals[key_f])
+            diff_preds[f] = diff_ctf_preds
+            diff_data[f] = diff_counterfactuals
+        # resp["counterfactuals"] = clean_json(counterfactuals)
+        # resp["new_predictions"] = clean_json(ctf_preds)
+        resp["columns"] = X.columns.to_list() # break apart tuples? neccessary or just columns??
+        resp["ctf_statistics"] = clean_json(ctf_statistics)
+        resp["original_values"] = X
+        resp["modified_values"] = clean_json(diff_data)
+        resp["original_results"] = orig_predictions # model's predictions
+        resp["modified_results"] = clean_json(diff_preds)
+        resp["df_name"] = self.found_models[model_name]["x_name"]
+        resp["original_accuracy"] = orig_accuracy
+
+        env.log.debug(f"[uncertainty] ({mode}) response is \n{resp}")
+        if mode == "make_response":
+            self._info_cache[model_name] = self.found_models[model_name]
+            if resp["model_name"] not in self.columns:
+                self.columns[resp["model_name"]] = (X,y)
+            else:
+                self.columns[resp["model_name"]] = (X, y)
+                
+            resp = json.loads(NpEncoder().encode(resp))
+            if model_name in self.data:
+                self.data[model_name].append(resp)
+            else:
+                self.data[model_name] = [resp]
+            return self.data
+        elif mode == "update":
+            resp = json.loads(NpEncoder().encode(resp))
+            updated_data[model_name] = [resp]
+            return updated_data
+
     def make_response(self, env, kernel_id, cell_id):
         # Data is sent to the frontend with a list of data objects for each model. This can be changed,
         # but I had imagined one model would have a list of different uncertainty groups.
         # 
         # This is probably wrong-- feel free to delete and format however you'd like, and we'll work it
         # out on the frontend :)
-        self.data["lr"] = [{
-            "type": "uncertainty",
-            "model_name": "lr",
-            "columns": [ # omit predictions
-                "index", "income", "term", "race", "zip"
-            ],
-            "original_values": [
-                [1, 100000, 36, "", 60637],
-                [22, 60000, 36, "asian", 60637],
-                [57, 40000, 36, "asian", 60637],
-                [129, 80000, 36, "black", 60637],
-                [192, 90000, 36, "white", 60637],
-                [302, 300000, 36, "hispanic/latino", 60637],
-                [405, 15000, 36, "white", 60637],
-                [678, 300000, 36, "other", 60637],
-            ],
-             "modified_values": [
-                [1, 60000, 36, "asian", 60637],
-                [22, 40000, 36, "asian", 60637],
-                [57, 80000, 36, "black", 60637],
-                [129, 90000, 36, "white", 60637],
-                [192, 300000, 36, "hispanic/latino", 60637],
-                [302, 15000, 36, "white", 60637],
-                [405, 30000, 36, "other", 60637],
-                [678, 40, 36, "", 60637],
-            ],
-            "original_results": [True, False, False, False, True, True, False, True],
-            "modified_results": [True, True, False, False, True, False, False, True]
-        }]
+        # self.data["lr"] = [{
+        #     "type": "uncertainty",
+        #     "model_name": "lr",
+        #     "columns": [ # omit predictions
+        #         "index", "income", "term", "race", "zip"
+        #     ],
+        #     "original_values": [
+        #         [1, 100000, 36, "", 60637],
+        #         [22, 60000, 36, "asian", 60637],
+        #         [57, 40000, 36, "asian", 60637],
+        #         [129, 80000, 36, "black", 60637],
+        #         [192, 90000, 36, "white", 60637],
+        #         [302, 300000, 36, "hispanic/latino", 60637],
+        #         [405, 15000, 36, "white", 60637],
+        #         [678, 300000, 36, "other", 60637],
+        #     ],
+        #      "modified_values": [
+        #         [1, 60000, 36, "asian", 60637],
+        #         [22, 40000, 36, "asian", 60637],
+        #         [57, 80000, 36, "black", 60637],
+        #         [129, 90000, 36, "white", 60637],
+        #         [192, 300000, 36, "hispanic/latino", 60637],
+        #         [302, 15000, 36, "white", 60637],
+        #         [405, 30000, 36, "other", 60637],
+        #         [678, 40, 36, "", 60637],
+        #     ],
+        #     "original_results": [True, False, False, False, True, True, False, True],
+        #     "modified_results": [True, True, False, False, True, False, False, True]
+        # }]
         # Note that the "example_model_name" dictionary keys are not sent to the frontend-- they only help organize
         # the backend. If we need df names on the frontend, then we can add it to the actual data object
+        super().make_response(env, kernel_id, cell_id)
+        
+        for model_name in self.found_models.keys():
+            self.uncertainty(env, model_name, mode="make_response")
     
     def update(self, env, kernel_id, cell_id, dfs, ns):
-        self.sent_count += 1
+        # self.sent_count += 1
+        ns = self.db.recent_ns()
+        non_dfs_ns = dill.loads(ns["namespace"])
+
+        def check_if_defined(resp):
+
+            if resp not in non_dfs_ns:
+                return False
+
+            X, y = self.columns.get(resp)
+            model = non_dfs_ns.get(resp)
+
+            if X is None or y is None or model is None:
+                return False
+            if not isinstance(model, ClassifierMixin):
+                return False
+            try: 
+                # there's no universal way to test whether the input and 
+                # output shapes match the trained model in sklearn, so this
+                # is easiest
+                model.score(X,y)
+            except ValueError:
+                return False
+            return True 
+        
+        live_resps = [model for model in self.data if check_if_defined(model)]
+        updated_data = {}
+
+        for model_name in live_resps:
+            updated_data = self.uncertainty(env, model_name, mode="update", 
+                updated_data=updated_data)
+        # remember to clean up non-live elements of self.columns
+        live_names = [model_name for model_name in live_resps]
+        old_names = [resp for resp in self.data if resp  not in live_names]
+    
+        for old_name in old_names:
+            del self.columns[old_name]
+            del self._info_cache[old_name] 
+        self.data = updated_data
+
+    def get_diff(self, indices, predictions, df):
+        # need to just use .loc to select the rows in predictions and the df where the data has
+        # changed. then return those values.
+        diff_predictions = {}
+        diff_df = {}
+        for b in predictions.keys():
+            diff_predictions[b] = predictions[b].loc[indices]
+            diff_df[b] = df[b].loc[indices]
+        return diff_predictions, diff_df
 
 def error_rates(tp, fp, tn, fn):
     """Returns precision, recall, f1score, false positive rate, false negative rate, and the number of rows """
@@ -1651,3 +2141,21 @@ def resolve_col_type(column):
     if is_categorical(column):
         return "categorical"
     return "unknown"
+
+def get_one_hot_prefix(columns):
+    substring_counts={}
+    
+    special_char = compile('[@_!#$%^&*()<>?/\|}{~:]')
+    for i in range(0, len(columns)):
+        for j in range(i+1,len(columns)):
+            string1 = columns[i]
+            string2 = columns[j]
+            match = SequenceMatcher(None, string1, string2).find_longest_match()
+            matching_substring=string1[match.a:match.a+match.size]
+            if(matching_substring not in substring_counts):
+                if (special_char.search(matching_substring)):
+                    substring_counts[matching_substring]=1
+            else:
+                substring_counts[matching_substring]+=1
+
+    return [prefix for prefix, occurences in substring_counts.items() if occurences > 1 and len(prefix) > 0]

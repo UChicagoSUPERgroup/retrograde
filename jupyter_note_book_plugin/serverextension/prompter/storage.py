@@ -5,6 +5,8 @@ notebook application and tracking development of particular cells over time
 from datetime import datetime, timedelta
 
 import json
+import numpy as np
+import pandas as pd
 import sqlite3
 import os
 import dill
@@ -461,7 +463,7 @@ class DbHandler:
         """store response in database"""
         self.renew_connection()
 
-        self._cursor.execute(self.cmds["STORE_RESP"], (kernel_id, self.user, cell_id, json.dumps(response), exec_ct))
+        self._cursor.execute(self.cmds["STORE_RESP"], (kernel_id, self.user, cell_id, json.dumps(response, cls=NpEncoder), exec_ct))
         self._conn.commit()
 
     def get_responses(self, kernel_id):
@@ -603,3 +605,29 @@ def load_dfs(ns):
     """take namespace and load dataframe objects from reserved variable name"""
     ns_dict = dill.loads(ns["namespace"])
     return {k : dill.loads(v) for k,v in ns_dict["_forking_kernel_dfs"].items()}
+
+def clean_json(d):
+    """
+    clear tuples from one level of a dictionary d
+    """
+    for k in list(d.keys()):
+        if isinstance(k, tuple):
+            v = d.pop(k)
+            d[str(k)] = v
+    return d
+    
+class NpEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        if isinstance(obj, np.floating):
+            return float(obj)
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        if isinstance(obj, pd.Series):
+            return obj.values.tolist()
+        if isinstance(obj, tuple):
+            return str(obj)
+        if isinstance(obj, pd.DataFrame):
+            return obj.to_numpy()
+        return super(NpEncoder, self).default(obj)
