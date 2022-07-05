@@ -17,7 +17,6 @@ export class UncertaintyNote extends PopupNotification {
   constructor(notices: any[]) {
     super("uncertainty", false, "Uncertainty Note", notices);
     this._notices = notices;
-    console.log("uncertainty notices:", notices);
     super.addRawHtmlElement(this._generateBaseNote());
   }
 
@@ -30,58 +29,186 @@ export class UncertaintyNote extends PopupNotification {
     var elem = $.parseHTML(`
             <div class="promptMl uncertaintyNote">
                 <h1>Uncertainty Note</h1>
-                <div class="model">
-                  <h3>Model <span="code-snippet">lr</span></h3>
-                  <div class="uncertaintyNoteTableContainer"><span style="width: 100%; display: flex; flex-direction: row; padding-bottom: 8px"><span class="labelContainer"><h4>Original</h4></span><span class="labelContainer"><h4>Race + Income</h4></span></span></div>
-                  <div class="conclusions">
-                    <h4>Conclusions</h4>
-                    <ul>
-                      <li>5 predictions changed when we modified 'race' and 'income'</li>
-                      <li>2 of these changes were from True to False</li>
-                      <li>3 of these changes were from False to True</li>
-                      <li>The combination of <span className="code-snippet-inline">black</span> and <span className="code-snippet-inline">$80,000</span> resulted in the most changed predictions with 2 changes occuring.</li>
-                    </ul>
-                  </div>
+                <div class="models">
                 </div>
             </div>
     `);
-    $(elem).find(".uncertaintyNoteTableContainer").append(this._renderTable());
-    $(elem).find(".uncertaintyNoteTableContainer").append(this._renderTable("modified_values", "modified_results"));
-    var htmlElem = elem[1] as any as HTMLElement;
-    $(elem).find('.uncertaintyNoteTableContainer div:first-of-type').on('scroll', function (e) {
-      var scrollLeft = $('.uncertaintyNoteTableContainer div:first-of-type').scrollLeft();
-      $('.uncertaintyNoteTableContainer div:nth-of-type(2)').scrollLeft(scrollLeft);
-    })
-    $(elem).find('.uncertaintyNoteTableContainer div:nth-of-type(2)').on('scroll', function (e) {
-      var scrollLeft = $('.uncertaintyNoteTableContainer div:nth-of-type(2)').scrollLeft();
-      $('.uncertaintyNoteTableContainer div:first-of-type').scrollLeft(scrollLeft);
-    })
-    return htmlElem;
+    for (var model of this._notices) {
+      $(elem).find(".models").append(this._generateModelContent(model));
+    }
+    return elem[1] as any as HTMLElement;
   }
 
-  private _renderTable(values_key : string = "original_values", results_key : string = "original_results"): HTMLElement {
-    var tables = this._generateElement("div", "");
-    for(var notice of this._notices) {
-      var table = this._generateElement("table", "");
-      var headers = this._generateElement("tr", "");
-      for(var columnName of notice["columns"])
-        headers.appendChild(this._generateElement("th", columnName))
-      headers.appendChild(this._generateElement("th", "Prediction"))
-      table.appendChild(headers)
-      for(var x = 0; x < notice[values_key].length; x++) {
-        var data = this._generateElement("tr", "");
-        for(var y = 0; y < notice[values_key][x].length; y++) {
-          data.appendChild(this._generateElement("td", notice[values_key][x][y]))
+  private _generateModelContent(model: { [key: string]: any }): HTMLElement {
+    var elem = $.parseHTML(`
+      <div class="noselect model shadowDefault" prompt-ml-tracking-enabled prompt-ml-tracker-interaction-description="Toggled model tab (${model["model_name"]})">
+        <h2><span class="prefix"> - </span>Within <span class="code-snippet">${model["model_name"]}</span></h2>
+        <div class="toggleable"></div>
+      </div>
+    `);
+    // handle expanded / condensed views
+    $(elem)
+      .find("h2")
+      .on("mouseup", (e: Event) => {
+        var parentElem = $($(e.currentTarget).parent());
+        // Toggle basic visibility effects
+        parentElem.toggleClass("condensed");
+        // Change prefix to "+" or "-" depending on if the note is condensed
+        parentElem
+          .find("h2 .prefix")
+          .text(parentElem.hasClass("condensed") ? " + " : " - ");
+      });
+    // generate table
+    $(elem).find(".toggleable").append(this._generateTable(model));
+    // prepare selector interactivity
+    const onPress = (columnName: string) => {
+      $(elem).find(`tr[modified="original"]`).removeAttr("modified");
+      $(elem).find("table .active").removeClass("active");
+      $(elem).find("table th").removeClass("active");
+      $(elem).find(`*[id*="${columnName}"]`).addClass("active");
+      $(elem).find(`table *[modified*="${columnName}"]`).addClass("active");
+      if (columnName.indexOf(",") >= 0) {
+        var columnsString = columnName
+          .replace(/ /g, "")
+          .replace(/'/g, "")
+          .replace("(", "")
+          .replace(")", "");
+        var columns = columnsString.split(",");
+        for (var column of columns) {
+          $(elem).find(`table *[id*="${column}"]`).addClass("active");
         }
-        data.appendChild(this._generateElement("td", "" + notice[results_key][x]))
-        table.appendChild(data);
       }
-      if(values_key != "original_values")
-        table.classList.add("modified")
-      tables.appendChild(table);
-    }
-    return tables;
+    };
+    // generate interactivity
+    $(elem).find(".toggleable").prepend(this._generateSelector(model, onPress));
+
+    return elem[1] as HTMLElement;
   }
+
+  private _extractRows(model: {
+    [key: string]: any;
+  }): { [key: string]: any }[] {
+    var modified_values: { [key: string]: any } = model.modified_values;
+    var original_results: boolean[] = model.original_results;
+    var rows = model.original_values.map((e: number[], i: number) => {
+      var row = { original: [...e, original_results[i] ? 1 : 0] };
+      for (var [modifiedColumnName, values] of Object.entries(
+        modified_values
+      )) {
+        var rowValues: number[][] = values["0"];
+        row = Object.assign({}, row, {
+          [modifiedColumnName]: [
+            ...rowValues[i],
+            model.modified_results[modifiedColumnName][0][i] ? 1 : 0,
+          ],
+        });
+      }
+      return row;
+    });
+    return rows;
+  }
+
+  private _generateSelector(
+    model: { [key: string]: any },
+    onSelect: Function
+  ): HTMLElement {
+    const dropdownSvg = `<svg class="dropdown-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500"><path class="dropdown-path" d="M325.607,79.393c-5.857-5.857-15.355-5.858-21.213,0.001l-139.39,139.393L25.607,79.393 c-5.857-5.857-15.355-5.858-21.213,0.001c-5.858,5.858-5.858,15.355,0,21.213l150.004,150c2.813,2.813,6.628,4.393,10.606,4.393 s7.794-1.581,10.606-4.394l149.996-150C331.465,94.749,331.465,85.251,325.607,79.393z" /></svg>`;
+    var elem = $.parseHTML(
+      `<div class="dropdown"><div class="selected"><p>Select columns to modify</p>${dropdownSvg}</div><div class="options"></div></div>`
+    );
+    for (var columnName of Object.keys(model.modified_values))
+      $(elem)
+        .find(".options")
+        .append($.parseHTML(`<p id="${columnName}">${columnName}</p>`));
+    $(elem).on("mouseup", (e: Event) => {
+      if ($(e.target).prop("id")) {
+        $(elem).find(".selected p").text($(e.target).prop("id"));
+        onSelect($(e.target).prop("id"));
+      }
+      $(elem).toggleClass("active");
+    });
+    return elem[0] as any as HTMLElement;
+  }
+
+  private _generateTable(model: { [key: string]: any }): HTMLElement {
+    // get rows in an easaier format
+    var rows = this._extractRows(model);
+    rows = rows.slice(0, 100);
+    var elem = $.parseHTML("<table></table>");
+    // generate column titles
+    var headers = $.parseHTML("<tr></tr>");
+    for (var columnName of model["columns"])
+      $(headers).append(this._generateCell(columnName, true));
+    // static columns
+    $(headers).append(this._generateCell("prediction", true));
+    $(elem).append(headers);
+    // Generate rows
+    for (var row of rows) {
+      var numModifications = Object.keys(row).length;
+      var tableRows = Array.from(Object.keys(row), (name, i) =>
+        $.parseHTML(`<tr modified="${name}"></tr>`)
+      );
+      for (var x = 0; x < row.original.length; x++) {
+        for (var y = 0; y < numModifications; y++) {
+          var originalValue = row.original[x];
+          var newValue = row[Object.keys(row)[y]][x];
+          if (originalValue == newValue)
+            $(tableRows[y]).append(
+              this._generateCell(this._r(originalValue, 3))
+            );
+          else
+            $(tableRows[y]).append(
+              this._generateCell(
+                `<span class="old">${this._r(
+                  originalValue,
+                  3
+                )}</span> ${this._r(newValue, 3)}`,
+                false,
+                true
+              )
+            );
+        }
+      }
+      for (var tableRow of tableRows) $(elem).append(tableRow);
+    }
+
+    return elem[0] as HTMLElement;
+  }
+
+  private _roundNumber(num: number, to: number) {
+    return (
+      Math.round((num + Number.EPSILON) * Math.pow(10, to)) / Math.pow(10, to)
+    );
+  }
+
+  private _r(num: number, to: number): string {
+    return this._roundNumber(num, to) + "";
+  }
+
+  private _generateCell(
+    content: string,
+    header = false,
+    modified = false
+  ): HTMLElement {
+    return $.parseHTML(
+      `<t${header ? "h" : "d"} ${header ? `id="${content}"` : ""} ${
+        modified ? 'class="modified"' : ""
+      }>${content}</t${header ? "h" : "d"}>`
+    )[0] as HTMLElement;
+  }
+
+  // private _generateCell(
+  //   content: string,
+  //   header = false,
+  //   modifications: { [key: string]: number } = {}
+  // ): HTMLElement {
+  //   var elem = $.parseHTML(`<t${header ? "h" : "d"}></t${header ? "h" : "d"}>`);
+  //   $(elem).append(content);
+  //   for (var [columnName, value] of Object.entries(modifications))
+  //     $.parseHTML(`<span modified="${columnName}">${value}</span>`);
+
+  //   return elem[0] as HTMLElement;
+  // }
 
   ////////////////////////////////////////////////////////////
   // Abstractions
