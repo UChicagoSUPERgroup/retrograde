@@ -1702,6 +1702,9 @@ class UncertaintyNote(Notification):
         return statistics
 
     def uncertainty(self, env, model_name, mode, updated_data={}):
+        env.log.debug(f"[uncertainty] uncertainty pass thru {list(self.found_models)} vs. {model_name}")
+        if(not model_name in self.found_models):
+            return
         resp = {"type" : "uncertainty", "model_name" : model_name, "trials" : self.T}
         X = self.found_models[model_name]["x"]
         y = self.found_models[model_name]["y"]
