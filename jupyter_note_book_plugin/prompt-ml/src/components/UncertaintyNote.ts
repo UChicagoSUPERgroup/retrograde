@@ -1,5 +1,6 @@
 import { PopupNotification } from "./PopupNotification";
-import $ = require("jquery");
+// import * as $ from "jquery"; // jQuery for local testing
+import $ = require("jquery"); // jQuery for plugin
 
 export class UncertaintyNote extends PopupNotification {
   ////////////////////////////////////////////////////////////
@@ -58,6 +59,8 @@ export class UncertaintyNote extends PopupNotification {
           .find("h2 .prefix")
           .text(parentElem.hasClass("condensed") ? " + " : " - ");
       });
+    // generate summary
+    $(elem).find(".toggleable").append(this._generateSummary(model));
     // generate table
     $(elem).find(".toggleable").append(this._generateTable(model));
     // prepare selector interactivity
@@ -68,12 +71,8 @@ export class UncertaintyNote extends PopupNotification {
       $(elem).find(`*[id*="${columnName}"]`).addClass("active");
       $(elem).find(`table *[modified*="${columnName}"]`).addClass("active");
       if (columnName.indexOf(",") >= 0) {
-        var columnsString = columnName
-          .replace(/ /g, "")
-          .replace(/'/g, "")
-          .replace("(", "")
-          .replace(")", "");
-        var columns = columnsString.split(",");
+        var columnsString = this._splitArrayOfColumns(columnName);
+        var columns = columnsString.split(", ");
         for (var column of columns) {
           $(elem).find(`table *[id*="${column}"]`).addClass("active");
         }
@@ -130,10 +129,46 @@ export class UncertaintyNote extends PopupNotification {
     return elem[0] as any as HTMLElement;
   }
 
+  private _generateSummary(model: { [key: string]: any }): HTMLElement {
+    var elem = $.parseHTML(
+      `<div class="summary"><h4>Modifications Summary</h4><ul class="modificationSummaries"></ul></div>`
+    );
+    const statistics: { [key: string]: any } = model["ctf_statistics"];
+    for (var [colName, colStats] of Object.entries(statistics)) {
+      if (colName == "biggest_diff") continue; // special case
+      colName = this._splitArrayOfColumns(colName);
+      var colSummary = $.parseHTML(
+        `<li>When we modified <strong>${colName}</strong>:</li><ul></ul>`
+      );
+      $(colSummary[1]).append(
+        $.parseHTML(
+          `<li><strong>${this._r(
+            colStats["accuracy"][0] * 100,
+            3
+          )}</strong>% of predictions were accurate</li>`
+        )
+      );
+      $(colSummary[1]).append(
+        $.parseHTML(
+          `<li><strong>${colStats["raw_diff"]}</strong> predictions changed</li><ul class="predictionsSublist"></ul>`
+        )
+      );
+      $(colSummary[1])
+        .find(".predictionsSublist")
+        .append(
+          $.parseHTML(
+            `<li><strong>${colStats["true_to_False"]}</strong> changed from <strong>true</strong> to <strong>false</strong></li>
+            <li><strong>${colStats["false_to_True"]}</strong> changed from <strong>true</strong> to <strong>false</strong></li>`
+          )
+        );
+      $(elem).find("ul.modificationSummaries").append(colSummary);
+    }
+    return elem[0] as any as HTMLElement;
+  }
+
   private _generateTable(model: { [key: string]: any }): HTMLElement {
     // get rows in an easaier format
     var rows = this._extractRows(model);
-    rows = rows.slice(0, 100);
     var elem = $.parseHTML("<table></table>");
     // generate column titles
     var headers = $.parseHTML("<tr></tr>");
@@ -159,10 +194,13 @@ export class UncertaintyNote extends PopupNotification {
           else
             $(tableRows[y]).append(
               this._generateCell(
-                `<span class="old">${this._r(
+                `<span class="new">${this._r(
+                  newValue,
+                  3
+                )}</span> <span class="old">${this._r(
                   originalValue,
                   3
-                )}</span> ${this._r(newValue, 3)}`,
+                )}</span>`,
                 false,
                 true
               )
@@ -197,18 +235,14 @@ export class UncertaintyNote extends PopupNotification {
     )[0] as HTMLElement;
   }
 
-  // private _generateCell(
-  //   content: string,
-  //   header = false,
-  //   modifications: { [key: string]: number } = {}
-  // ): HTMLElement {
-  //   var elem = $.parseHTML(`<t${header ? "h" : "d"}></t${header ? "h" : "d"}>`);
-  //   $(elem).append(content);
-  //   for (var [columnName, value] of Object.entries(modifications))
-  //     $.parseHTML(`<span modified="${columnName}">${value}</span>`);
-
-  //   return elem[0] as HTMLElement;
-  // }
+  private _splitArrayOfColumns(columnString: string): string {
+    return columnString
+      .replace(/ /g, "")
+      .replace(/'/g, "")
+      .replace("(", "")
+      .replace(")", "")
+      .replace(/,/g, ", ");
+  }
 
   ////////////////////////////////////////////////////////////
   // Abstractions

@@ -612,6 +612,9 @@ th {
 .uncertaintyNote table {
   border-spacing: 0;
   width: 100%;
+  max-height: 80vh;
+  display: block;
+  overflow-y: scroll;
 }
 
 .uncertaintyNote tr {
@@ -682,8 +685,18 @@ th {
 
 .uncertaintyNote .old {
   text-decoration: line-through;
+  float: right;
+  font-size: 0.9em;
+}
+
+.uncertaintyNote .new {
+  font-weight: 600;
 }
 
 .uncertaintyNote .modified {
   background-color: #f1c56b;
+}
+
+.uncertaintyNote .summary h4 {
+  margin: 0;
 }
