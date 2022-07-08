@@ -3,11 +3,11 @@ from .config import MODE
 
 if MODE == "EXP_CTS":
     NOTE_RULES = {
-        "all" : [WelcomeNote, ProtectedColumnNote, UncertaintyNote], # should trigger always
+        "all" : [WelcomeNote, ProtectedColumnNote], # should trigger always
         "intro" : [],
         "clean" : [MissingDataNote],
         "feature_select" : [ProxyColumnNote],
-        "model" : [ModelReportNote],
+        "model" : [ModelReportNote, UncertaintyNote],
         "end" : []  
     }
     SHOW = ["all", "intro", "clean", "feature_select", "model", "end"]

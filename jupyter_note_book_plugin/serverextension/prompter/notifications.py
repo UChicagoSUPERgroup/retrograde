@@ -9,6 +9,7 @@ when relevant
 from random import choice, sample, random as random_number
 from re import compile
 from difflib import SequenceMatcher
+from itertools import combinations
 import math
 import operator
 from ast import literal_eval
@@ -1384,10 +1385,9 @@ class UncertaintyNote(Notification):
         super().__init__(db)
         self.sent_count = 1
         self.T = 1 # num of trials allotted
-        # self.T = 10 # num of trials allotted
         self._info_cache = {}
         self.columns = {}
-
+        self.length_combinations = 2 
     def _get_new_models(self, cell_id, env, non_dfs_ns): 
         """
         return dictionary of model names in cell that are defined in the namespace
@@ -1412,6 +1412,8 @@ class UncertaintyNote(Notification):
         models_with_dfs = check_call_dfs(defined_dfs, non_dfs_ns, models, env)
         found_models = {}
         
+        env.log.info(f"[uncertainty] models_with_dfs:\n{models_with_dfs}")
+        env.log.info(f"[uncertainty] models:\n{models}")
         for model_name in models_with_dfs:
             found_models[model_name] = models_with_dfs[model_name]
             
@@ -1523,13 +1525,14 @@ class UncertaintyNote(Notification):
         elif is_numeric_dtype(data):
             ctf_instances = self.choose_numeric(env, data, unique_vals, budget)
         else:
-            env.log.error(f"[counterfactual] no data type found for unique_vals: {unique_vals}")
+            env.log.error(f"[uncertainty] no data type found for unique_vals: {unique_vals}")
             raise RuntimeError()
+
+        env.log.info(f"[uncertainty] generated ctfs:\n{ctf_instances}")
         return ctf_instances
 
     def ctf_predict(self, env, model, data, ctfs, y_true, is_one_hot):
-        """_summary_
-
+        """
         Parameters
         ----------
         env : _type_
@@ -1558,70 +1561,101 @@ class UncertaintyNote(Notification):
             }
             
         """
-        new_preds = {column : {} for column in ctfs.keys()} # holds the new predictions
-        new_scores = {column : {} for column in ctfs.keys()} # holds the new accuracy scores
-        new_dfs = {column : {} for column in ctfs.keys()} # holds the new dataframes with the counterfactuals and other values
-        for column in ctfs.keys():
-            data_prime = data.copy()
+        new_preds = {column : {} for column in ctfs.keys()}
+        new_scores = {column : {} for column in ctfs.keys()} 
+        new_dfs = {column : {} for column in ctfs.keys()} 
+        # holds the new dataframes with the counterfactuals
+
+        if len(ctfs.keys()) > 1:
+            # treat combinations as one feature -> ("income", "interest")
+            new_preds = {tuple(ctfs.keys()) : {}} 
+            new_scores = {tuple(ctfs.keys()) : {}}
+            new_dfs = {tuple(ctfs.keys()) : {}}
             for b in range(self.T):
-                if is_one_hot:
-                    # dataframe 
-                    orig_col_order = list(data_prime.columns)
-                    env.log.info(f"data_prime columns before: {data_prime.columns}\n shape: {data_prime.shape}")
-                    df_prime = pd.DataFrame(ctfs[column][b])
-                    env.log.info(f"df_prime cols: {df_prime.columns}\n shape: {df_prime.shape}")
-                    data_prime = data_prime.drop(columns=list(column))
+                data_prime = data.copy()
+                orig_col_order = list(data_prime.columns)
+                for column in ctfs.keys():
+                    if is_one_hot[column]:
+                        env.log.info(f"data_prime columns before: {data_prime.columns}\n shape: {data_prime.shape}")
+                        df_prime = pd.DataFrame(ctfs[column][b])
+                        env.log.info(f"df_prime cols: {df_prime.columns}\n shape: {df_prime.shape}")
+                        data_prime = data_prime.drop(columns=list(column))
 
-                    if df_prime.shape[1] != len(orig_col_order):
-                        env.log.info(f"column: {column}")
-                        empty_cols = set(list(column)) - set(df_prime.columns)
-                        empties = []
-                        env.log.info(f"empty_cols: {empty_cols}")
-                        for empty in empty_cols:
-                            empties.append(pd.Series([0] * df_prime.shape[0], name=empty, index=df_prime.index))
-                        df_prime = pd.concat([df_prime, *empties], axis=1)
+                        if df_prime.shape[1] != len(orig_col_order):
+                            env.log.info(f"column: {column}")
+                            empty_cols = set(list(column)) - set(df_prime.columns)
+                            empties = []
+                            env.log.info(f"empty_cols: {empty_cols}")
+                            for empty in empty_cols:
+                                empties.append(pd.Series([0] * df_prime.shape[0], name=empty, index=df_prime.index))
+                            df_prime = pd.concat([df_prime, *empties], axis=1)
 
-                    try:
-                        data_prime[list(column)] = df_prime
-                    except ValueError as v:
-                        env.log.error(f"{v} \ndata_prime columns: {data_prime.shape}, {data_prime.columns}, subset: {df_prime.shape} {list(column)}")
-                        raise ValueError(v.args)
-                    try:
-                        data_prime = data_prime[orig_col_order] 
-                    except ValueError as v:
-                        env.log.error(f"{v}")
-                        raise ValueError(v.args)
-                else:
-                    col_prime = pd.Series(ctfs[column][b])
-                    data_prime[column] = col_prime
-                new_dfs[column][b] = data_prime
-                new_preds[column][b] = pd.Series(model.predict(data_prime), index=data_prime.index)
-                new_scores[column][b] = model.score(data_prime, y_true)
+                        try:
+                            data_prime[list(column)] = df_prime
+                        except ValueError as v:
+                            env.log.error(f"{v} \ndata_prime columns: {data_prime.shape}, {data_prime.columns}, subset: {df_prime.shape} {list(column)}")
+                            raise ValueError(v.args)
+                        try:
+                            data_prime = data_prime[orig_col_order] 
+                        except ValueError as v:
+                            env.log.error(f"{v}")
+                            raise ValueError(v.args)
+                    else:
+                        try:
+                            col_prime = pd.Series(ctfs[column][b])
+                        except ValueError as v:
+                            env.log.error(f"[uncertainty] error occured with column {column} and budget {b}: {v}")
+                            env.log.info(f"[uncertainty] ctfs:\n{ctfs}")
+                            continue
+                        data_prime[column] = col_prime
+
+                # after modifications to data_prime ...
+                new_dfs[tuple(ctfs.keys())][b] = data_prime
+
+                # predict
+                new_preds[tuple(ctfs.keys())][b] = pd.Series(model.predict(data_prime),
+                    index=data_prime.index)
+                new_scores[tuple(ctfs.keys())][b] = model.score(data_prime, y_true)
+        else:
+            for column in ctfs.keys():
+                data_prime = data.copy()
+                for b in range(self.T):
+                    if is_one_hot[column]:
+                        # dataframe 
+                        orig_col_order = list(data_prime.columns)
+                        env.log.info(f"data_prime columns before: {data_prime.columns}\n shape: {data_prime.shape}")
+                        df_prime = pd.DataFrame(ctfs[column][b])
+                        env.log.info(f"df_prime cols: {df_prime.columns}\n shape: {df_prime.shape}")
+                        data_prime = data_prime.drop(columns=list(column))
+
+                        if df_prime.shape[1] != len(orig_col_order):
+                            env.log.info(f"column: {column}")
+                            empty_cols = set(list(column)) - set(df_prime.columns)
+                            empties = []
+                            env.log.info(f"empty_cols: {empty_cols}")
+                            for empty in empty_cols:
+                                empties.append(pd.Series([0] * df_prime.shape[0], name=empty, index=df_prime.index))
+                            df_prime = pd.concat([df_prime, *empties], axis=1)
+
+                        try:
+                            data_prime[list(column)] = df_prime
+                        except ValueError as v:
+                            env.log.error(f"{v} \ndata_prime columns: {data_prime.shape}, {data_prime.columns}, subset: {df_prime.shape} {list(column)}")
+                            raise ValueError(v.args)
+                        try:
+                            data_prime = data_prime[orig_col_order] 
+                        except ValueError as v:
+                            env.log.error(f"{v}")
+                            raise ValueError(v.args)
+                    else:
+                        col_prime = pd.Series(ctfs[column][b])
+                        data_prime[column] = col_prime
+                    new_dfs[column][b] = data_prime
+                    new_preds[column][b] = pd.Series(model.predict(data_prime), index=data_prime.index)
+                    new_scores[column][b] = model.score(data_prime, y_true)
         return new_preds, new_scores, new_dfs
 
-    def determine_budget(self, env, data, mode="kevin"):
-        """
-
-        Parameters
-        ----------
-        env : _type_
-            _description_
-        kernel_id : _type_
-            _description_
-        cell_id : _type_
-            _description_
-        data : _type_
-            _description_
-
-        Returns
-        -------
-        _type_
-            _description_
-        """
-        return 1 if mode == "kevin" else self.T
-
-    def ctf_statistics(self, env, ctf_predictions, original_predictions, ctf_accuracy, 
-        original_accuracy):
+    def ctf_statistics(self, env, ctf_predictions, original_predictions):
        
         '''
         want to calculate all the ctf specific data (for each feature's predictions) then
@@ -1631,23 +1665,20 @@ class UncertaintyNote(Notification):
         biggest_diff = {}
         for ctf_key, value in ctf_predictions.items():
             ctf_trials, ctf_accuracy = value
-            ctf_key = str(ctf_key)
+            # ctf_key = str(ctf_key)
             if True: 
                 # Kev Mode
                 for ctf_pred in ctf_trials.values():
                     # ctf_pred, ctf_accuracy = ctf_value
-                    env.log.info(f"generating stats for {ctf_key}")
-                    # log the key
+                    env.log.info(f"[uncertainty] generating stats for {ctf_key}")
+                    env.log.info(f"[uncertainty] ctf_trials: {ctf_trials}")
 
                     # get the indices of rows with different preds
-                    diff_indices = (original_predictions != ctf_pred).index.to_list()
+                    diff_indices = original_predictions[(original_predictions != ctf_pred)].index.to_list()
 
                     total = len(original_predictions)
                     raw_diff = int((original_predictions != ctf_pred).sum() )
-                    # num of rows with diff predictions
-                    env.log.debug(f"original_preds: {original_predictions}")
-                    env.log.debug(f"ctf_preds: {ctf_pred}")
-                    
+                                        
                     try:
                         true_to_False = int(ctf_pred[original_predictions==True].value_counts()[False])
                     except KeyError:
@@ -1660,7 +1691,7 @@ class UncertaintyNote(Notification):
                         false_to_True = 0
                     # num of rows where the prediction shifted from False -> True
 
-                    env.log.debug(f"{ctf_key} true_to_False: {true_to_False}, false_to_True: {false_to_True}")
+                    env.log.debug(f"[uncertainty] {ctf_key} true_to_False: {true_to_False}, false_to_True: {false_to_True}")
                     if ctf_key not in statistics:
                         statistics[ctf_key] = {
                             'raw_diff': 0,
@@ -1668,7 +1699,7 @@ class UncertaintyNote(Notification):
                             'false_to_True': 0,
                             'accuracy': ctf_accuracy,
                             'diff_indices': diff_indices,
-                            'total': total
+                            'total': 0
                         }
                     statistics[ctf_key]['raw_diff'] += raw_diff
                     statistics[ctf_key]['true_to_False'] += true_to_False
@@ -1695,6 +1726,8 @@ class UncertaintyNote(Notification):
                             "diff_indices": statistics[ctf_key]['diff_indices'],
                             "total": statistics[ctf_key]['total']
                         }
+                    
+                    # TODO: double_ctf i.e. combinations of two
             else: 
                 # Galen stats
                 pass
@@ -1702,14 +1735,15 @@ class UncertaintyNote(Notification):
         return statistics
 
     def uncertainty(self, env, model_name, mode, updated_data={}):
-        env.log.debug(f"[uncertainty] uncertainty pass thru {list(self.found_models)} vs. {model_name}")
-        if(not model_name in self.found_models):
-            return
         resp = {"type" : "uncertainty", "model_name" : model_name, "trials" : self.T}
-        X = self.found_models[model_name]["x"]
-        y = self.found_models[model_name]["y"]
-        model = self.found_models[model_name]["model"]
-
+        try:
+            X = self.found_models[model_name]["x"]
+            y = self.found_models[model_name]["y"]
+            model = self.found_models[model_name]["model"]
+        except KeyError:
+            X = self._info_cache[model_name]["x"]
+            y = self._info_cache[model_name]["y"]
+            model = self._info_cache[model_name]["model"]
         orig_accuracy = model.score(X,y)
         orig_predictions = pd.Series(model.predict(X), index=X.index)
 
@@ -1751,7 +1785,8 @@ class UncertaintyNote(Notification):
         env.log.debug(f"[uncertainty] prefixes: {prefixes}")
         env.log.debug(f"[uncertainty] datas: {datas}")
         env.log.debug(f"[uncertainty] columns: {columns}")
-        # TODO: predict all combinations up to N choose 2
+
+        # 1. Generate Counterfactuals
         for feature, data in zip(columns, datas):
             # generate a list of possible counterfactual values
             one_hot_feature = True if feature in one_hots else False
@@ -1759,18 +1794,47 @@ class UncertaintyNote(Notification):
                 data, data.unique(), budget=self.T, is_one_hot=one_hot_feature)
             counterfactuals[feature] = feature_ctfs
 
-            # use the list of possible ctf values to make new predictions with 
-            # with just the generated values from this feature
-            ctf_preds, ctf_accuracy, ctf_dfs = self.ctf_predict(env, model, X, 
-                {feature: feature_ctfs}, y, is_one_hot=one_hot_feature)
-            for f in ctf_preds.keys():
-                # if multiple ctfs changed at once 
-                new_predictions[f] = (ctf_preds[f], ctf_accuracy[f])
-                counterfactuals[f] = ctf_dfs[f] 
-                env.log.info(f"[uncertainty] new preds for {feature} are:\n{new_predictions[f]}")
-        # calculate statistics about ctf predictions
-        ctf_statistics = self.ctf_statistics(env, new_predictions, orig_predictions,
-            ctf_accuracy, orig_accuracy)
+        # 2. Predictions
+        comb_list = []
+        counterfactual_dfs = {}
+        for i in range(self.length_combinations):
+            comb_list += list(combinations(list(counterfactuals.keys()), i+1))
+        env.log.info(f"[uncertainty] combinations of features to predict: {comb_list}")
+        for f in comb_list:
+            _ctfs = {}
+            one_hot_feature = {}
+            try:
+                f1, f2 = f
+                two_features = True
+            except ValueError:
+                f_single = f[0]
+                two_features = False
+
+            if two_features:
+                _ctfs = {
+                    f1: counterfactuals[f1],
+                    f2: counterfactuals[f2]
+                }
+                one_hot_feature = {}
+                one_hot_feature[f1] = True if f1 in one_hots else False
+                one_hot_feature[f2] = True if f2 in one_hots else False
+            else:
+                _ctfs = {
+                    f_single: counterfactuals[f_single]
+                }
+                one_hot_feature = {f_single: True} if f_single in one_hots else {f_single: False}
+            
+
+            ctf_preds, ctf_accuracy, ctf_dfs = self.ctf_predict(env, model, X,
+                    _ctfs, y, is_one_hot=one_hot_feature
+                )
+            for feat in ctf_preds.keys():
+                new_predictions[feat] = (ctf_preds[feat], ctf_accuracy[feat])
+                counterfactual_dfs[feat] = ctf_dfs[feat]
+                env.log.info(f"[uncertainty] new preds for {f}/{feat} are:\n{new_predictions[feat]}")
+
+        # 3. Statistics and output formatting
+        ctf_statistics = self.ctf_statistics(env, new_predictions, orig_predictions)
 
         # get the diff (only rows with different predictions)
         diff_preds = {}
@@ -1785,19 +1849,23 @@ class UncertaintyNote(Notification):
             except ValueError:
                 key_f = f
 
-            diff_ctf_preds, diff_counterfactuals = self.get_diff(diff_indices, 
-                new_predictions[key_f][0], counterfactuals[key_f])
+            diff_ctf_preds, diff_counterfactuals = self.get_diff(env, diff_indices, 
+                new_predictions[key_f][0], counterfactual_dfs[key_f])
             diff_preds[f] = diff_ctf_preds
             diff_data[f] = diff_counterfactuals
         # resp["counterfactuals"] = clean_json(counterfactuals)
         # resp["new_predictions"] = clean_json(ctf_preds)
+        # TODO: figure out why the single column ctfs have changes to MULTIPLE columns
         resp["columns"] = X.columns.to_list() # break apart tuples? neccessary or just columns??
         resp["ctf_statistics"] = clean_json(ctf_statistics)
         resp["original_values"] = X
         resp["modified_values"] = clean_json(diff_data)
         resp["original_results"] = orig_predictions # model's predictions
         resp["modified_results"] = clean_json(diff_preds)
-        resp["df_name"] = self.found_models[model_name]["x_name"]
+        try:
+            resp["df_name"] = self.found_models[model_name]["x_name"]
+        except KeyError:
+            resp["df_name"] = self._info_cache[model_name]["x_name"]
         resp["original_accuracy"] = orig_accuracy
 
         env.log.debug(f"[uncertainty] ({mode}) response is \n{resp}")
@@ -1866,6 +1934,7 @@ class UncertaintyNote(Notification):
         ns = self.db.recent_ns()
         non_dfs_ns = dill.loads(ns["namespace"])
 
+        #TODO: UncertaintyNote is recomputing even with no changes to the model or data
         def check_if_defined(resp):
 
             if resp not in non_dfs_ns:
@@ -1891,20 +1960,20 @@ class UncertaintyNote(Notification):
         updated_data = {}
 
         for model_name in live_resps:
-            updated_data = self.uncertainty(env, model_name, mode="update", 
+            updated_d = self.uncertainty(env, model_name, mode="update", 
                 updated_data=updated_data)
+            if updated_data:
+                updated_data = updated_d
         # remember to clean up non-live elements of self.columns
         live_names = [model_name for model_name in live_resps]
-        old_names = [resp for resp in self.data if resp  not in live_names]
+        old_names = [resp for resp in self.data if resp not in live_names]
     
         for old_name in old_names:
             del self.columns[old_name]
             del self._info_cache[old_name] 
         self.data = updated_data
 
-    def get_diff(self, indices, predictions, df):
-        # need to just use .loc to select the rows in predictions and the df where the data has
-        # changed. then return those values.
+    def get_diff(self, env, indices, predictions, df):
         diff_predictions = {}
         diff_df = {}
         for b in predictions.keys():
