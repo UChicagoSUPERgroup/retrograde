@@ -1602,3 +1602,80 @@ def resolve_col_type(column):
     if is_categorical(column):
         return "categorical"
     return "unknown"
+
+
+class RareInstanceNote(Notification):
+    """
+    A notification that gives a measure of potential uncertainty in based on how rare column values, and 
+    combinations of column values, are.
+
+    Format: 
+    {
+        "type": "rare_instance",
+        "model_name" : <name of model> | "N/A",
+        "df_names" : [<list of dfs used to train this model>],
+        
+
+    }
+
+{"type" : "model_report", "model_name" : <name of model>,
+            "acc_orig" : <original training acc>,
+            "groups" : <the group the metric is checked w.r.t.>,
+            "error_rates" : <dict of groups with error rates separated by member (another dict)>,
+            "k_highest_error_rates" : <dict of groups with highest error rates>
+            }
+    """
+    def __init__(self, db):
+        super().__init__(db)
+
+    def _get_new_models(self, cell_id, env, non_dfs_ns): 
+        """
+        return dictionary of model names in cell that are defined in the namespace
+        and that do not already have a note issued about them
+        """  
+        poss_models = env.get_fitted_models()
+        models = {model_name : model_info for model_name, model_info in poss_models.items() if model_name in non_dfs_ns.keys()} 
+        old_models = list(self.data.keys())
+        
+        return {model_name : model_info for model_name, model_info in models.items() if model_name not in old_models}
+
+
+    def check_feasible(self, cell_id, env, dfs, ns):
+        
+        if "namespace" in ns:
+            non_dfs_ns = dill.loads(ns["namespace"])
+        else:
+            non_dfs_ns = ns
+
+        models = self._get_new_models(cell_id, env, non_dfs_ns)
+        defined_dfs = dfs
+        
+        models_with_dfs = check_call_dfs(defined_dfs, non_dfs_ns, models, env)
+        aligned_models = {}
+        prot_anc_found = False
+
+        for model_name in models_with_dfs:
+            match_name, match_cols, match_indexer = search_for_sensitive_cols(env, models_with_dfs[model_name]["x"], model_name, defined_dfs)
+            if not match_name:
+                continue
+            """
+            env.log.debug("[ModelReportNote] model {0} has match {1}, additional info: {2}".format(model_name, match_name, models_with_dfs[model_name]))
+            aligned_models[model_name] = models_with_dfs[model_name]
+            df_name = models_with_dfs[model_name]["x_name"]
+            prot_anc_found, x_ancestor, x_ancestor_name, prot_col_names, prot_cols = self.prot_ancestors_found(env, df_name, dfs, env._kernel_id)
+            if not prot_anc_found:
+                continue
+            aligned_models[model_name]["match"] = {"cols" : match_cols, 
+                                                   "indexer" : match_indexer,
+                                                   "name" : match_name,
+                                                   "x_ancestor" : x_ancestor,
+                                                   "x_ancestor_name" : x_ancestor_name,
+                                                   "prot_col_names" : prot_col_names,
+                                                   "prot_cols" : prot_cols}
+            """
+        if len(aligned_models) > 0 and prot_anc_found:
+            self.aligned_models = aligned_models
+            return prot_anc_found                            
+        return False
+
+    

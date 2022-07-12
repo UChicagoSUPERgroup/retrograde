@@ -169,6 +169,10 @@ class AnalysisEnvironment:
         """are models in cell defined in this analysis?"""
         return self.models
 
+    def get_fitted_models(self):
+        """models discovered only by the user doing xxx.fit"""
+        return self.models_f
+
 class Aliases:
     """
     store, parse and handle aliases for modules, submodules and function imports

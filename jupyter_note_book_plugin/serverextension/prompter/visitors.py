@@ -5,6 +5,7 @@ from astor import dump_tree
 from ast import NodeVisitor
 from ast import Call, Attribute, Name, Str, Assign, Expr, Num
 from ast import Index, Subscript, Slice, ExtSlice, List, Constant
+from sklearn.base import ClassifierMixin
 import pandas as pd
 
 PD_READ_FUNCS = ["read_csv", "read_fwf", "read_json", "read_html",
@@ -204,22 +205,34 @@ class ModelFitVisitor(ModelScoreVisitor):
         # calls to non-clfs
         if isinstance(call_node.func, Attribute) and call_node.func.attr == "fit" and len(call_node.args) >= 1:
             # if this fit call is a variable name, we want it
-            if isinstance(call_node.func.value, Name) and call_node.func.value.id in self.model_names:
-                return True
-        elif isinstance(call_node.func, Call):
-            # if it's not a variable, but still a SomethingClassifier.fit call, 
-            # we want that too. Unfortunately, scikit learn is DuckTyped. 
-            # Things that "fit" just happen to have a fit function without 
-            # inheriting from the same base class
-
-            classname = str.lower(call_node.func.value.attr)
-
-            # this should get most of them
-            if "classifier" in classname or "regress" in classname or "forest" \
-            in classname or "tree" in classname or "lars" in classname or \
-            "elastic" in classname or "ridge" in classname or "perceptron" or \
-            "enet" in classname:
-                return True 
+            if isinstance(call_node.func.value, Name):
+                if call_node.func.value.id in self.model_names:
+                    return True
+                try:
+                    # evaluate the Name as a class and see if it is a subclass of ClassifierMixin
+                    # catches SomethingClassifier.fit()
+                    if issubclass(eval(call_node.func.value.id), ClassifierMixin):
+                        return True
+                except (SyntaxError, NameError, TypeError):
+                    pass
+            elif isinstance(call_node.func.value, Call):
+                # if this is something().fit, first grab the node for the something()
+                # function
+                subnode = call_node.func.value.func
+                # if that subnode is an attribute, use eval to check if the name represents a class
+                # that inherits from ClassifierMixin
+                if isinstance(subnode, Attribute):
+                    try:
+                        if issubclass(eval(subnode.attr), ClassifierMixin):
+                            return True
+                    except (SyntaxError, NameError, TypeError):
+                        pass
+                elif isinstance(subnode, Name):
+                    try:
+                        if issubclass(eval(subnode.id), ClassifierMixin):
+                            return True
+                    except (SyntaxError, NameError, TypeError):
+                        pass
         return False
 
     def visit_Call(self, node):
