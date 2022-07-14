@@ -252,7 +252,7 @@ class ModelFitVisitor(ModelScoreVisitor):
                 self.models[name] = {"X" : X_cols, "y" : y_cols if y_cols is not None else "__None", 
                                      "X_df" : X_df_name, "y_df" : y_df_name if y_df_name is not None else "__None"}
             else:
-                self.unmatched_call = {"X" : X_cols, "y" : y_cols if y_cols is not None else "__None",
+                self.models["__anonymous_call"] = {"X" : X_cols, "y" : y_cols if y_cols is not None else "__None",
                                        "X_df" : y_df_name, "y_df" : y_df_name if y_df_name is not None else "__None"}
 
 

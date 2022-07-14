@@ -7,6 +7,7 @@ sent, what its response is composed of, and updating response contents
 when relevant
 """
 from random import choice
+from itertools import combinations
 
 import math
 import operator
@@ -703,6 +704,144 @@ class MissingDataNote(ProtectedColumnNote):
 #        env.log.debug("[MissingDataNote] updated responses")
         self.data = new_data
 
+class RareInstanceNote(Notification):
+    """
+    A notification that gives a measure of potential uncertainty in based on how rare column values, and 
+    combinations of column values, are.
+
+    Format: 
+    {
+        "type": "rare_instance",
+        "model_name" : <name of model>,
+        X : {
+            "num_cols": <num>,
+            "df_name": <name>
+            "1": {
+                <column1>: [{
+                    value: <rare value>,
+                    context: <some text>,
+                    count: <count>
+                }, {...},],
+                ...
+            },
+            "2": {
+                <column1>+<column2>...: 
+                [{
+                    value: [(valuea1, value2a, ...),
+                    context: <some text>,
+                    count: <count>
+                }, {...}, ] 
+                ...
+            },
+            "3": {
+                <column1>+<column2>+<column3>...: 
+                [{
+                    value: [(valuea1, value2a, ...),
+                    context: <some text>,
+                    count: <count>
+                }, ...] 
+                ...
+            },
+            "etc"
+        },
+        y: : { <same as X> } | "N/A" (sometimes there isn't a y)
+    }
+    """
+    def __init__(self, db):
+        super().__init__(db)
+        self.models = {}
+        self.fit_dfs = {}
+
+    def _get_new_models(self, cell_id, env, non_dfs_ns): 
+        """
+        return dictionary of model names in cell that are defined in the namespace
+        and that do not already have a note issued about them
+        """  
+        poss_models = env.get_fitted_models()
+        models = {model_name : model_info for model_name, model_info in poss_models.items() if model_name in non_dfs_ns.keys()} 
+        old_models = list(self.data.keys())
+        
+        return {model_name : model_info for model_name, model_info in models.items() if model_name not in old_models}
+
+
+    def _get_column_combinations(self, cols, N):
+        """
+        return a list of lists containing all N-length combinations of the columns
+        """
+        if N == 1:
+            return cols
+        return [list(x) for x in combinations(cols, N)]
+
+    
+    def _cols_to_JSON_key(self, cols):
+        return '+'.join(cols)
+
+
+    def check_feasible(self, cell_id, env, dfs, ns):
+        """
+        this note is feasible if there are any new fit attempts we haven't explored yet
+        """
+        non_dfs_ns = None
+        if "namespace" in ns:
+            non_dfs_ns = dill.loads(ns["namespace"])
+        else:
+            non_dfs_ns = ns
+
+        self.models = self._get_new_models(cell_id, env, non_dfs_ns)
+
+        return len(self.models.keys()) != 0
+
+    
+    def make_response(self, env, kernel_id, cell_id):
+        super().make_response(env, kernel_id, cell_id)
+
+        for model_name in self.models:
+            resp = { "type" : "rare_instance", "model_name": model_name }
+
+            X_df = self.models[model_name]["X_df"]
+            y_df = self.models[model_name]["y_df"]
+
+            if X_df is not None:
+                resp["X"] = {}
+                num_cols = len(X_df)
+                resp["X"]["num_cols"] = num_cols
+                resp["X"]["df_name"] = self.models[model_name]["X_df_name"]
+
+
+                X_description = X_df.describe()
+
+                for i in range(num_cols):
+                    num_combos = i+1
+                    resp["X"][str(num_combos)]
+                    combos_list = self._get_column_combinations(list(X_df), num_combos)
+                    for col in combos_list:
+                        if num_combos == 1:
+                            if is_numeric_dtype(X_df[col]):
+                                q1 = X_description[col]["25%"]
+                                q3 = X_description[col]["75%"]
+                                iqr = q3 - q1
+                                lowoutlier = q1 - 1.5 * iqr
+                                highoutlier = q3 + 1.5 * iqr
+                                resp["X"][str(num_combos)][self._cols_to_JSON_key([col])] = [] 
+                                resp["X"][str(num_combos)][self._cols_to_JSON_key([col])].append({
+                                    "value": lowoutlier,
+                                    "context": "Values less than this are rare"
+                                })
+                                resp[str(num_combos)][self._cols_to_JSON_key([col])].append({
+                                    "value": highoutlier,
+                                    "context": "Values greater than this are rare"
+                                })
+                            else:
+                                # TODO: outliers for categorical data
+                                pass
+                        else:
+                            # TODO
+                            pass
+
+            if y_df is not None:
+                pass # TODO: should we actually track this too?
+
+
 class ModelReportNote(Notification):
     """
     A notification that, similar to ErrorSliceNote, tests to see if any classifier models
@@ -775,6 +914,7 @@ class ModelReportNote(Notification):
             self.aligned_models = aligned_models
             return prot_anc_found                            
         return False
+
     def _get_prot_ancestor(self, env, df_name, dfs, kernel_id):
         """
         Find ancestor of df_name with sensitive columns
@@ -891,7 +1031,6 @@ class ModelReportNote(Notification):
             return False, [], [], [], []
             
         return True, x_ancestor, ancestor_dfs, prot_col_names, prot_cols
-
         
     def group_based_error_rates(self, env, prot_group, df, y_true, y_pred):
         """
@@ -1064,6 +1203,7 @@ class ModelReportNote(Notification):
         k_highest_rates = {**k_sorted_one_hot_rates, **k_sorted_cat_rates}
         sorted_error_rates = {**sorted_one_hot_rates, **sorted_cat_rates}
         return sorted_error_rates, k_highest_rates
+    
     def filter_and_select(self, error_rates, n, env):
         """
         do not return any slice with less than 1% of data
@@ -1106,6 +1246,7 @@ class ModelReportNote(Notification):
                         elif below[group_idx]:
                             new_output[group][group_val]["highlight"][metric_idx] = -1
         return new_output
+    
     def make_response(self, env, kernel_id, cell_id):
         # pylint: disable=too-many-locals,too-many-statements
         super().make_response(env, kernel_id, cell_id)
@@ -1602,80 +1743,5 @@ def resolve_col_type(column):
     if is_categorical(column):
         return "categorical"
     return "unknown"
-
-
-class RareInstanceNote(Notification):
-    """
-    A notification that gives a measure of potential uncertainty in based on how rare column values, and 
-    combinations of column values, are.
-
-    Format: 
-    {
-        "type": "rare_instance",
-        "model_name" : <name of model> | "N/A",
-        "df_names" : [<list of dfs used to train this model>],
-        
-
-    }
-
-{"type" : "model_report", "model_name" : <name of model>,
-            "acc_orig" : <original training acc>,
-            "groups" : <the group the metric is checked w.r.t.>,
-            "error_rates" : <dict of groups with error rates separated by member (another dict)>,
-            "k_highest_error_rates" : <dict of groups with highest error rates>
-            }
-    """
-    def __init__(self, db):
-        super().__init__(db)
-
-    def _get_new_models(self, cell_id, env, non_dfs_ns): 
-        """
-        return dictionary of model names in cell that are defined in the namespace
-        and that do not already have a note issued about them
-        """  
-        poss_models = env.get_fitted_models()
-        models = {model_name : model_info for model_name, model_info in poss_models.items() if model_name in non_dfs_ns.keys()} 
-        old_models = list(self.data.keys())
-        
-        return {model_name : model_info for model_name, model_info in models.items() if model_name not in old_models}
-
-
-    def check_feasible(self, cell_id, env, dfs, ns):
-        
-        if "namespace" in ns:
-            non_dfs_ns = dill.loads(ns["namespace"])
-        else:
-            non_dfs_ns = ns
-
-        models = self._get_new_models(cell_id, env, non_dfs_ns)
-        defined_dfs = dfs
-        
-        models_with_dfs = check_call_dfs(defined_dfs, non_dfs_ns, models, env)
-        aligned_models = {}
-        prot_anc_found = False
-
-        for model_name in models_with_dfs:
-            match_name, match_cols, match_indexer = search_for_sensitive_cols(env, models_with_dfs[model_name]["x"], model_name, defined_dfs)
-            if not match_name:
-                continue
-            """
-            env.log.debug("[ModelReportNote] model {0} has match {1}, additional info: {2}".format(model_name, match_name, models_with_dfs[model_name]))
-            aligned_models[model_name] = models_with_dfs[model_name]
-            df_name = models_with_dfs[model_name]["x_name"]
-            prot_anc_found, x_ancestor, x_ancestor_name, prot_col_names, prot_cols = self.prot_ancestors_found(env, df_name, dfs, env._kernel_id)
-            if not prot_anc_found:
-                continue
-            aligned_models[model_name]["match"] = {"cols" : match_cols, 
-                                                   "indexer" : match_indexer,
-                                                   "name" : match_name,
-                                                   "x_ancestor" : x_ancestor,
-                                                   "x_ancestor_name" : x_ancestor_name,
-                                                   "prot_col_names" : prot_col_names,
-                                                   "prot_cols" : prot_cols}
-            """
-        if len(aligned_models) > 0 and prot_anc_found:
-            self.aligned_models = aligned_models
-            return prot_anc_found                            
-        return False
 
     

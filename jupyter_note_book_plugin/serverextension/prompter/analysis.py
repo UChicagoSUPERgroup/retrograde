@@ -139,7 +139,7 @@ class AnalysisEnvironment:
                     self.models_f[model_name] = new_models[model_name]
                     self.models_f[model_name]["cell"] = cell_id
             else:
-                self.models_f[model_name] = new_models[model_name]
+                self.models_f[model_name] = fit_models[model_name]
                 self.models_f[model_name]["cell"] = cell_id
 
     def _get_new_data(self, df_ns, cell_id):
@@ -369,4 +369,3 @@ class KernelException(RuntimeError):
 
 class DeadKernelError(RuntimeError):
     pass
-
