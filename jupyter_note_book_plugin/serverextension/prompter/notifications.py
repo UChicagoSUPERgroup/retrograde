@@ -1416,6 +1416,15 @@ class UncertaintyNote(Notification):
         env.log.info(f"[uncertainty] models:\n{models}")
         for model_name in models_with_dfs:
             # TODO: check if model_name is in _info_cache with the same accuracy?
+            if model_name in self._info_cache:
+            # if this model is already in info cache, check if the accuracy is the same
+                old_resp = self._info_cache[model_name]["resp"]
+                X = models_with_dfs[model_name]["x"]
+                y = models_with_dfs[model_name]["y"]
+                accuracy = models[model_name].score(X, y)
+                if (X.shape == old_resp["original_shape"] and 
+                    accuracy == old_resp["original_accuracy"]):
+                    continue
             found_models[model_name] = models_with_dfs[model_name]
         
         
@@ -1464,17 +1473,14 @@ class UncertaintyNote(Notification):
         std = data.std()
         rng = np.random.default_rng()
         deltas = np.asarray(rng.random(budget))
-        # regenerate deltas?
+        def _choose_num(x, std, d):
+            plus_minus = 1 if random_number() < 0.5 else -1
+            return x + (plus_minus * std * d)
 
         chosen = [data.copy() for _ in range(budget)] 
         # modified copies of original data
-        # TODO: could be a lambda function
-        for row, idx in zip(values, indices):
-            plus_minus = 1 if random_number() < 0.5 else -1
-            rand_samp = [row + (plus_minus * std * d) for d in deltas]
-            # instance value + (+- 1 * standard deviation * delta)
-            for b in range(budget):
-                chosen[b][idx] = rand_samp[b]
+        for b, d in enumerate(deltas):
+            chosen[b] = data.apply(_choose_num, args=(std, d))
         return chosen
 
     def choose_categorical(self, env, data, unique_vals, budget, is_one_hot):
@@ -1742,7 +1748,7 @@ class UncertaintyNote(Notification):
                             "total": statistics[ctf_key]['total']
                         }
                     
-                    # TODO: double_ctf i.e. combinations of two
+                    # TODO: double_ctf i.e. combinations of two - July 21: probably not doing this
             else: 
                 # Galen stats
                 pass
@@ -1762,6 +1768,14 @@ class UncertaintyNote(Notification):
         orig_accuracy = model.score(X,y)
         orig_predictions = pd.Series(model.predict(X), index=X.index)
         orig_indices = X.index.tolist()
+        orig_shape = X.shape
+
+        if model_name in self._info_cache and mode == "update":
+            # if this model is already in info cache, check if the accuracy is the same
+            old_resp = self._info_cache[model_name]["resp"]
+            if (X.shape == old_resp["original_shape"] and 
+                orig_accuracy == old_resp["original_accuracy"]):
+                return self.wrap_up(mode, old_resp, model_name, X, y, updated_data)
 
         # for each feature get the ctfs and put in a dict
         # budget = self.determine_budget(env, kernel_id, cell_id, X)
@@ -1803,7 +1817,6 @@ class UncertaintyNote(Notification):
         env.log.debug(f"[uncertainty] columns: {columns}")
 
         # 1. Generate Counterfactuals
-        # TODO: check for these in _info_cache first (also save in _info_cache)
         for feature, data in zip(columns, datas):
             # generate a list of possible counterfactual values
             one_hot_feature = True if feature in one_hots else False
@@ -1875,6 +1888,7 @@ class UncertaintyNote(Notification):
         # resp["counterfactuals"] = clean_json(counterfactuals)
         # resp["new_predictions"] = clean_json(ctf_preds)
         resp["columns"] = clean_json(diff_columns)
+        resp["original_shape"] = orig_shape
         resp["ctf_statistics"] = clean_json(ctf_statistics)
         # resp["original_values"] = diff_original
         resp["modified_values"] = clean_json(diff_data)
@@ -1886,9 +1900,12 @@ class UncertaintyNote(Notification):
             resp["df_name"] = self._info_cache[model_name]["x_name"]
         resp["original_accuracy"] = orig_accuracy
 
-        env.log.debug(f"[uncertainty] ({mode}) response is \n{resp}")
+        return self.wrap_up(mode, resp, model_name, X, y, updated_data)
+
+    def wrap_up(self, mode, resp, model_name, X, y, updated_data=None):
         if mode == "make_response":
             self._info_cache[model_name] = self.found_models[model_name]
+            self._info_cache[model_name]["resp"] = resp
             if resp["model_name"] not in self.columns:
                 self.columns[resp["model_name"]] = (X,y)
             else:
@@ -1906,49 +1923,12 @@ class UncertaintyNote(Notification):
             return updated_data
 
     def make_response(self, env, kernel_id, cell_id):
-        # Data is sent to the frontend with a list of data objects for each model. This can be changed,
-        # but I had imagined one model would have a list of different uncertainty groups.
-        # 
-        # This is probably wrong-- feel free to delete and format however you'd like, and we'll work it
-        # out on the frontend :)
-        # self.data["lr"] = [{
-        #     "type": "uncertainty",
-        #     "model_name": "lr",
-        #     "columns": [ # omit predictions
-        #         "index", "income", "term", "race", "zip"
-        #     ],
-        #     "original_values": [
-        #         [1, 100000, 36, "", 60637],
-        #         [22, 60000, 36, "asian", 60637],
-        #         [57, 40000, 36, "asian", 60637],
-        #         [129, 80000, 36, "black", 60637],
-        #         [192, 90000, 36, "white", 60637],
-        #         [302, 300000, 36, "hispanic/latino", 60637],
-        #         [405, 15000, 36, "white", 60637],
-        #         [678, 300000, 36, "other", 60637],
-        #     ],
-        #      "modified_values": [
-        #         [1, 60000, 36, "asian", 60637],
-        #         [22, 40000, 36, "asian", 60637],
-        #         [57, 80000, 36, "black", 60637],
-        #         [129, 90000, 36, "white", 60637],
-        #         [192, 300000, 36, "hispanic/latino", 60637],
-        #         [302, 15000, 36, "white", 60637],
-        #         [405, 30000, 36, "other", 60637],
-        #         [678, 40, 36, "", 60637],
-        #     ],
-        #     "original_results": [True, False, False, False, True, True, False, True],
-        #     "modified_results": [True, True, False, False, True, False, False, True]
-        # }]
-        # Note that the "example_model_name" dictionary keys are not sent to the frontend-- they only help organize
-        # the backend. If we need df names on the frontend, then we can add it to the actual data object
         super().make_response(env, kernel_id, cell_id)
         
         for model_name in self.found_models.keys():
             self.uncertainty(env, model_name, mode="make_response")
     
     def update(self, env, kernel_id, cell_id, dfs, ns):
-        # self.sent_count += 1
         ns = self.db.recent_ns()
         non_dfs_ns = dill.loads(ns["namespace"])
 
