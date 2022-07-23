@@ -3,7 +3,7 @@ analysis.py creates a running environment for dynamically tracking
 data relationships between variables
 """
 from queue import Empty
-from ast import parse, Name, Attribute, Str
+from ast import parse, Name, Attribute, Str 
 from sklearn.base import ClassifierMixin
 from pandas import DataFrame
 
@@ -134,10 +134,8 @@ class AnalysisEnvironment:
         self.log.debug(f"[AnalysisEnv] new models discovered from fit are {fit_models}")
         for model_name in fit_models:
             if model_name in self.models_f:
-                if ("X" in self.models_f[model_name] and "X" in fit_models[model_name]) or \
-                ("y" in self.models_f[model_name] and "y" in self.models_f[model_name]):
-                    self.models_f[model_name] = new_models[model_name]
-                    self.models_f[model_name]["cell"] = cell_id
+                self.models_f[model_name] = fit_models[model_name]
+                self.models_f[model_name]["cell"] = cell_id
             else:
                 self.models_f[model_name] = fit_models[model_name]
                 self.models_f[model_name]["cell"] = cell_id

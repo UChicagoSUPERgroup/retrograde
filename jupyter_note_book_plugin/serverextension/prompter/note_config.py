@@ -1,13 +1,13 @@
-from .notifications import WelcomeNote, ProtectedColumnNote, MissingDataNote, ProxyColumnNote, ErrorSliceNote, ModelReportNote
+from .notifications import WelcomeNote, ProtectedColumnNote, MissingDataNote, ProxyColumnNote, ErrorSliceNote, ModelReportNote, RareInstanceNote
 from .config import MODE
 
 if MODE == "EXP_CTS":
     NOTE_RULES = {
         "all" : [WelcomeNote, ProtectedColumnNote], # should trigger always
         "intro" : [],
-        "clean" : [MissingDataNote],
+        "clean" : [MissingDataNote], # 
         "feature_select" : [ProxyColumnNote],
-        "model" : [ModelReportNote],
+        "model" : [ModelReportNote, RareInstanceNote], # 
         "end" : []  
     }
     SHOW = ["all", "intro", "clean", "feature_select", "model", "end"]
@@ -18,7 +18,7 @@ if MODE == "EXP_END":
         "clean" : [],
         "feature_select" : [],
         "model" : [],
-        "end" : [ModelReportNote, ProxyColumnNote, MissingDataNote, ProtectedColumnNote, WelcomeNote]
+        "end" : [ModelReportNote, ProxyColumnNote, MissingDataNote, ProtectedColumnNote, WelcomeNote, RareInstanceNote]
     }
     SHOW = ["end"]
 if MODE == "EXP_NONE":

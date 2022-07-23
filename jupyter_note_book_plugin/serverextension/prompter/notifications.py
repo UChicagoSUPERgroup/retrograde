@@ -705,54 +705,13 @@ class MissingDataNote(ProtectedColumnNote):
         self.data = new_data
 
 class RareInstanceNote(Notification):
-    """
-    A notification that gives a measure of potential uncertainty in based on how rare column values, and 
-    combinations of column values, are.
-
-    Format: 
-    {
-        "type": "rare_instance",
-        "model_name" : <name of model>,
-        X : {
-            "num_cols": <num>,
-            "df_name": <name>
-            "1": {
-                <column1>: [{
-                    value: <rare value>,
-                    context: <some text>,
-                    count: <count>
-                }, {...},],
-                ...
-            },
-            "2": {
-                <column1>+<column2>...: 
-                [{
-                    value: [(valuea1, value2a, ...),
-                    context: <some text>,
-                    count: <count>
-                }, {...}, ] 
-                ...
-            },
-            "3": {
-                <column1>+<column2>+<column3>...: 
-                [{
-                    value: [(valuea1, value2a, ...),
-                    context: <some text>,
-                    count: <count>
-                }, ...] 
-                ...
-            },
-            "etc"
-        },
-        y: : { <same as X> } | "N/A" (sometimes there isn't a y)
-    }
-    """
     def __init__(self, db):
         super().__init__(db)
+        # self.sent = False
         self.models = {}
         self.fit_dfs = {}
 
-    def _get_new_models(self, cell_id, env, non_dfs_ns): 
+    def _get_new_models(self, cell_id, env, non_dfs_ns, dfs): 
         """
         return dictionary of model names in cell that are defined in the namespace
         and that do not already have a note issued about them
@@ -760,10 +719,21 @@ class RareInstanceNote(Notification):
         poss_models = env.get_fitted_models()
         models = {model_name : model_info for model_name, model_info in poss_models.items() if model_name in non_dfs_ns.keys()} 
         old_models = list(self.data.keys())
+
+        # get the actual dataframe object in this
+        for model_name in models:
+            try:
+                models[model_name]["X_obj"] = dfs[models[model_name]["X_df_name"]]
+            except:
+                models[model_name]["X_obj"] = None
+            if models[model_name]["y_df"] is not None:
+                try:
+                    models[model_name]["y_obj"] = dfs[models[model_name]["y_df_name"]]
+                except:
+                    models[model_name]["y_obj"] = None
         
         return {model_name : model_info for model_name, model_info in models.items() if model_name not in old_models}
-
-
+    
     def _get_column_combinations(self, cols, N):
         """
         return a list of lists containing all N-length combinations of the columns
@@ -771,75 +741,91 @@ class RareInstanceNote(Notification):
         if N == 1:
             return cols
         return [list(x) for x in combinations(cols, N)]
-
     
-    def _cols_to_JSON_key(self, cols):
-        return '+'.join(cols)
-
-
     def check_feasible(self, cell_id, env, dfs, ns):
         """
-        this note is feasible if there are any new fit attempts we haven't explored yet
+        This note is feasible if there are more models to check
         """
-        non_dfs_ns = None
+
         if "namespace" in ns:
             non_dfs_ns = dill.loads(ns["namespace"])
         else:
             non_dfs_ns = ns
+        self.models = self._get_new_models(cell_id, env, non_dfs_ns, dfs)
+        return len(self.models) != 0
 
-        self.models = self._get_new_models(cell_id, env, non_dfs_ns)
-
-        return len(self.models.keys()) != 0
-
-    
     def make_response(self, env, kernel_id, cell_id):
-        super().make_response(env, kernel_id, cell_id)
+        env.log.debug("[RareInstance] make response")
 
         for model_name in self.models:
-            resp = { "type" : "rare_instance", "model_name": model_name }
+            resp = { "type" : "rare_instance", "model_name": model_name, "X": {}, "y": {} }
 
-            X_df = self.models[model_name]["X_df"]
-            y_df = self.models[model_name]["y_df"]
+            X = self.models[model_name]["X_obj"]
+            if X is None:
+                continue
+            do_y = False
+            if self.models[model_name]["y_df"] is not None:
+                do_y = True
+                y = self.models[model_name]["y_obj"]
 
-            if X_df is not None:
-                resp["X"] = {}
-                num_cols = len(X_df)
-                resp["X"]["num_cols"] = num_cols
-                resp["X"]["df_name"] = self.models[model_name]["X_df_name"]
+            X_numeric = self.models[model_name]["X_df"].select_dtypes(include='number')
+            X_cat = self.models[model_name]["X_df"].select_dtypes(include='category')
+            if do_y:
+                y_numeric = self.models[model_name]["y_df"].select_dtypes(include='number')
+                y_cat = self.models[model_name]["y_df"].select_dtypes(include='category')
 
+            # represents unique combinations of categorical columns, which are inherently rare
+            resp["X"]["unique"] = {}
+            resp["X"]["unique"]["cols"] = list(X_cat)
+            resp["X"]["unique"]["values"] = X_cat.drop_duplicates().values.to_list()
 
-                X_description = X_df.describe()
+            if do_y:
+                resp["y"]["unique"] = {}
+                resp["y"]["unique"]["cols"] = list(y_cat)
+                resp["y"]["unique"]["values"] = y_cat.drop_duplicates().values.to_list()
+            
+            # represents rows that have statistical outliers, which are rare
+            resp["X"]["outlier"] = {}
+            Xncls = list(X_numeric)
+            X_q1 = X[Xncls].quantile(.25)
+            X_q3 = X[Xncls].quantile(.75)
+            X_iqr = X_q3 - X_q1
+            X_outliers = X[((X[Xncls] < (X_q1 - 1.5 * X_iqr)) | (X[Xncls] > (X_q3 + 1.5 * X_iqr))).any(axis=1)]
+            
+            resp["X"]["outlier"]["cols"] = list(X)
+            resp["X"]["outlier"]["rows"] = X_outliers.values.to_list()            
 
-                for i in range(num_cols):
-                    num_combos = i+1
-                    resp["X"][str(num_combos)]
-                    combos_list = self._get_column_combinations(list(X_df), num_combos)
-                    for col in combos_list:
-                        if num_combos == 1:
-                            if is_numeric_dtype(X_df[col]):
-                                q1 = X_description[col]["25%"]
-                                q3 = X_description[col]["75%"]
-                                iqr = q3 - q1
-                                lowoutlier = q1 - 1.5 * iqr
-                                highoutlier = q3 + 1.5 * iqr
-                                resp["X"][str(num_combos)][self._cols_to_JSON_key([col])] = [] 
-                                resp["X"][str(num_combos)][self._cols_to_JSON_key([col])].append({
-                                    "value": lowoutlier,
-                                    "context": "Values less than this are rare"
-                                })
-                                resp[str(num_combos)][self._cols_to_JSON_key([col])].append({
-                                    "value": highoutlier,
-                                    "context": "Values greater than this are rare"
-                                })
-                            else:
-                                # TODO: outliers for categorical data
-                                pass
-                        else:
-                            # TODO
-                            pass
+            if do_y:
+                resp["y"]["outlier"] = {}
+                yncls = list(y_numeric)
+                y_q1 = y[yncls].quantile(.25)
+                y_q3 = y[yncls].quantile(.75)
+                y_iqr = y_q3 - y_q1
+                y_outliers = y[((y[yncls] < (y_q1 - 1.5 * y_iqr)) | (y[yncls] > (y_q3 + 1.5 * y_iqr))).any(axis=1)]
+                
+                resp["y"]["outlier"]["cols"] = list(y)
+                resp["y"]["outlier"]["rows"] = y_outliers.values.to_list()
+            
 
-            if y_df is not None:
-                pass # TODO: should we actually track this too?
+            # represents rows that are rare because they have low frequency categorical data
+            resp["y"]["low_count"] = {}
+            Xccls = list(X_cat)
+            X_low_count = X[((X[Xccls].value_counts() / X[Xccls].count()) < 0.05).any(axis=1)]
+            resp["X"]["low_count"]["cols"] = X_low_count.values.to_list()
+
+            if do_y:
+                yccls = list(y_cat)
+                y_low_count = y[((y[yccls].value_counts() / y[yccls].count()) < 0.05).any(axis=1)]
+                resp["y"]["low_count"]["cols"] = y_low_count.values.to_list()
+
+            if model_name in self.data:
+                self.data[model_name].append(resp)
+            else:
+                self.data[model_name] = [resp]
+    
+    def update(self, env, kernel_id, cell_id, dfs, ns):
+        env.log.debug("[RareInstance] update")
+        self.data = self.data
 
 
 class ModelReportNote(Notification):
