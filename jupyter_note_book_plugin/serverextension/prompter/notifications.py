@@ -1388,6 +1388,7 @@ class UncertaintyNote(Notification):
         self._info_cache = {}
         self.columns = {}
         self.length_combinations = 2 
+
     def _get_new_models(self, cell_id, env, non_dfs_ns): 
         """
         return dictionary of model names in cell that are defined in the namespace
@@ -1713,6 +1714,7 @@ class UncertaintyNote(Notification):
                     env.log.debug(f"[uncertainty] {ctf_key} true_to_False: {true_to_False}, false_to_True: {false_to_True}")
                     if ctf_key not in statistics:
                         statistics[ctf_key] = {
+                            'info': ctf_key,
                             'raw_diff': raw_diff,
                             'true_to_False': true_to_False,
                             'false_to_True': false_to_True,
