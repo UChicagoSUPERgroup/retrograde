@@ -608,10 +608,12 @@ th {
   padding: 10px;
   max-width: 100%;
   border-radius: 5px;
+  margin: 10px;
 }
 .uncertaintyNote table {
   border-spacing: 0;
-  width: 100%;
+  max-width: 100%;
+  width: fit-content;
   max-height: 80vh;
   display: block;
   overflow-y: scroll;
@@ -670,9 +672,7 @@ th {
   border-top: 1px solid #efefef;
   margin-top: -1px;
   margin-bottom: 0;
-  padding-top: 10px;
-  padding-bottom: 10px;
-  padding-left: 15px;
+  padding: 10px 15px;
 }
 
 .uncertaintyNote tr[modified]:not(.active, *[modified="original"]) {

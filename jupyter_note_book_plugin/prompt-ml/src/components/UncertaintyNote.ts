@@ -1,5 +1,4 @@
 import { PopupNotification } from "./PopupNotification";
-// import * as $ from "jquery"; // jQuery for local testing
 import $ = require("jquery"); // jQuery for plugin
 
 export class UncertaintyNote extends PopupNotification {
@@ -10,6 +9,7 @@ export class UncertaintyNote extends PopupNotification {
   ////////////////////////////////////////////////////////////
 
   private _notices: { [key: string]: any }[];
+  private _selectedIndex: number;
 
   ////////////////////////////////////////////////////////////
   // Constructor
@@ -17,6 +17,7 @@ export class UncertaintyNote extends PopupNotification {
 
   constructor(notices: any[]) {
     super("uncertainty", false, "Uncertainty Note", notices);
+    this._selectedIndex = 0;
     this._notices = notices;
     super.addRawHtmlElement(this._generateBaseNote());
   }
@@ -41,6 +42,9 @@ export class UncertaintyNote extends PopupNotification {
   }
 
   private _generateModelContent(model: { [key: string]: any }): HTMLElement {
+    for (var [colName, _] of Object.entries(model.columns)) {
+      model.columns[colName].sort();
+    }
     var elem = $.parseHTML(`
       <div class="noselect model shadowDefault" prompt-ml-tracking-enabled prompt-ml-tracker-interaction-description="Toggled model tab (${model["model_name"]})">
         <h2><span class="prefix"> - </span>Within <span class="code-snippet">${model["model_name"]}</span></h2>
@@ -60,51 +64,20 @@ export class UncertaintyNote extends PopupNotification {
           .text(parentElem.hasClass("condensed") ? " + " : " - ");
       });
     // generate summary
-    $(elem).find(".toggleable").append(this._generateSummary(model));
+    $(elem).find(".toggleable").append(this._generateSummary(model)); // TODO: fix
     // generate table
-    $(elem).find(".toggleable").append(this._generateTable(model));
+    $(elem).find(".toggleable").append(this._generateTable(model)); // TODO: fix
     // prepare selector interactivity
-    const onPress = (columnName: string) => {
-      $(elem).find(`tr[modified="original"]`).removeAttr("modified");
-      $(elem).find("table .active").removeClass("active");
-      $(elem).find("table th").removeClass("active");
-      $(elem).find(`*[id*="${columnName}"]`).addClass("active");
-      $(elem).find(`table *[modified*="${columnName}"]`).addClass("active");
-      if (columnName.indexOf(",") >= 0) {
-        var columnsString = this._splitArrayOfColumns(columnName);
-        var columns = columnsString.split(", ");
-        for (var column of columns) {
-          $(elem).find(`table *[id*="${column}"]`).addClass("active");
-        }
-      }
+    const onPress = (d: string) => {
+      const keys = Object.keys(model.modified_values).sort();
+      // const newIndex = model.ctf_statistics[d].info.map((key : string) => keys.indexOf(key));
+      this._selectedIndex = keys.indexOf(d);
+      $(elem).find("table").remove();
+      $(elem).find(".toggleable").append(this._generateTable(model));
     };
     // generate interactivity
-    $(elem).find(".toggleable").prepend(this._generateSelector(model, onPress));
-
+    $(elem).find(".toggleable").prepend(this._generateSelector(model, onPress)); // TODO: fix
     return elem[1] as HTMLElement;
-  }
-
-  private _extractRows(model: {
-    [key: string]: any;
-  }): { [key: string]: any }[] {
-    var modified_values: { [key: string]: any } = model.modified_values;
-    var original_results: boolean[] = model.original_results;
-    var rows = model.original_values.map((e: number[], i: number) => {
-      var row = { original: [...e, original_results[i] ? 1 : 0] };
-      for (var [modifiedColumnName, values] of Object.entries(
-        modified_values
-      )) {
-        var rowValues: number[][] = values["0"];
-        row = Object.assign({}, row, {
-          [modifiedColumnName]: [
-            ...rowValues[i],
-            model.modified_results[modifiedColumnName][0][i] ? 1 : 0,
-          ],
-        });
-      }
-      return row;
-    });
-    return rows;
   }
 
   private _generateSelector(
@@ -115,13 +88,21 @@ export class UncertaintyNote extends PopupNotification {
     var elem = $.parseHTML(
       `<div class="dropdown"><div class="selected"><p>Select columns to modify</p>${dropdownSvg}</div><div class="options"></div></div>`
     );
-    for (var columnName of Object.keys(model.modified_values))
+    for (var columnName of Object.keys(model.modified_values).sort()) {
+      const displayName = []
+        .concat(...[model.ctf_statistics[columnName].info]) // converts 2d ==> 1d
+        .join(", ");
       $(elem)
         .find(".options")
-        .append($.parseHTML(`<p id="${columnName}">${columnName}</p>`));
+        .append(
+          $.parseHTML(
+            `<p id="${columnName}" displayname="${displayName}">${displayName}</p>`
+          )
+        );
+    }
     $(elem).on("mouseup", (e: Event) => {
       if ($(e.target).prop("id")) {
-        $(elem).find(".selected p").text($(e.target).prop("id"));
+        $(elem).find(".selected p").text($(e.target).attr("displayname"));
         onSelect($(e.target).prop("id"));
       }
       $(elem).toggleClass("active");
@@ -142,7 +123,7 @@ export class UncertaintyNote extends PopupNotification {
       );
       $(colSummary[1]).append(
         $.parseHTML(
-          `<li><strong>${this._r(
+          `<li><strong>${UncertaintyNote._r(
             colStats["accuracy"][0] * 100,
             3
           )}</strong>% of predictions were accurate</li>`
@@ -167,71 +148,76 @@ export class UncertaintyNote extends PopupNotification {
   }
 
   private _generateTable(model: { [key: string]: any }): HTMLElement {
-    // get rows in an easaier format
-    var rows = this._extractRows(model);
-    var elem = $.parseHTML("<table></table>");
-    // generate column titles
-    var headers = $.parseHTML("<tr></tr>");
-    for (var columnName of model["columns"])
-      $(headers).append(this._generateCell(columnName, true));
-    // static columns
-    $(headers).append(this._generateCell("prediction", true));
-    $(elem).append(headers);
-    // Generate rows
-    for (var row of rows) {
-      var numModifications = Object.keys(row).length;
-      var tableRows = Array.from(Object.keys(row), (name, i) =>
-        $.parseHTML(`<tr modified="${name}"></tr>`)
-      );
-      for (var x = 0; x < row.original.length; x++) {
-        for (var y = 0; y < numModifications; y++) {
-          var originalValue = row.original[x];
-          var newValue = row[Object.keys(row)[y]][x];
-          if (originalValue == newValue)
-            $(tableRows[y]).append(
-              this._generateCell(this._r(originalValue, 3))
-            );
-          else
-            $(tableRows[y]).append(
-              this._generateCell(
-                `<span class="new">${this._r(
-                  newValue,
-                  3
-                )}</span> <span class="old">${this._r(
-                  originalValue,
-                  3
-                )}</span>`,
-                false,
-                true
-              )
-            );
-        }
-      }
-      for (var tableRow of tableRows) $(elem).append(tableRow);
-    }
-
-    return elem[0] as HTMLElement;
+    // select data to load
+    const selectedGroupLabel = Object.keys(model.modified_values).sort()[
+      this._selectedIndex
+    ];
+    const modifiedData = [
+      model.columns[selectedGroupLabel],
+      ...model.modified_values[selectedGroupLabel],
+    ];
+    // find column indices for modified data
+    const modifiedCols = [].concat(
+      ...model.ctf_statistics[selectedGroupLabel].info
+    );
+    const modifiedIndices = modifiedCols.map((col) =>
+      model.columns[selectedGroupLabel].sort().indexOf(col)
+    );
+    console.log("mod", modifiedIndices, modifiedCols);
+    // create dom element
+    var table = document.createElement("table");
+    var tableBody = document.createElement("tbody");
+    modifiedData.forEach(function (rowData: any[], x: number) {
+      var row = document.createElement("tr");
+      rowData.forEach(function (cellData, y) {
+        if (modifiedIndices.indexOf(y) >= 0) return;
+        var cell = UncertaintyNote._generateCell(
+          x == 0
+            ? modifiedIndices.indexOf(y - 1) >= 0
+              ? rowData[y - 1]
+              : cellData
+            : UncertaintyNote._r(cellData, 3),
+          x == 0,
+          modifiedIndices.indexOf(y - 1) >= 0 && x != 0
+            ? UncertaintyNote._r(rowData[y - 1], 3)
+            : null,
+          x == 0 && modifiedIndices.indexOf(y - 1) >= 0
+        );
+        row.appendChild(cell);
+      });
+      tableBody.appendChild(row);
+    });
+    table.appendChild(tableBody);
+    return table as HTMLElement;
   }
 
-  private _roundNumber(num: number, to: number) {
+  public static _roundNumber(num: number, to: number) {
     return (
       Math.round((num + Number.EPSILON) * Math.pow(10, to)) / Math.pow(10, to)
     );
   }
 
-  private _r(num: number, to: number): string {
+  public static _r(num: number, to: number): string {
     return this._roundNumber(num, to) + "";
   }
 
-  private _generateCell(
+  public static _generateCell(
     content: string,
     header = false,
-    modified = false
+    modified: string = null,
+    overrideModifiedStyling = false
   ): HTMLElement {
     return $.parseHTML(
-      `<t${header ? "h" : "d"} ${header ? `id="${content}"` : ""} ${
-        modified ? 'class="modified"' : ""
-      }>${content}</t${header ? "h" : "d"}>`
+      `<t${header ? "h" : "d"}
+      ${header ? `id="${content}"` : ""}
+      ${modified || overrideModifiedStyling ? "class='modified'" : ""} >
+        ${
+          modified
+            ? `<span class="new">${content}</span><span class="old">${modified}</span>`
+            : content
+        }
+
+      </t${header ? "h" : "d"}>`
     )[0] as HTMLElement;
   }
 
