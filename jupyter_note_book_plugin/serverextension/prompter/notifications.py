@@ -1722,6 +1722,9 @@ class UncertaintyNote(Notification):
                             'diff_indices': diff_indices,
                             'total': total
                         }
+                        # quick fix for single features to be saved in info as a list
+                        if isinstance(ctf_key, str):
+                            statistics[ctf_key]['info'] = [ctf_key]
                     
                     # old as of july 13
                     # statistics[ctf_key]['raw_diff'] += raw_diff
@@ -1994,6 +1997,8 @@ class UncertaintyNote(Notification):
         else:
             column_set.add(feature+modified_indicator)
         column_set = list(column_set)
+        column_set.sort() # place '_mod' features after their originals
+        env.log.debug(f"[uncertainty] column_set for {feature} is {column_set}")
         
         df.columns = [c+modified_indicator for c in df.columns]
         diff_df = X.join(df, how='right')
