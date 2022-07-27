@@ -1473,15 +1473,23 @@ class UncertaintyNote(Notification):
         # or 
         std = data.std()
         rng = np.random.default_rng()
-        deltas = np.asarray(rng.random(budget))
-        def _choose_num(x, std, d):
+        deltas = np.asarray(rng.random(budget)) * 0.5 # limit range of values to [0, 0.5)
+        def _choose_num(x, std, d, lower_bound, upper_bound):
             plus_minus = 1 if random_number() < 0.5 else -1
-            return x + (plus_minus * std * d)
+            new_x = x + (plus_minus * std * d) 
+            if new_x < lower_bound:
+                return lower_bound
+            elif new_x > upper_bound:
+                return upper_bound
+            else:
+                return new_x
 
         chosen = [data.copy() for _ in range(budget)] 
+        minim = data.min()
+        maxim = data.max()
         # modified copies of original data
         for b, d in enumerate(deltas):
-            chosen[b] = data.apply(_choose_num, args=(std, d))
+            chosen[b] = data.apply(_choose_num, args=(std, d, minim, maxim))
         return chosen
 
     def choose_categorical(self, env, data, unique_vals, budget, is_one_hot):
