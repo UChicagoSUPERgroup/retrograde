@@ -617,6 +617,7 @@ th {
   max-height: 80vh;
   display: block;
   overflow-y: scroll;
+  table-layout: fixed;
 }
 
 .uncertaintyNote tr {
@@ -686,11 +687,18 @@ th {
 .uncertaintyNote .old {
   text-decoration: line-through;
   float: right;
-  font-size: 0.9em;
+  font-size: 0.8em;
 }
 
 .uncertaintyNote .new {
   font-weight: 600;
+  padding-right: 15px;
+}
+
+.uncertaintyNote table td {
+  max-width: 100px;
+  word-wrap: wrap;
+  white-space: normal;
 }
 
 .uncertaintyNote .modified {
