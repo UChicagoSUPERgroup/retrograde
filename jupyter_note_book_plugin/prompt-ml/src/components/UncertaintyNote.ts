@@ -63,20 +63,19 @@ export class UncertaintyNote extends PopupNotification {
           .find("h2 .prefix")
           .text(parentElem.hasClass("condensed") ? " + " : " - ");
       });
-    // generate summary
-    $(elem).find(".toggleable").append(this._generateSummary(model)); // TODO: fix
     // generate table
-    $(elem).find(".toggleable").append(this._generateTable(model)); // TODO: fix
+    $(elem).find(".toggleable").append(this._generateTable(model));
+    // generate summary
+    $(elem).find(".toggleable").append(this._generateSummary(model));
     // prepare selector interactivity
     const onPress = (d: string) => {
       const keys = Object.keys(model.modified_values).sort();
-      // const newIndex = model.ctf_statistics[d].info.map((key : string) => keys.indexOf(key));
       this._selectedIndex = keys.indexOf(d);
       $(elem).find("table").remove();
       $(elem).find(".toggleable").append(this._generateTable(model));
     };
     // generate interactivity
-    $(elem).find(".toggleable").prepend(this._generateSelector(model, onPress)); // TODO: fix
+    $(elem).find(".toggleable").prepend(this._generateSelector(model, onPress));
     return elem[1] as HTMLElement;
   }
 
@@ -89,8 +88,8 @@ export class UncertaintyNote extends PopupNotification {
       `<div class="dropdown"><div class="selected"><p>Select columns to modify</p>${dropdownSvg}</div><div class="options"></div></div>`
     );
     for (var columnName of Object.keys(model.modified_values).sort()) {
-      const displayName = []
-        .concat(...[model.ctf_statistics[columnName].info]) // converts 2d ==> 1d
+      const displayName = model.ctf_statistics[columnName].info
+        .flat()
         .join(", ");
       $(elem)
         .find(".options")
@@ -117,7 +116,7 @@ export class UncertaintyNote extends PopupNotification {
     const statistics: { [key: string]: any } = model["ctf_statistics"];
     for (var [colName, colStats] of Object.entries(statistics)) {
       if (colName == "biggest_diff") continue; // special case
-      colName = this._splitArrayOfColumns(colName);
+      colName = this._splitArrayOfColumns(model, colName);
       var colSummary = $.parseHTML(
         `<li>When we modified <strong>${colName}</strong>:</li><ul></ul>`
       );
@@ -148,14 +147,18 @@ export class UncertaintyNote extends PopupNotification {
   }
 
   private _generateTable(model: { [key: string]: any }): HTMLElement {
+    // can change as needed with piloting
+    const MAX_ROW_COUNT = 25;
     // select data to load
     const selectedGroupLabel = Object.keys(model.modified_values).sort()[
       this._selectedIndex
     ];
-    const modifiedData = [
+    let modifiedData = [
       model.columns[selectedGroupLabel],
       ...model.modified_values[selectedGroupLabel],
     ];
+    if (modifiedData.length >= MAX_ROW_COUNT)
+      modifiedData = modifiedData.slice(0, MAX_ROW_COUNT);
     // find column indices for modified data
     const modifiedCols = [].concat(
       ...model.ctf_statistics[selectedGroupLabel].info
@@ -163,12 +166,21 @@ export class UncertaintyNote extends PopupNotification {
     const modifiedIndices = modifiedCols.map((col) =>
       model.columns[selectedGroupLabel].sort().indexOf(col)
     );
-    console.log("mod", modifiedIndices, modifiedCols);
     // create dom element
     var table = document.createElement("table");
     var tableBody = document.createElement("tbody");
     modifiedData.forEach(function (rowData: any[], x: number) {
+      const index = x - 1;
       var row = document.createElement("tr");
+      // index
+      row.appendChild(
+        UncertaintyNote._generateCell(
+          x == 0 ? "index" : "" + index,
+          x == 0,
+          null
+        )
+      );
+      // df col data
       rowData.forEach(function (cellData, y) {
         if (modifiedIndices.indexOf(y) >= 0) return;
         var cell = UncertaintyNote._generateCell(
@@ -185,6 +197,20 @@ export class UncertaintyNote extends PopupNotification {
         );
         row.appendChild(cell);
       });
+      // prediction
+      row.appendChild(
+        UncertaintyNote._generateCell(
+          x == 0
+            ? "prediction"
+            : model.modified_results[selectedGroupLabel][index],
+          x == 0,
+          model.ctf_statistics[selectedGroupLabel].diff_indices.indexOf(
+            index
+          ) >= 0
+            ? "" + !model.modified_results[selectedGroupLabel][index]
+            : null
+        )
+      );
       tableBody.appendChild(row);
     });
     table.appendChild(tableBody);
@@ -221,13 +247,11 @@ export class UncertaintyNote extends PopupNotification {
     )[0] as HTMLElement;
   }
 
-  private _splitArrayOfColumns(columnString: string): string {
-    return columnString
-      .replace(/ /g, "")
-      .replace(/'/g, "")
-      .replace("(", "")
-      .replace(")", "")
-      .replace(/,/g, ", ");
+  private _splitArrayOfColumns(
+    model: { [key: string]: any },
+    columnString: string
+  ): string {
+    return model.ctf_statistics[columnString].info.flat().join(", ");
   }
 
   ////////////////////////////////////////////////////////////
