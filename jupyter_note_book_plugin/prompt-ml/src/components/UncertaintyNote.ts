@@ -64,7 +64,12 @@ export class UncertaintyNote extends PopupNotification {
           .text(parentElem.hasClass("condensed") ? " + " : " - ");
       });
     // generate table
-    $(elem).find(".toggleable").append(this._generateTable(model));
+    $(elem)
+      .find(".toggleable")
+      .append($.parseHTML(`<div class="tableContainer" />`));
+    $(elem)
+      .find(".toggleable .tableContainer")
+      .append(this._generateTable(model));
     // generate summary
     $(elem).find(".toggleable").append(this._generateSummary(model));
     // prepare selector interactivity
@@ -72,7 +77,9 @@ export class UncertaintyNote extends PopupNotification {
       const keys = Object.keys(model.modified_values).sort();
       this._selectedIndex = keys.indexOf(d);
       $(elem).find("table").remove();
-      $(elem).find(".toggleable").append(this._generateTable(model));
+      $(elem)
+        .find(".toggleable .tableContainer")
+        .append(this._generateTable(model));
     };
     // generate interactivity
     $(elem).find(".toggleable").prepend(this._generateSelector(model, onPress));
