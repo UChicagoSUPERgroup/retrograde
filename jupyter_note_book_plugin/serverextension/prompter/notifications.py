@@ -1991,8 +1991,8 @@ class UncertaintyNote(Notification):
         #     diff_predictions[b] = predictions[b].loc[indices]
         #     diff_df[b] = df[b].loc[indices]
         # return diff_predictions, diff_df
-        preds = pd.concat([orig_preds.loc[indices], predictions[0].loc[indices]])
-        df = df[0] # NOTE: limiting to just one "trial" (AKA b or budget previously) for simplification
+        preds = pd.concat([orig_preds.loc[indices], predictions[0].loc[indices]], axis=1)
+        df = df[0].loc[indices] # NOTE: limiting to just one "trial" (AKA b or budget previously) for simplification
         column_set = set(X.columns.tolist())
         modified_indicator = '_mod'
         if isinstance(feature, tuple):
