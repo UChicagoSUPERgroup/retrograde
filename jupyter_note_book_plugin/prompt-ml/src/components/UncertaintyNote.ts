@@ -182,7 +182,9 @@ export class UncertaintyNote extends PopupNotification {
       // index
       row.appendChild(
         UncertaintyNote._generateCell(
-          x == 0 ? "index" : "" + index,
+          x == 0
+            ? "index"
+            : "" + model.ctf_statistics[selectedGroupLabel].diff_indices[index],
           x == 0,
           null
         )
@@ -209,13 +211,12 @@ export class UncertaintyNote extends PopupNotification {
         UncertaintyNote._generateCell(
           x == 0
             ? "prediction"
-            : model.modified_results[selectedGroupLabel][index],
+            : model.modified_results[selectedGroupLabel][index][0],
           x == 0,
-          model.ctf_statistics[selectedGroupLabel].diff_indices.indexOf(
-            index
-          ) >= 0
-            ? "" + !model.modified_results[selectedGroupLabel][index]
-            : null
+          x == 0
+            ? null
+            : "" + model.modified_results[selectedGroupLabel][index][1],
+          true
         )
       );
       tableBody.appendChild(row);
