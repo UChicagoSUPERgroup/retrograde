@@ -67,7 +67,11 @@ export class UncertaintyNote extends PopupNotification {
     // generate table
     $(elem)
       .find(".toggleable")
-      .append($.parseHTML(`<div class="tableContainer" />`));
+      .append(
+        $.parseHTML(
+          `<div class="tableContainer"><h4>Modifications Table</h4></div>`
+        )
+      );
     $(elem)
       .find(".toggleable .tableContainer")
       .append(this._generateTable(model));
@@ -94,7 +98,9 @@ export class UncertaintyNote extends PopupNotification {
     var elem = $.parseHTML(
       `<div class="dropdown"><div class="selected"><p>Select columns to modify</p>${dropdownSvg}</div><div class="options"></div></div>`
     );
-    for (var columnName of Object.keys(model.modified_values).sort()) {
+    for (var columnName of Object.keys(model.modified_values)
+      .sort()
+      .filter((columnName) => model.ctf_statistics[columnName].raw_diff > 0)) {
       const displayName = model.ctf_statistics[columnName].info
         .flat()
         .join(", ");
@@ -123,6 +129,7 @@ export class UncertaintyNote extends PopupNotification {
     const statistics: { [key: string]: any } = model["ctf_statistics"];
     for (var [colName, colStats] of Object.entries(statistics)) {
       if (colName == "biggest_diff") continue; // special case
+      if (colStats["raw_diff"] == 0) continue;
       colName = this._splitArrayOfColumns(model, colName);
       var colSummary = $.parseHTML(
         `<li>When we modified <strong>${colName}</strong>:</li><ul></ul>`
@@ -204,7 +211,6 @@ export class UncertaintyNote extends PopupNotification {
       );
       // df col data
       rowData.forEach(function (cellData, y) {
-        if (modifiedIndices.indexOf(y - 1) == -1) return;
         if (modifiedIndices.indexOf(y) >= 0) return;
         var cell = UncertaintyNote._generateCell(
           x == 0
@@ -213,7 +219,9 @@ export class UncertaintyNote extends PopupNotification {
               : cellData
             : UncertaintyNote._r(cellData, 3),
           x == 0,
-          x != 0 && rowData[y - 1] != rowData[y]
+          x != 0 &&
+            modifiedIndices.indexOf(y - 1) >= 0 &&
+            rowData[y - 1] != rowData[y]
             ? UncertaintyNote._r(rowData[y - 1], 3)
             : null,
           x == 0 && modifiedIndices.indexOf(y - 1) >= 0
