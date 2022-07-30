@@ -16,7 +16,7 @@ export class UncertaintyNote extends PopupNotification {
   ////////////////////////////////////////////////////////////
 
   constructor(notices: any[]) {
-    super("uncertainty", false, "Uncertainty Note", notices);
+    super("uncertainty", false, "Counterfactuals", notices);
     this._selectedIndex = 0;
     this._notices = notices;
     super.addRawHtmlElement(this._generateBaseNote());
@@ -30,7 +30,42 @@ export class UncertaintyNote extends PopupNotification {
   private _generateBaseNote(): HTMLElement {
     var elem = $.parseHTML(`
             <div class="promptMl uncertaintyNote">
-                <h1>Uncertainty Note</h1>
+                <h1>Counterfactual Notification</h1>
+                <p>
+                A counterfactual is a conditional statement used to reason about what could 
+                have been true under different circumstances. "If Brenda was allergic to apples 
+                she would not eat an apple every day", is an example of a counterfactual 
+                statement. In the machine learning setting, a counterfactual means perturbing 
+                each data point and observing how this impacts the predictions made by a model.
+                </p>
+                <br />
+                <p>
+                <b>How does Retrograde do this?</b> <br />
+                For numerical features, Retrograde randomly adds or subtracts less than half a 
+                standard deviation (the standard deviation of your test data set) from each row instance.
+                For one-hot encoded features or categorical features, Retrograde randomly 
+                chooses a value different than the current row's value.
+                </p>
+                <br />
+                <p>
+                <b>Why should I be concerned?</b> <br />
+                When you are building a machine learning model, it is sometimes difficult to 
+                know how a model will perform on out-of-distribution data (i.e. data instances 
+                it has not previously seen). Consequently, it may be difficult to solely use 
+                the accuracy of a model as a measure. This uncertainty is a result of the 
+                inability to know the degree to which your model has "generalized" and 
+                "learned" from the data. 
+                </p>
+                <br />
+                <b>What can I do about it?</b> <br />  
+                Retrograde offers brief statistics about the number of predictions affected by 
+                the perturbations as well as how the predictions were affected (i.e. 
+                quantifying the changes from True to False or False to True). The statistics 
+                from this modification are summarized above the table. It is up to you to 
+                interpret and evaluate the ramifications of the counterfactual predictions 
+                presented to see if there exist systemic issues or outliers with the results of 
+                the counterfactual predictions.               
+                </p>
                 <div class="models">
                 </div>
             </div>
@@ -47,7 +82,7 @@ export class UncertaintyNote extends PopupNotification {
     }
     var elem = $.parseHTML(`
       <div class="noselect model shadowDefault" prompt-ml-tracking-enabled prompt-ml-tracker-interaction-description="Toggled model tab (${model["model_name"]})">
-        <h2><span class="prefix"> - </span>Within <span class="code-snippet">${model["model_name"]}</span></h2>
+        <h2><span class="prefix"> - </span>Within <span class="code-snippet">${model["model_name"]}</span> Base Accuracy: ${model["original_accuracy"]}}</h2>
         <div class="toggleable"></div>
       </div>
     `);
@@ -151,8 +186,8 @@ export class UncertaintyNote extends PopupNotification {
         .find(".predictionsSublist")
         .append(
           $.parseHTML(
-            `<li><strong>${colStats["true_to_False"]}</strong> changed from <strong>true</strong> to <strong>false</strong></li>
-            <li><strong>${colStats["false_to_True"]}</strong> changed from <strong>true</strong> to <strong>false</strong></li>`
+            `<li><strong>${colStats["true_to_False"]}</strong> changed from <strong>True</strong> to <strong>False</strong></li>
+            <li><strong>${colStats["false_to_True"]}</strong> changed from <strong>False</strong> to <strong>True</strong></li>`
           )
         );
       $(elem).find("ul.modificationSummaries").append(colSummary);
