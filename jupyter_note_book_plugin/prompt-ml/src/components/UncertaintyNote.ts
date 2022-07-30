@@ -63,6 +63,7 @@ export class UncertaintyNote extends PopupNotification {
           .find("h2 .prefix")
           .text(parentElem.hasClass("condensed") ? " + " : " - ");
       });
+    $(elem).find(".toggleable").append(this._generateSummary(model));
     // generate table
     $(elem)
       .find(".toggleable")
@@ -71,7 +72,6 @@ export class UncertaintyNote extends PopupNotification {
       .find(".toggleable .tableContainer")
       .append(this._generateTable(model));
     // generate summary
-    $(elem).find(".toggleable").append(this._generateSummary(model));
     // prepare selector interactivity
     const onPress = (d: string) => {
       const keys = Object.keys(model.modified_values).sort();
@@ -189,23 +189,6 @@ export class UncertaintyNote extends PopupNotification {
           null
         )
       );
-      // df col data
-      rowData.forEach(function (cellData, y) {
-        if (modifiedIndices.indexOf(y) >= 0) return;
-        var cell = UncertaintyNote._generateCell(
-          x == 0
-            ? modifiedIndices.indexOf(y - 1) >= 0
-              ? rowData[y - 1]
-              : cellData
-            : UncertaintyNote._r(cellData, 3),
-          x == 0,
-          modifiedIndices.indexOf(y - 1) >= 0 && x != 0
-            ? UncertaintyNote._r(rowData[y - 1], 3)
-            : null,
-          x == 0 && modifiedIndices.indexOf(y - 1) >= 0
-        );
-        row.appendChild(cell);
-      });
       // prediction
       row.appendChild(
         UncertaintyNote._generateCell(
@@ -219,6 +202,24 @@ export class UncertaintyNote extends PopupNotification {
           true
         )
       );
+      // df col data
+      rowData.forEach(function (cellData, y) {
+        if (modifiedIndices.indexOf(y - 1) == -1) return;
+        if (modifiedIndices.indexOf(y) >= 0) return;
+        var cell = UncertaintyNote._generateCell(
+          x == 0
+            ? modifiedIndices.indexOf(y - 1) >= 0
+              ? rowData[y - 1]
+              : cellData
+            : UncertaintyNote._r(cellData, 3),
+          x == 0,
+          x != 0 && rowData[y - 1] != rowData[y]
+            ? UncertaintyNote._r(rowData[y - 1], 3)
+            : null,
+          x == 0 && modifiedIndices.indexOf(y - 1) >= 0
+        );
+        row.appendChild(cell);
+      });
       tableBody.appendChild(row);
     });
     table.appendChild(tableBody);
