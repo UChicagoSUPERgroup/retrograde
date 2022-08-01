@@ -27,7 +27,7 @@ export class PopupNotification {
     return elem;
   }
 
-  private _generateElement(type: string, content: string): HTMLElement {
+  public _generateElement(type: string, content: string): HTMLElement {
     var elem = document.createElement(type);
     elem.innerHTML = content;
     return elem;

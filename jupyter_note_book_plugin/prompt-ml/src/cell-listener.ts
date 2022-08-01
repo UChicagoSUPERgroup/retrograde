@@ -113,7 +113,7 @@ export class Listener {
 	        ServerConnection.makeSettings()).
 	    then(value => { 
               console.log("received: ",value);
-              let obj = JSON.parse(value);
+              let obj = JSON.parse(value.replace(/\bNaN\b/g, "null"));
               this._infoSignal.emit(obj); });
         }
       })
