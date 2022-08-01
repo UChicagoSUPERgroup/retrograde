@@ -13,12 +13,12 @@ if MODE == "EXP_CTS":
     SHOW = ["all", "intro", "clean", "feature_select", "model", "end"]
 if MODE == "EXP_END":
     NOTE_RULES = {
-        "all" : [WelcomeNote],
+        "all" : [WelcomeNote, ProtectedColumnNote],
         "intro" :[],
-        "clean" : [],
-        "feature_select" : [],
-        "model" : [],
-        "end" : [ModelReportNote, ProxyColumnNote, MissingDataNote, ProtectedColumnNote, WelcomeNote]
+        "clean" : [MissingDataNote],
+        "feature_select" : [ProxyColumnNote],
+        "model" : [ModelReportNote, UncertaintyNote],
+        "end" : []
     }
     SHOW = ["end"]
 if MODE == "EXP_NONE":
