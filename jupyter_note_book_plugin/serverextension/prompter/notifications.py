@@ -14,6 +14,7 @@ import math
 import operator
 from ast import literal_eval
 
+
 import pandas as pd
 from pandas.api.types import is_numeric_dtype
 import numpy as np
@@ -399,34 +400,26 @@ class ProxyColumnNote(ProtectedColumnNote):
             return None
         if sens_col_type == "categorical" and not_sense_col_type == "numeric":
             coeff,p = self._apply_ANOVA(df, sens_col, not_sense_col)
-            if pd.isna(coeff):
-                raise Exception(f"na coeff {sens_col} {not_sense_col}")
-            if p < PVAL_CUTOFF:
-                return {"sensitive_col_name" : sens_col, 
+            if not pd.isna(coeff) and p < PVAL_CUTOFF:
+                return {"sensitive_col_name" : sens_col, "stat_name" : "F",
                         "proxy_col_name" : not_sense_col, "p" : p,
                         "coefficient" : round(coeff, 2)}
         if sens_col_type == "categorical" and not_sense_col_type == "categorical":
             coeff,p = self._apply_chisq(df, sens_col, not_sense_col)
-            if pd.isna(coeff):
-                raise Exception(f"na coeff {sens_col} {not_sense_col}")
-            if p < PVAL_CUTOFF:
-                return {"sensitive_col_name" : sens_col,
+            if not pd.isna(coeff) and p < PVAL_CUTOFF:
+                return {"sensitive_col_name" : sens_col, "stat_name" : "Chisq",
                         "proxy_col_name" : not_sense_col, "p" : p,
                         "coefficient" : round(coeff, 2)}
         if sens_col_type == "numeric" and not_sense_col_type == "numeric":
             coeff,p = self._apply_spearman(df, sens_col, not_sense_col)
-            if pd.isna(coeff):
-                raise Exception(f"na coeff {sens_col} {not_sense_col}")
-            if p < PVAL_CUTOFF:
-                return {"sensitive_col_name" : sens_col,
+            if not pd.isna(coeff) and p < PVAL_CUTOFF:
+                return {"sensitive_col_name" : sens_col, "stat_name" : "Rho",
                         "proxy_col_name" : not_sense_col, "p" : p,
                         "coefficient" : round(coeff, 2)} 
         if sens_col_type == "numeric" and not_sense_col_type == "categorical":
             coeff,p = self._apply_ANOVA(df, not_sense_col, sens_col)
-            if pd.isna(coeff):
-                raise Exception(f"na coeff {sens_col} {not_sense_col}")
-            if p < PVAL_CUTOFF:
-                return {"sensitive_col_name" : sens_col,
+            if not pd.isna(coeff) and p < PVAL_CUTOFF:
+                return {"sensitive_col_name" : sens_col, "stat_name" : "F",
                         "proxy_col_name" : not_sense_col, "p" : p,
                         "coefficient" : round(coeff, 2)} 
         return None
@@ -513,29 +506,22 @@ class ProxyColumnNote(ProtectedColumnNote):
         sense_col_values = df[sense_col].dropna().unique()
 
         if len(df[num_col].dropna().unique()) < 2: # f test is not defined if values are uniform
-            return 1.0
+            return None,1.0
         if len(sense_col_values) < 2:
-            return 1.0
+            return None,1.0
         value_cols = [df[num_col][df[sense_col] == v].dropna() for v in sense_col_values]
 
-        total_var = df[num_col].var(ddof=0, skipna=True)
-        total_mean = df[num_col].mean()
-
-        corr_ratio_num = sum([len(subset)*(subset.mean() - total_mean)**2 for subset in value_cols if len(subset) > 0])
-        corr_ratio = np.sqrt((corr_ratio_num/len(df[num_col]))/total_var)
-          
         result = f_oneway(*value_cols)
 
-        return corr_ratio,result[1] # this returns the p-value
+        return result[0],result[1] # this returns the p-value
  
     def _apply_chisq(self, df, sense_col, cat_col):
         # pylint: disable=no-self-use
         # contingency table
         table = pd.crosstab(df[sense_col], df[cat_col])
         result = chi2_contingency(table.to_numpy())
-        coeff = association(table.to_numpy(), method="cramer")
 
-        return coeff,result[1] # returns the p-value 
+        return result[0],result[1] # returns the p-value 
 
     def _apply_spearman(self, df, sens_col, not_sens_col):
         # pylint: disable=no-self-use

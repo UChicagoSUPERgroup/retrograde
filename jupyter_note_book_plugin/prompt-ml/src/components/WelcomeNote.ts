@@ -7,8 +7,8 @@ export class WelcomeNote extends PopupNotification {
 
   constructor() {
     super("welcome", false, "Welcome", [{}]);
-    this.addHeader("Welcome to PromptML");
-        this.addParagraph(`Throughout the course of this data task, the PromptML plugin will provide information about the data and your decisions with respect to fairness. 
+    this.addHeader("Welcome to Retrograde");
+        this.addParagraph(`Throughout the course of this data task, the Retrograde plugin will provide information about the data and your decisions with respect to fairness. 
         The plugin provides information through distinct notifications that each provide different data and analysis. 
         This <span class="code-snippet-inline">Welcome Notification</span> provides background information about the plugin, other notifications, and the task itself.`);
     this.addSubheader("The Plugin Interface")
