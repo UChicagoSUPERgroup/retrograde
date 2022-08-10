@@ -420,6 +420,13 @@ export class Prompter {
       notice
     );
     note.addHeader("Missing Data");
+    note.addParagraph(`This note surfaces cases of missing data in your dataframes, particularly patterns 
+      where data is missing at a higher rate for certain types of data subjects than others.`);
+
+    note.addParagraph(`<br /><b>Why this matters</b> There are a number of reasons why data may be missing. In some instances, 
+    it may be due to biased collection practices. It may also be missing due to random 
+    error.  How you handle the missing values may impact how the model behaves.`);
+
     for (var df_idx in notice) {
       // Small-view df container
       var df_name = notice[df_idx]["df"];
@@ -459,22 +466,18 @@ export class Prompter {
         var num_max = df["missing_columns"][col_name_index]["sens_col"][cor_col]["n_max"];
 
         ul.push(
-          `When <strong>${cor_col}</strong> is <strong>${cor_mode}</strong>, <strong>${col_name_index}</strong> is missing <strong>${num_missing}</strong>/<strong>${num_max}</strong> entries`
+          `When <strong>${cor_col}</strong> is <strong>${cor_mode}</strong>, <strong>${col_name_index}</strong> is missing <strong>${num_missing}</strong>/<strong>${num_max}</strong> (${((num_missing / num_max) * 100).toFixed(1)}%) entries`
         );
         ul.push([
-          `${col_name_index} is missing ${col_count}/${total_length} entries`,
+          `${col_name_index} is missing ${col_count}/${total_length} (${((col_count / total_length) * 100).toFixed(1)}%) entries`,
         ]);
       }
       note.addList(ul);
     }
-    note.addParagraph("This plugin has detected patterns of missing data");
-    note.addParagraph(`<br /><b>Why it matters</b> There are a number of reasons why data may be missing. In some instances, 
-    it may be due to biased collection practices. It may also be missing due to random 
-    error.  How you handle the missing values may impact how the model behaves.`);
-
     note.addParagraph(`<br /><b>What you can do</b> It is up to you to determine why you think the values in each column are missing.
     In some cases, it may be appropriate to exclude rows with missing entries in a particular column.
-    It may also be appropriate to impute that data. These decisions also may depend on whether you believe the column is relevant to the predictive
+    It may also be appropriate to impute that data, such as by adding an average value in place of the missing data rather 
+    than dropping those rows. These decisions also may depend on whether you believe the column is relevant to the predictive
     task. If the column with missing data is not relevant, then it may be appropriate to exclude that column.`)
 
     note.addParagraph(`<br /><b>How was it detected?</b> The plugin calculates missing data values by examining the all columns with na values. 
