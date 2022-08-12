@@ -21,10 +21,10 @@ export class WelcomeNote extends PopupNotification {
         and pregnancy status.`);
         this.addRawHtmlElement(document.createElement("br"));
     this.addSubheader("Remember to Check for Updates")
-        this.addParagraph(`As you work, be sure to regularly check Retrograde the side panel for new notifications. 
-        Notifications that that have new information that has not yet been viewed will appear in <b style="color:orange">orange</b>. 
-        Notifications with information that has already been viewed can be revisited at any time by clicking on it, however, these will
-        appear in <b style="color:gray">gray</b>.`)
+        this.addParagraph(`If Retrograde has any new information to show you, they will appear in the JupyterLab side panel labeled
+        'Retrograde'. Be sure to check it at least once before you submit the task. Notifications that that have new information that 
+        has not yet been viewed will appear in <b style="color:orange">orange</b>. Notifications with information that has already 
+        been viewed can be revisited at any time by clicking on it, however, these will appear in <b style="color:gray">gray</b>.`)
   }
 
   ////////////////////////////////////////////////////////////
