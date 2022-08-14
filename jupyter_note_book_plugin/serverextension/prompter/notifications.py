@@ -2241,7 +2241,7 @@ def get_one_hot_prefix(columns):
         for j in range(i+1,len(columns)):
             string1 = columns[i]
             string2 = columns[j]
-            match = SequenceMatcher(None, string1, string2).find_longest_match()
+            match = SequenceMatcher(None, string1, string2).find_longest_match(0, len(string1), 0, len(string2))
             matching_substring=string1[match.a:match.a+match.size]
             if(matching_substring not in substring_counts):
                 if (special_char.search(matching_substring)):

@@ -289,7 +289,7 @@ export class Prompter {
     // for an explanation of why we have to use [].slice.call(array)...
     // instead of directly using array.sort
     return [].slice.call(array).sort(function(a, b) {
-      var x = a["metrics"][SORT_BY]; var y = b["metrics"][SORT_BY];
+      var x: any = a["metrics"][SORT_BY]; var y = b["metrics"][SORT_BY];
       return ((x < y) ? 1 : ((x > y) ? -1 : 0));
     });
   }
@@ -333,6 +333,28 @@ export class Prompter {
   private _makeProxyMsg(d: any) {
     var note = new PopupNotification("proxy", false, "Proxy Columns", d);
     note.addHeader("Proxy Columns");
+
+    const description1 = $.parseHTML("<div>" +
+      "<br /><p>Some columns (variables) in your dataframe are correlated with protected classes. These are called <b>proxy variables.</b></p>" +
+      "<p>Below, we list the correlation coefficients (Spearman's rho [ρ], chi-square [χ²], or ANOVA [F]). Correlation coefficients close to 0 indicate no correlation, whereas those close to 1 or -1 indicate a high degree or positive or negative correlation.</p>" +
+      '<br /><p><b>Why it matters</b> Using proxy variables as predictors in your model may unintentionally base the model\'s decisions on protected classes like race and gender even if you exclude those sensitive variables from the model.</p>' +
+      "<br /><p><b>What you can do</b> It is up to you to decide whether to include proxy variables (or even protected classes themselves) as predictors in your model. The correlations identified here may or may not be meaningful. There also may be more complex correlations " +
+      "that weren't detected. In some cases, a variable's predictive value may outweigh its correlation with a protected class; in other cases, it might not.</p>" +
+      "<br /><p>Ultimately, it is up to you to make a decision about whether it is valid to include the correlated columns in your model.</p>"+
+    "</div>");
+    const description1HtmlElement = description1[0] as any as HTMLElement;
+    note.addRawHtmlElement(description1HtmlElement);
+
+    let symbol_converter = (symbol_name: string) => {
+      if (symbol_name == "Chisq") {
+        return "χ²"
+      } else if (symbol_name == "Rho") {
+        return "ρ"
+      } else {
+        return symbol_name;
+      }
+    };
+
     for (let df_name in d) {
       note.addHeader(`Within <span class="code-snippet">${df_name}</span></strong>`);
       var df = d[df_name];
@@ -346,7 +368,7 @@ export class Prompter {
           };
         }
 
-        var col_name = `${df["proxy_col_name"][idx]} (${df["stat_name"][idx]} = ${df["coeff"][idx]})`;
+        var col_name = `${df["proxy_col_name"][idx]} (${symbol_converter(df["stat_name"][idx])} = ${df["coeff"][idx]})`;
 
         if (df["p_vals"][idx] < 0.001) {
           tableRows[columnName].correlated.push(col_name);
@@ -358,8 +380,8 @@ export class Prompter {
         <thead>
           <tr>
             <th>Column name</th>
-            <th>Significantly correlated </br> columns (P < 0.001)</th>
-            <th>Potentially correlated </br> columns (P < 0.25)</th>
+            <th>Significantly correlated </br> columns (p < 0.001)</th>
+            <th>Potentially correlated </br> columns (p < 0.25)</th>
           </tr>
         </thead>
       `;
@@ -393,18 +415,15 @@ export class Prompter {
     }
 
 
-    const description = $.parseHTML(
+    const description2 = $.parseHTML(
       "<div>" +
-        "<br /><p>This plugin has detected the presence of certain columns in this notebook that are correlated with sensitive variables.</p>" +
-        '<br /><p><b>Why it matters</b> Using columns correlated with sensitive variables may produce outcomes that are biased. This bias may be undesirable, unethical and in some cases illegal. </p>' +
-        "<br /><p><b>What you can do</b> The correlations found or suggested here may or may not be meaningful. There also may be situation-specific correlations that are not detected by this plugin. In some cases, it may be appropriate to use a column which does have a correlation with a sensitive variable.</p>" +
-        "<br /><p>Ultimately, it is up to you to make a decision about whether it is valid to include the correlated columns in your model.</p>"+
-        "<br /><p><b>How was it detected?</b> The plugin calculates these values by comparing every sensitive column with every non-sensitive column. The plugin uses Analysis of Variance, Chi-Square, and Spearman tests depending on the type of columns being compared." + 
+        "<br /><p><b>How was it detected?</b> The plugin calculates these values by comparing every sensitive column with every non-sensitive column. " +
+        "Based on the data types of the columns being compared, Retrograde uses Analysis of Variance, Chi-Square, or Spearman tests as appropriate. It shows highly significant correlations (p < .001) on the left and less significant correlations (p < 0.25) on the right." + 
         "The correlations shown are those that had a p-value of less than 0.2, the Highest Correlated columns are those that had a p-value of less than 0.001"+
         "</div>"
     );
-    const descriptionHtmlElement = description[0] as any as HTMLElement;
-    note.addRawHtmlElement(descriptionHtmlElement);
+    const description2HtmlElement = description2[0] as any as HTMLElement;
+    note.addRawHtmlElement(description2HtmlElement);
 
 
     return note.generateFormattedOutput();
