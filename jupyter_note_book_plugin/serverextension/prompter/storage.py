@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 import json
 import numpy as np
 import pandas as pd
+import re
 import sqlite3
 import os
 import dill
@@ -606,15 +607,75 @@ def load_dfs(ns):
     ns_dict = dill.loads(ns["namespace"])
     return {k : dill.loads(v) for k,v in ns_dict["_forking_kernel_dfs"].items()}
 
-def clean_json(d):
+def clean_json(d, prefixes):
     """
     clear tuples from one level of a dictionary d
     """
     for k in list(d.keys()):
         if isinstance(k, tuple):
             v = d.pop(k)
-            d[str(k)] = v
+            if len(k) > 2:
+                for p in prefixes:
+                    if k[0].startswith(p):
+                        prefix = p
+                feature = re.compile('[@_!#$%^&*()<>?/\|}{~:]').split(prefix, 1)[0]
+            elif len(k) == 2:
+                f1, f2 = k
+                if isinstance(f1, tuple):
+                    for p in prefixes:
+                        if f1[0].startswith(p):
+                            prefix = p
+                    feature1 = re.compile('[@_!#$%^&*()<>?/\|}{~:]').split(prefix, 1)[0]
+                else:
+                    feature1 = f1
+                if isinstance(f2, tuple):
+                    for p in prefixes:
+                        if f2[0].startswith(p):
+                            prefix = p
+                    feature2 = re.compile('[@_!#$%^&*()<>?/\|}{~:]').split(prefix, 1)[0]
+                else:
+                    feature2 = f2
+
+                feature = (feature1, feature2)
+            else:
+                # ...
+                pass
+            d[str(feature)] = v
     return d
+
+def clean_list(env, l, prefixes):
+    if isinstance(l, (list, tuple)):
+        if len(l) > 2:
+            for p in prefixes:
+                if l[0].startswith(p):
+                    prefix = p
+            feature = re.compile('[@_!#$%^&*()<>?/\|}{~:]').split(prefix, 1)[0]
+        elif len(l) == 2:
+            f1, f2 = l
+            if isinstance(f1, (list, tuple)):
+                for p in prefixes:
+                    if f1[0].startswith(p):
+                        prefix = p
+                feature1 = re.compile('[@_!#$%^&*()<>?/\|}{~:]').split(prefix, 1)[0]
+            else:
+                feature1 = f1
+            if isinstance(f2, (list, tuple)):
+                for p in prefixes:
+                    if f2[0].startswith(p):
+                        prefix = p
+                feature2 = re.compile('[@_!#$%^&*()<>?/\|}{~:]').split(prefix, 1)[0]
+            else:
+                feature2 = f2
+
+            feature = [feature1, feature2]
+        else:
+            # ...
+            feature = l
+            pass
+    else:
+        feature = l
+    env.log.info(f"{l}: clean list feature {feature}")
+    return feature
     
 class NpEncoder(json.JSONEncoder):
     def default(self, obj):

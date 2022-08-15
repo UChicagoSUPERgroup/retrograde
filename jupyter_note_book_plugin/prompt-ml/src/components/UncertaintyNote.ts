@@ -276,12 +276,12 @@ export class UncertaintyNote extends PopupNotification {
             ? modifiedIndices.indexOf(y - 1) >= 0
               ? rowData[y - 1]
               : cellData
-            : UncertaintyNote._r(cellData, 3),
+            : typeof cellData == "number" ? UncertaintyNote._r(cellData, 3) : cellData,
           x == 0,
           x != 0 &&
             modifiedIndices.indexOf(y - 1) >= 0 &&
             rowData[y - 1] != rowData[y]
-            ? UncertaintyNote._r(rowData[y - 1], 3)
+            ? typeof rowData == "number" ? UncertaintyNote._r(rowData[y - 1], 3) : rowData[y - 1]
             : null,
           x == 0 && modifiedIndices.indexOf(y - 1) >= 0
         );
