@@ -83,10 +83,15 @@ export class UncertaintyNote extends PopupNotification {
       model.columns[colName].sort();
     }
     var elem = $.parseHTML(`
-      <div class="noselect model shadowDefault" prompt-ml-tracking-enabled prompt-ml-tracker-interaction-description="Toggled model tab (${model["model_name"]})">
-        <h2><span class="prefix"> - </span>Within <span class="code-snippet">${model["model_name"]}</span> Original Accuracy: ${UncertaintyNote._r(
-          model["original_accuracy"] * 100, 1
-          )}%</h2>
+      <div class="noselect model shadowDefault" prompt-ml-tracking-enabled prompt-ml-tracker-interaction-description="Toggled model tab (${
+        model["model_name"]
+      })">
+        <h2><span class="prefix"> - </span>Within <span class="code-snippet">${
+          model["model_name"]
+        }</span> Original Accuracy: ${UncertaintyNote._r(
+      model["original_accuracy"] * 100,
+      1
+    )}%</h2>
         <div class="toggleable"></div>
       </div>
     `);
@@ -106,11 +111,7 @@ export class UncertaintyNote extends PopupNotification {
     // generate table
     $(elem)
       .find(".toggleable")
-      .append(
-        $.parseHTML(
-          `<div class="tableContainer"><h4>Modifications Table</h4></div>`
-        )
-      );
+      .append($.parseHTML(`<div class="tableContainer"></div>`));
     $(elem)
       .find(".toggleable .tableContainer")
       .append(this._generateTable(model));
@@ -125,7 +126,13 @@ export class UncertaintyNote extends PopupNotification {
         .append(this._generateTable(model));
     };
     // generate interactivity
-    $(elem).find(".toggleable").prepend(this._generateSelector(model, onPress));
+    $(elem)
+      .find(".toggleable .tableContainer")
+      .prepend(this._generateSelector(model, onPress));
+    // generate title
+    const tableHeader = document.createElement("h4");
+    tableHeader.innerText = "Modifications Table";
+    $(elem).find(".toggleable .tableContainer").prepend(tableHeader);
     return elem[1] as HTMLElement;
   }
 
@@ -187,7 +194,7 @@ export class UncertaintyNote extends PopupNotification {
       $(colSummary[1]).append(
         $.parseHTML(
           `<li><strong>${colStats["raw_diff"]} (${UncertaintyNote._r(
-            colStats["raw_diff"] / colStats["total"] * 100, 
+            (colStats["raw_diff"] / colStats["total"]) * 100,
             1
           )}%)</strong> predictions changed</li>
           <ul class="predictionsSublist"></ul>`
@@ -198,11 +205,11 @@ export class UncertaintyNote extends PopupNotification {
         .append(
           $.parseHTML(
             `<li><strong>${colStats["true_to_False"]} (${UncertaintyNote._r(
-              colStats["true_to_False"] / colStats["total"] * 100,
+              (colStats["true_to_False"] / colStats["total"]) * 100,
               1
             )}%)</strong> changed from <strong>True</strong> to <strong>False</strong></li>
             <li><strong>${colStats["false_to_True"]} (${UncertaintyNote._r(
-              colStats["false_to_True"] / colStats["total"] * 100,
+              (colStats["false_to_True"] / colStats["total"]) * 100,
               1
             )}%)</strong> changed from <strong>False</strong> to <strong>True</strong></li>`
           )
@@ -249,7 +256,7 @@ export class UncertaintyNote extends PopupNotification {
         )
       );
       // prediction
-      row.appendChild(
+      row.prepend(
         UncertaintyNote._generateCell(
           x == 0
             ? "prediction"
@@ -308,8 +315,8 @@ export class UncertaintyNote extends PopupNotification {
       ${modified || overrideModifiedStyling ? "class='modified'" : ""} >
         ${
           modified
-            // ? `<span class="new">${content}</span><span class="old">${modified}</span>`
-            ? `<span class="old">${modified}</span>➜<span class="new">${content}</span>`
+            ? // ? `<span class="new">${content}</span><span class="old">${modified}</span>`
+              `<span class="old">${modified}</span>➜<span class="new">${content}</span>`
             : content
         }
 

@@ -710,3 +710,9 @@ th {
 .uncertaintyNote .summary h4 {
   margin: 0;
 }
+
+.uncertaintyNote tr td:first-of-type,
+.uncertaintyNote tr th:first-of-type {
+  border-right: 3px solid black;
+  padding-right: 30px;
+}
