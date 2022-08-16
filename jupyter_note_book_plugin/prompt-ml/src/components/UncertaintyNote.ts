@@ -97,8 +97,8 @@ export class UncertaintyNote extends PopupNotification {
     `);
     // handle expanded / condensed views
     $(elem)
-      .find("h2")
-      .on("mouseup", (e: Event) => {
+      .find("h2")[0]
+      .onmouseup = (e: Event) => {
         var parentElem = $($(e.currentTarget).parent());
         // Toggle basic visibility effects
         parentElem.toggleClass("condensed");
@@ -106,7 +106,7 @@ export class UncertaintyNote extends PopupNotification {
         parentElem
           .find("h2 .prefix")
           .text(parentElem.hasClass("condensed") ? " + " : " - ");
-      });
+      };
     $(elem).find(".toggleable").append(this._generateSummary(model));
     // generate table
     $(elem)
@@ -158,13 +158,13 @@ export class UncertaintyNote extends PopupNotification {
           )
         );
     }
-    $(elem).on("mouseup", (e: Event) => {
+    (elem[0] as HTMLElement).onmouseup = (e: Event) => {
       if ($(e.target).prop("id")) {
         $(elem).find(".selected p").text($(e.target).attr("displayname"));
         onSelect($(e.target).prop("id"));
       }
       $(elem).toggleClass("active");
-    });
+    };
     return elem[0] as any as HTMLElement;
   }
 
