@@ -88,6 +88,18 @@ class ProtectedColumnNote(Notification):
         self.df_not_protected_cols = {}
         self.ncounter = 0
 
+    def expunge(self, dfs, non_dfs):
+        """
+        If df not in dfs, remove it
+
+        TODO: this currently causes inconsistent state
+        in the frontend. If df_name removed is the only one, the note
+        is not updated
+        """
+        for df_name in self.data:
+            if df_name not in dfs:
+                del self.data[df_name]
+
     def check_feasible(self, cell_id, env, dfs, ns):
 
         # are there any dataframes that we haven't examined?
