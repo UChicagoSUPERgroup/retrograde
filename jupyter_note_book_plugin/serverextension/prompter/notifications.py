@@ -35,6 +35,8 @@ PVAL_CUTOFF = 0.25 # cutoff for thinking that column is a proxy for a sensitive 
 class Notification:
     """Abstract base class for all notifications"""
     def __init__(self, db):
+        self.started = False # has note started being considered?
+        self.displayed = False # is note being displayed?
         self._feasible = False
         self.db = db
         self.data = {}
@@ -64,7 +66,9 @@ class Notification:
     def check_feasible(self, cell_id, env, dfs, ns):
         """check feasibility of implementing class"""
         raise NotImplementedError("check_feasible must be overridden") 
-
+    def expunge(self, dfs, non_dfs):
+        """Remove any entries that are stale"""
+        pass
 class ProtectedColumnNote(Notification):
 
     """
@@ -321,6 +325,7 @@ class ProtectedColumnNote(Notification):
 
 class WelcomeNote(Notification):
     def __init__(self, db):
+        super().__init__(db)
         self.sent = False
     
     def check_feasible(self, cell_id, env, dfs, ns):

@@ -9,8 +9,8 @@ import dill
 
 from ..storage import load_dfs
 from ..analysis import AnalysisEnvironment
-from ..note_config import NOTE_RULES, SHOW
-
+from ..note_config import NOTES, CONTEXT
+from .note_manager import KernelNoteManager
 
 class AnalysisManager:
     """
@@ -20,13 +20,14 @@ class AnalysisManager:
     """
 
     def __init__(self, nbapp, database_manager):
+
         self.database_manager = database_manager
         self.analyses = {}
         self._nb = nbapp
 
+        self.note_manager = KernelNoteManager(database_manager.getDb(), nbapp.log, NOTES, CONTEXT)
+
         # mapping of notebook section -> notes to look for
-        self.notes = {s : [note_type(self.db()) for note_type in allowed_notes] for s, allowed_notes in NOTE_RULES.items()}
-        self.show = SHOW
 
     def handle_user_input(self, request):
         req_type = request["input_type"] if "input_type" in request else ""
@@ -84,21 +85,12 @@ class AnalysisManager:
         dfs = load_dfs(ns)
 
         non_dfs = dill.loads(ns["namespace"])
+        self.note_manager.update_notes(cell_id, kernel_id, env, dfs, non_dfs, cell_mode)
 
-        for r in self.notes["all"]:
-            if r.feasible(cell_id, env, dfs, non_dfs):
-                r.make_response(env, kernel_id, cell_id)
-            r.update(env, kernel_id, cell_id, dfs, non_dfs)
-        for r in self.notes[cell_mode]:
-            if r.feasible(cell_id, env, dfs, non_dfs):
-                r.make_response(env, kernel_id, cell_id) 
-            r.update(env, kernel_id, cell_id, dfs, non_dfs)
-        if cell_mode in self.show:
-            response = self.send_notifications(kernel_id, cell_id, request["exec_ct"])
-            return response
+        response = self.note_manager.make_responses(kernel_id, cell_id, request["exec_ct"], cell_mode, dfs, non_dfs)
+        return response
 #        self._nb.log.info("[MANAGER] sending response {0}".format(response))
 
-        return
     def handle_col_info(self, kernel_id, request):
         """Routes a request of type 'columnInformation' to DbHandler.provide_col_info()"""
         result = self.db().provide_col_info(kernel_id, request)
