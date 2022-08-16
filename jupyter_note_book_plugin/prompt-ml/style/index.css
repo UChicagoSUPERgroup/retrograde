@@ -700,6 +700,8 @@ th {
   max-width: 100px;
   word-wrap: wrap;
   white-space: normal;
+  padding-right: 30px;
+  padding-left: 8px;
 }
 
 .uncertaintyNote .modified {

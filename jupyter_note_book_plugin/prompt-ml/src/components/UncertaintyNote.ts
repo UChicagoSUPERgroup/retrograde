@@ -147,9 +147,9 @@ export class UncertaintyNote extends PopupNotification {
     for (var columnName of Object.keys(model.modified_values)
       .sort()
       .filter((columnName) => model.ctf_statistics[columnName].raw_diff > 0)) {
-      const displayName = model.ctf_statistics[columnName].info
-        .flat()
-        .join(", ");
+      const displayName = Array.isArray(model.ctf_statistics[columnName].info)
+        ? model.ctf_statistics[columnName].info.flat().join(", ")
+        : model.ctf_statistics[columnName].info;
       $(elem)
         .find(".options")
         .append(
@@ -276,12 +276,16 @@ export class UncertaintyNote extends PopupNotification {
             ? modifiedIndices.indexOf(y - 1) >= 0
               ? rowData[y - 1]
               : cellData
-            : typeof cellData == "number" ? UncertaintyNote._r(cellData, 3) : cellData,
+            : typeof cellData == "number"
+            ? UncertaintyNote._r(cellData, 3)
+            : cellData,
           x == 0,
           x != 0 &&
             modifiedIndices.indexOf(y - 1) >= 0 &&
             rowData[y - 1] != rowData[y]
-            ? typeof rowData == "number" ? UncertaintyNote._r(rowData[y - 1], 3) : rowData[y - 1]
+            ? typeof rowData == "number"
+              ? UncertaintyNote._r(rowData[y - 1], 3)
+              : rowData[y - 1]
             : null,
           x == 0 && modifiedIndices.indexOf(y - 1) >= 0
         );
@@ -328,7 +332,9 @@ export class UncertaintyNote extends PopupNotification {
     model: { [key: string]: any },
     columnString: string
   ): string {
-    return model.ctf_statistics[columnString].info.flat().join(", ");
+    return Array.isArray(model.ctf_statistics[columnString].info)
+      ? model.ctf_statistics[columnString].info.flat().join(", ")
+      : model.ctf_statistics[columnString].info;
   }
 
   ////////////////////////////////////////////////////////////
