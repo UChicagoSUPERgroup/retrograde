@@ -108,7 +108,7 @@ class ProtectedColumnNote(Notification):
 
         # pylint: disable=protected-access
         poss_cols = self.db.get_unmarked_columns(env._kernel_id)
-
+        env.log.debug(f"[ProtectedColumnNote.check_feasible] dfs with unmarked_cols {poss_cols}")
         for df_name, cols in poss_cols.items():
             if df_name not in dfs:
                 continue # sometimes dfs are in database, but have been deleted
@@ -175,6 +175,7 @@ class ProtectedColumnNote(Notification):
             for col_name, col_info in resp["columns"].items():
                 input_data[resp["df"]][col_name] = {"is_sensitive": col_info["sensitive"], 
                                                     "user_specified" : False, "fields" : col_info["field"]}
+        env.log.debug(f"[ProtectedColumn.make_response")
         self.db.update_marked_columns(kernel_id, input_data)
 
     def _make_resp_entry(self, df_name):
@@ -260,12 +261,13 @@ class ProtectedColumnNote(Notification):
             if col_name  not in col_prev[df_name]:
                 col_prev[df_name][col_name] = {}
             col_prev[df_name][col_name] = {"sensitive" : is_sensitive, "user_specified" : user_specified, "fields" : fields}
-
+        env.log.debug(f"[ProtectedColumnNote.update] note has {list(self.data.keys())}")
         for df_name, old_protected_columns in self.data.items():
 
             if df_name not in dfs:
                 continue
             if df_name in new_df_names: # if df is in here, then note was *just* generated
+                env.log.debug(f"[ProtectedColumnNote.update] note for {df_name} was already generated")
                 new_data[df_name] = old_protected_columns
                 continue
 
@@ -331,6 +333,7 @@ class ProtectedColumnNote(Notification):
                                                       "user_specified" : False,
                                                       "field" : None}
             new_data[df_name] = [new_entry]
+        env.log.debug(f"[ProtectedColumnNote.update] updating {list(update_data.keys())}")
         self.db.update_marked_columns(kernel_id, update_data)
 
         self.data = new_data
