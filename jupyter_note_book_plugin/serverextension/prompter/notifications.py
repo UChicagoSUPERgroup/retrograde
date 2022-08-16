@@ -1464,9 +1464,9 @@ class UncertaintyNote(Notification):
             plus_minus = 1 if random_number() < 0.5 else -1
             new_x = x + (plus_minus * std * d) 
             if new_x < lower_bound:
-                return lower_bound
+                return _choose_num(x, std, rng.random() * 0.5, lower_bound, upper_bound)
             elif new_x > upper_bound:
-                return upper_bound
+                return _choose_num(x, std, rng.random() * 0.5, lower_bound, upper_bound)
             else:
                 return new_x
 
@@ -1887,7 +1887,6 @@ class UncertaintyNote(Notification):
             diff_columns[f] = diff_columns_
         # resp["counterfactuals"] = clean_json(counterfactuals)
         # resp["new_predictions"] = clean_json(ctf_preds)
-        # TODO: change all keys of one hot columns to be the prefix (clean_json) -> look in get_diff for how to do this. i believe in you future kevin, we need you!
         resp["columns"] = clean_json(diff_columns, prefixes)
         resp["original_shape"] = orig_shape
         for col in ctf_statistics.keys():
@@ -1999,14 +1998,14 @@ class UncertaintyNote(Notification):
         for col, values in one_hot_as_column.items():
             c = re.compile('[@_!#$%^&*()<>?/\|}{~:]').split(col, 1)[0] # remove trailing character
             X[c] = values.str.split('[@_!#$%^&*()<>?/\|}{~:]', expand=True)[1]
-        env.log.debug(X)
+        env.log.debug(f"X: {X}")
 
         # df one hots
         try:
             f1, f2 = feature
             two_features = True
         except ValueError:
-            f_single = feature[0]
+            f_single = feature
             two_features = False
 
         if two_features:
@@ -2021,8 +2020,8 @@ class UncertaintyNote(Notification):
             if is_one_hot:
                 one_hot_as_column = df[list(f)].idxmax(axis=1).str.split(
                     '[@_!#$%^&*()<>?/\|}{~:]', expand=True)[1]
-                env.log.info(f"{list(f)}: {one_hot_as_column}")
-                env.log.info(f"{df}")
+                env.log.info(f"list f and one hot as column {list(f)}: {one_hot_as_column}")
+                env.log.info(f"df: {df}")
                 old_one_hot_as_col = df[list(f)].idxmax(axis=1)
                 df = df.drop(list(f), axis=1)
                 for p in prefixes:
@@ -2031,7 +2030,7 @@ class UncertaintyNote(Notification):
                         prefix = re.compile('[@_!#$%^&*()<>?/\|}{~:]').split(prefix, 1)[0] # remove trailing character
                         df[prefix] = one_hot_as_column
                         env.log.debug(f"found prefix {prefix}")
-        env.log.debug(df)
+        env.log.debug(f"df after: {df}")
         column_set = set(X.columns.tolist())
         modified_indicator = '_mod'
         # if isinstance(feature, tuple):
@@ -2053,7 +2052,7 @@ class UncertaintyNote(Notification):
         diff_df = X.join(df, how='right')
         diff_df = diff_df[column_set]
         
-        env.log.debug(diff_df)
+        env.log.debug(f"diff_df: {diff_df}")
         return column_set, preds, diff_df
 
 def error_rates(tp, fp, tn, fn):

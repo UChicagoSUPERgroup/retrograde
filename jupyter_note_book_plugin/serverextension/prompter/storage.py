@@ -649,7 +649,7 @@ def clean_list(env, l, prefixes):
             for p in prefixes:
                 if l[0].startswith(p):
                     prefix = p
-            feature = re.compile('[@_!#$%^&*()<>?/\|}{~:]').split(prefix, 1)[0]
+            feature = [re.compile('[@_!#$%^&*()<>?/\|}{~:]').split(prefix, 1)[0]]
         elif len(l) == 2:
             f1, f2 = l
             if isinstance(f1, (list, tuple)):
