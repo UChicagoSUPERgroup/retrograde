@@ -30,7 +30,7 @@ export class UncertaintyNote extends PopupNotification {
   private _generateBaseNote(): HTMLElement {
     var elem = $.parseHTML(`
             <div class="promptMl uncertaintyNote">
-                <h1>Counterfactual Notification</h1>
+                <h1>Counterfactual</h1>
                 <p>
                 A counterfactual is a conditional statement used to reason about what could 
                 have been true under different circumstances. "If Brenda was allergic to apples 
