@@ -87,14 +87,14 @@ export class ProtectedColumnNote extends PopupNotification {
                     <p>Some of the columns in the <strong>${joinedColumnNames}</strong> dataframe feature protected classes of data. 
                     A protected class is group of people sharing a common trait who are legally 
                     protected from being discriminated against on the basis of that trait. 
-                    Some examples include race, gender, and pregnancy status (please refer to the Welcome tab for the full list of protected columns).
+                    Some examples include race, gender, and pregnancy status.
                     <br /><br /><strong>Why should I be concerned?</strong>
                     <br />When you are building machine learning models off of data that includes 
                     information from protected classes, you may be inadvertently replicating power
                     structures that cause violence and harm, which could play into how your model makes predictions.
                     <br /><br /><strong>What can I do about it?</strong>
                     <br />Below, the column sensitivity picker will allow you to decide if a column represents one of the protected groups (note this is not necessarily the same as being correlated to a protected group). 
-                    The plugin uses that sensitivity decision in other notifications to show you more information about your data and/or model.</p>
+                    Retrograde uses that sensitivity decision in other notifications to show you more information about your data and/or model.</p>
                 </div>
                 ${dfString}
             </div>

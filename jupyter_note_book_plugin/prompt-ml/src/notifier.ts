@@ -204,8 +204,8 @@ export class Prompter {
     console.log("eqodds length ",eqOdds.length); 
     eqOdds.reverse();
     // preamble on MRN
-    note.addParagraph(`<p><b>The Model Report Note</b> uses the sensitivity as marked in the Protected Column Note to determine
-                       the columns that will be considered in this model report. By parsing your code, the plugin is able to find the original dataframe
+    note.addParagraph(`<p>The <span class="code-snippet-inline">Model Report</span> uses the sensitivity as marked in the <span class="code-snippet-inline">Protected Columns</span> to determine
+                       the columns that will be considered here. By parsing your code, Retrograde is able to find the original dataframe
                        your test dataframe was derived from and uses the sensitive columns found in that dataframe to measure
                        your model's performance across groups you may have excluded in your test features.</p>`);
     // <p style="color:green"><i>${metric_name}: ${metric}</i></p>
@@ -266,7 +266,7 @@ export class Prompter {
       // Attaching the data to the note itself
       note.addRawHtmlElement(new Model(name, model["current_df"], model["ancestor_df"], groups).export())
     }
-    note.addParagraph(`<p>This plugin has calculated performance metrics for data subsets based on Protected Columns</p>`);
+    note.addParagraph(`<p>Retrograde has calculated performance metrics for data subsets based on <span class="code-snippet-inline">Protected Columns</span></p>`);
     note.addParagraph(`<br /><p><b>Why it matters</b> Overall accuracy of a model may not tell the whole story. 
                        A model may be accurate overall, but may have better or worse performance on particular data subsets. 
                        Alternatively, errors of one type may be more frequent within one subset, and errors of another type may be more frequent in a different data subset.</p>`);
@@ -274,10 +274,10 @@ export class Prompter {
     note.addParagraph(`<br /><p><b>What you can do</b> It is up to you to determine how to balance overall accuracy and group-level performance. 
                      It may be the case that choosing a different model, choosing different model parameters, or choosing different input columns will change these characteristics.
                 Exploring the whole space may not be feasible, so prioritizing certain performance metrics and groups, and characterizing the tradeoffs there may be most efficient.</p>`);
-    note.addParagraph(`<br /><p><b>How was it detected?</b> The performance metrics shown here are derived from the plugin's best guess at the protected columns associated with the model's testing data. 
+    note.addParagraph(`<br /><p><b>How was it detected?</b> The performance metrics shown here are derived from Retrograde's best guess at the protected columns associated with the model's testing data. 
                        Because of this they may not perfectly match a manual evaluation. 
-                       The plugin calculates the performance with respect to protected groups identified in the Protected Column note. 
-                       The plugin calculates precision, recall, F1 Score, false positive rate (FPR) and false negative rate (FNR). More information about these metrics can be found <a style="color:blue" href="https://towardsdatascience.com/performance-metrics-confusion-matrix-precision-recall-and-f1-score-a8fe076a2262">here</a></p>`);
+                       Retrograde calculates the performance with respect to protected groups identified in <span class="code-snippet-inline">Protected Columns</span>. 
+                       Retrograde calculates precision, recall, F1 Score, false positive rate (FPR) and false negative rate (FNR). More information about these metrics can be found <a style="color:blue" href="https://towardsdatascience.com/performance-metrics-confusion-matrix-precision-recall-and-f1-score-a8fe076a2262">here</a></p>`);
     // Send to the Jupyterlab interface to render
     var message = note.generateFormattedOutput();
     this._appendNote(message);
@@ -395,11 +395,11 @@ export class Prompter {
 
     const description = $.parseHTML(
       "<div>" +
-        "<br /><p>This plugin has detected the presence of certain columns in this notebook that are correlated with sensitive variables.</p>" +
+        "<br /><p>Retrograde has detected the presence of certain columns in this notebook that are correlated with sensitive variables.</p>" +
         '<br /><p><b>Why it matters</b> Using columns correlated with sensitive variables may produce outcomes that are biased. This bias may be undesirable, unethical and in some cases illegal. </p>' +
-        "<br /><p><b>What you can do</b> The correlations found or suggested here may or may not be meaningful. There also may be situation-specific correlations that are not detected by this plugin. In some cases, it may be appropriate to use a column which does have a correlation with a sensitive variable.</p>" +
+        "<br /><p><b>What you can do</b> The correlations found or suggested here may or may not be meaningful. There also may be situation-specific correlations that are not detected by this Retrograde. In some cases, it may be appropriate to use a column which does have a correlation with a sensitive variable.</p>" +
         "<br /><p>Ultimately, it is up to you to make a decision about whether it is valid to include the correlated columns in your model.</p>"+
-        "<br /><p><b>How was it detected?</b> The plugin calculates these values by comparing every sensitive column with every non-sensitive column. The plugin uses Analysis of Variance, Chi-Square, and Spearman tests depending on the type of columns being compared." + 
+        "<br /><p><b>How was it detected?</b> Retrograde calculates these values by comparing every sensitive column with every non-sensitive column. Retrograde uses Analysis of Variance, Chi-Square, and Spearman tests depending on the type of columns being compared." + 
         "The correlations shown are those that had a p-value of less than 0.2, the Highest Correlated columns are those that had a p-value of less than 0.001"+
         "</div>"
     );
@@ -467,19 +467,19 @@ export class Prompter {
       }
       note.addList(ul);
     }
-    note.addParagraph("This plugin has detected patterns of missing data");
+    note.addParagraph("Retrograde has detected patterns of missing data");
     note.addParagraph(`<br /><b>Why it matters</b> There are a number of reasons why data may be missing. In some instances, 
     it may be due to biased collection practices. It may also be missing due to random 
-    error.  How you handle the missing values may impact how the model behaves.`);
+    error. How you handle the missing values may impact how the model behaves.`);
 
     note.addParagraph(`<br /><b>What you can do</b> It is up to you to determine why you think the values in each column are missing.
     In some cases, it may be appropriate to exclude rows with missing entries in a particular column.
     It may also be appropriate to impute that data. These decisions also may depend on whether you believe the column is relevant to the predictive
     task. If the column with missing data is not relevant, then it may be appropriate to exclude that column.`)
 
-    note.addParagraph(`<br /><b>How was it detected?</b> The plugin calculates missing data values by examining the all columns with na values. 
+    note.addParagraph(`<br /><b>How was it detected?</b> Retrograde calculates missing data values by examining the all columns with na values. 
     This means that placeholder values not recognized by <code>pd.isna()</code> are not recognized.
-    This note uses the protected columns identified in the Protected Column notification and checks the most common sensitive data value when an entry is missing.
+    This notification uses the protected columns identified in <span class="code-snippet-inline">Protected Columns</span> and checks the most common sensitive data value when an entry is missing.
     It does not check combinations of columns.`);
     // Create container for the small-view content
     // Iterating over every dataframe
