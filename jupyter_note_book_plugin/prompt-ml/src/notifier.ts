@@ -207,7 +207,7 @@ export class Prompter {
     note.addParagraph(`<p><b>The Model Report</b> uses the sensitivity as marked in the Protected Column notification to determine
                        the columns that will be considered in this model report. It is like a report card created by Retrograde that
                        measures your model's performance across groups you may have excluded in your test features. Retrograde does this in part 
-                       by parsing your code and finding the original dataframe your test dataframe was derived from, and as well as that 
+                       by parsing your code and finding the original dataframe your test dataframe was derived from, as well as that 
                        dataframe's sensitive columns, 
                        .</p>`);
     // <p style="color:green"><i>${metric_name}: ${metric}</i></p>
