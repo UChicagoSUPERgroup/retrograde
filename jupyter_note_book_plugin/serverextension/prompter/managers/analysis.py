@@ -96,6 +96,7 @@ class AnalysisManager:
         result = self.db().provide_col_info(kernel_id, request)
         if "error" in result:
             self._nb.log.warning("[MANAGER] Unable to provide columnInformation.\nRequest: {0}\nError: {1}".format(request, result))
+            return result
 
         formatted_result = {"col_name" : result["col_name"],
                             "sensitivity" : result["sensitivity"]}

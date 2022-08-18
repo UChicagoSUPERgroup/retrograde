@@ -61,7 +61,7 @@ export class ProtectedColumnNote extends PopupNotification {
     const joinedColumnNames = dfs.join(", ");
     var elem = $.parseHTML(`
             <div class="promptMl protectedColumns">
-                <h1>Protected Column Note</h1>
+                <h1>Protected Columns</h1>
                 <div class="intro">
                     <p>Some of the columns in the <strong>${joinedColumnNames}</strong> dataframe feature protected classes of data. 
                     A protected class is group of people sharing a common trait who are legally 
@@ -73,7 +73,7 @@ export class ProtectedColumnNote extends PopupNotification {
                     structures that cause violence and harm, which could play into how your model makes predictions.
                     <br /><br /><strong>What can I do about it?</strong>
                     <br />Below, the column sensitivity picker will allow you to decide if a column represents one of the protected groups (note this is not necessarily the same as being correlated to a protected group). 
-                    The plugin uses that sensitivity decision in other notifications to show you more information about your data and/or model.</p>
+                    Retrograde uses that sensitivity decision in other notifications to show you more information about your data and/or model.</p>
                 </div>
                 ${dfString}
             </div>
