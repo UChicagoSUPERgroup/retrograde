@@ -515,8 +515,14 @@ class DbHandler:
         df_name = request["df"] 
         col_name = request["col"]
 
+        if df_name not in dfs:
+            return {"error": "selected dataframe no longer exists."}
         df_callable = dfs[df_name]
+
+        if col_name not in df_callable:
+            return {"error": "selected column no longer exists."}
         col = df_callable[col_name]
+
 
         if is_numeric_dtype(col):
             col_val_counts = col.value_counts(bins=5)

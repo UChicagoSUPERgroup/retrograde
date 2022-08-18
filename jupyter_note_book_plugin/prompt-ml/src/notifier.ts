@@ -204,10 +204,12 @@ export class Prompter {
     console.log("eqodds length ",eqOdds.length); 
     eqOdds.reverse();
     // preamble on MRN
-    note.addParagraph(`<p><b>The Model Report Note</b> uses the sensitivity as marked in the Protected Column Note to determine
-                       the columns that will be considered in this model report. By parsing your code, the plugin is able to find the original dataframe
-                       your test dataframe was derived from and uses the sensitive columns found in that dataframe to measure
-                       your model's performance across groups you may have excluded in your test features.</p>`);
+    note.addParagraph(`<p><b>The Model Report</b> uses the sensitivity as marked in the Protected Column notification to determine
+                       the columns that will be considered in this model report. It is like a report card created by Retrograde that
+                       measures your model's performance across groups you may have excluded in your test features. Retrograde does this in part 
+                       by parsing your code and finding the original dataframe your test dataframe was derived from, as well as that 
+                       dataframe's sensitive columns, 
+                       .</p>`);
     // <p style="color:green"><i>${metric_name}: ${metric}</i></p>
     note.addParagraph(`<br /><p> <span style="color:green"><i>"metric_name": "metric_value"</i></span> indicates that a metric is performing some percent better than the median for that group while
                        <span style="color:red"><b>"metric_name": "metric_value"</b></span> does the same for metrics performing some percent worse than the median for that group.</p>`)
@@ -274,10 +276,10 @@ export class Prompter {
     note.addParagraph(`<br /><p><b>What you can do</b> It is up to you to determine how to balance overall accuracy and group-level performance. 
                      It may be the case that choosing a different model, choosing different model parameters, or choosing different input columns will change these characteristics.
                 Exploring the whole space may not be feasible, so prioritizing certain performance metrics and groups, and characterizing the tradeoffs there may be most efficient.</p>`);
-    note.addParagraph(`<br /><p><b>How was it detected?</b> The performance metrics shown here are derived from the plugin's best guess at the protected columns associated with the model's testing data. 
+    note.addParagraph(`<br /><p><b>How was it detected?</b> The performance metrics shown here are derived from Retrograde's best guess at the protected columns associated with the model's testing data. 
                        Because of this they may not perfectly match a manual evaluation. 
-                       The plugin calculates the performance with respect to protected groups identified in the Protected Column note. 
-                       The plugin calculates precision, recall, F1 Score, false positive rate (FPR) and false negative rate (FNR). More information about these metrics can be found <a style="color:blue" href="https://towardsdatascience.com/performance-metrics-confusion-matrix-precision-recall-and-f1-score-a8fe076a2262">here</a></p>`);
+                       Retrograde calculates the performance with respect to protected groups identified in the Protected Column notification. 
+                       Retrograde calculates precision, recall, F1 Score, false positive rate (FPR) and false negative rate (FNR). More information about these metrics can be found <a style="color:blue" href="https://towardsdatascience.com/performance-metrics-confusion-matrix-precision-recall-and-f1-score-a8fe076a2262">here</a>.</p>`);
     // Send to the Jupyterlab interface to render
     var message = note.generateFormattedOutput();
     this._appendNote(message);
@@ -289,7 +291,7 @@ export class Prompter {
     // for an explanation of why we have to use [].slice.call(array)...
     // instead of directly using array.sort
     return [].slice.call(array).sort(function(a, b) {
-      var x = a["metrics"][SORT_BY]; var y = b["metrics"][SORT_BY];
+      var x: any = a["metrics"][SORT_BY]; var y = b["metrics"][SORT_BY];
       return ((x < y) ? 1 : ((x > y) ? -1 : 0));
     });
   }
@@ -333,6 +335,28 @@ export class Prompter {
   private _makeProxyMsg(d: any) {
     var note = new PopupNotification("proxy", false, "Proxy Columns", d);
     note.addHeader("Proxy Columns");
+
+    const description1 = $.parseHTML("<div>" +
+      "<br /><p>Some columns (variables) in your dataframe are correlated with protected classes. These are called <b>proxy variables.</b></p>" +
+      "<p>Below, we list the correlation coefficients (Spearman's rho [ρ], Chi-Square [χ²], or ANOVA [F]). Correlation coefficients close to 0 indicate no correlation, whereas those close to 1 or -1 indicate a high degree or positive or negative correlation.</p>" +
+      '<br /><p><b>Why it matters</b> Using proxy variables as predictors in your model may unintentionally base the model\'s decisions on protected classes like race and gender even if you exclude those sensitive variables from the model.</p>' +
+      "<br /><p><b>What you can do</b> It is up to you to decide whether to include proxy variables (or even protected classes themselves) as predictors in your model. The correlations identified here may or may not be meaningful. There also may be more complex correlations " +
+      "that weren't detected. In some cases, a variable's predictive value may outweigh its correlation with a protected class; in other cases, it might not.</p>" +
+      "<br /><p>Ultimately, it is up to you to make a decision about whether it is valid to include the correlated columns in your model.</p>"+
+    "</div>");
+    const description1HtmlElement = description1[0] as any as HTMLElement;
+    note.addRawHtmlElement(description1HtmlElement);
+
+    let symbol_converter = (symbol_name: string) => {
+      if (symbol_name == "Chisq") {
+        return "χ²"
+      } else if (symbol_name == "Rho") {
+        return "ρ"
+      } else {
+        return symbol_name;
+      }
+    };
+
     for (let df_name in d) {
       note.addHeader(`Within <span class="code-snippet">${df_name}</span></strong>`);
       var df = d[df_name];
@@ -346,7 +370,7 @@ export class Prompter {
           };
         }
 
-        var col_name = `${df["proxy_col_name"][idx]} (${df["stat_name"][idx]} = ${df["coeff"][idx]})`;
+        var col_name = `${df["proxy_col_name"][idx]} (${symbol_converter(df["stat_name"][idx])} = ${df["coeff"][idx]})`;
 
         if (df["p_vals"][idx] < 0.001) {
           tableRows[columnName].correlated.push(col_name);
@@ -358,8 +382,8 @@ export class Prompter {
         <thead>
           <tr>
             <th>Column name</th>
-            <th>Significantly correlated </br> columns (P < 0.001)</th>
-            <th>Potentially correlated </br> columns (P < 0.25)</th>
+            <th>Significantly correlated </br> columns (p < 0.001)</th>
+            <th>Potentially correlated </br> columns (p < 0.25)</th>
           </tr>
         </thead>
       `;
@@ -393,18 +417,15 @@ export class Prompter {
     }
 
 
-    const description = $.parseHTML(
+    const description2 = $.parseHTML(
       "<div>" +
-        "<br /><p>This plugin has detected the presence of certain columns in this notebook that are correlated with sensitive variables.</p>" +
-        '<br /><p><b>Why it matters</b> Using columns correlated with sensitive variables may produce outcomes that are biased. This bias may be undesirable, unethical and in some cases illegal. </p>' +
-        "<br /><p><b>What you can do</b> The correlations found or suggested here may or may not be meaningful. There also may be situation-specific correlations that are not detected by this plugin. In some cases, it may be appropriate to use a column which does have a correlation with a sensitive variable.</p>" +
-        "<br /><p>Ultimately, it is up to you to make a decision about whether it is valid to include the correlated columns in your model.</p>"+
-        "<br /><p><b>How was it detected?</b> The plugin calculates these values by comparing every sensitive column with every non-sensitive column. The plugin uses Analysis of Variance, Chi-Square, and Spearman tests depending on the type of columns being compared." + 
+        "<br /><p><b>How was it detected?</b> Retrograde calculates these values by comparing every sensitive column with every non-sensitive column. " +
+        "Based on the data types of the columns being compared, Retrograde uses Analysis of Variance, Chi-Square, or Spearman tests as appropriate. It shows highly significant correlations (p < .001) on the left and less significant correlations (p < 0.25) on the right." + 
         "The correlations shown are those that had a p-value of less than 0.2, the Highest Correlated columns are those that had a p-value of less than 0.001"+
         "</div>"
     );
-    const descriptionHtmlElement = description[0] as any as HTMLElement;
-    note.addRawHtmlElement(descriptionHtmlElement);
+    const description2HtmlElement = description2[0] as any as HTMLElement;
+    note.addRawHtmlElement(description2HtmlElement);
 
 
     return note.generateFormattedOutput();
@@ -420,6 +441,13 @@ export class Prompter {
       notice
     );
     note.addHeader("Missing Data");
+    note.addParagraph(`This notification surfaces cases of missing data in your dataframes, particularly patterns 
+      where data is missing at a higher rate for certain types of data subjects than others.`);
+
+    note.addParagraph(`<br /><b>Why this matters</b> There are a number of reasons why data may be missing. In some instances, 
+    it may be due to biased collection practices. It may also be missing due to random 
+    error.  How you handle the missing values may impact how the model behaves.`);
+
     for (var df_idx in notice) {
       // Small-view df container
       var df_name = notice[df_idx]["df"];
@@ -459,27 +487,23 @@ export class Prompter {
         var num_max = df["missing_columns"][col_name_index]["sens_col"][cor_col]["n_max"];
 
         ul.push(
-          `When <strong>${cor_col}</strong> is <strong>${cor_mode}</strong>, <strong>${col_name_index}</strong> is missing <strong>${num_missing}</strong>/<strong>${num_max}</strong> entries`
+          `When <strong>${cor_col}</strong> is <strong>${cor_mode}</strong>, <strong>${col_name_index}</strong> is missing <strong>${num_missing}</strong>/<strong>${num_max}</strong> (${((num_missing / num_max) * 100).toFixed(1)}%) entries`
         );
         ul.push([
-          `${col_name_index} is missing ${col_count}/${total_length} entries`,
+          `${col_name_index} is missing ${col_count}/${total_length} (${((col_count / total_length) * 100).toFixed(1)}%) entries`,
         ]);
       }
       note.addList(ul);
     }
-    note.addParagraph("This plugin has detected patterns of missing data");
-    note.addParagraph(`<br /><b>Why it matters</b> There are a number of reasons why data may be missing. In some instances, 
-    it may be due to biased collection practices. It may also be missing due to random 
-    error.  How you handle the missing values may impact how the model behaves.`);
-
     note.addParagraph(`<br /><b>What you can do</b> It is up to you to determine why you think the values in each column are missing.
     In some cases, it may be appropriate to exclude rows with missing entries in a particular column.
-    It may also be appropriate to impute that data. These decisions also may depend on whether you believe the column is relevant to the predictive
+    It may also be appropriate to impute that data, such as by adding an average value in place of the missing data rather 
+    than dropping those rows. These decisions also may depend on whether you believe the column is relevant to the predictive
     task. If the column with missing data is not relevant, then it may be appropriate to exclude that column.`)
 
-    note.addParagraph(`<br /><b>How was it detected?</b> The plugin calculates missing data values by examining the all columns with na values. 
+    note.addParagraph(`<br /><b>How was it detected?</b> Retrograde calculates missing data values by examining the all columns with na values. 
     This means that placeholder values not recognized by <code>pd.isna()</code> are not recognized.
-    This note uses the protected columns identified in the Protected Column notification and checks the most common sensitive data value when an entry is missing.
+    The Missing Data notification uses the protected columns identified in the Protected Column notification and checks the most common sensitive data value when an entry is missing.
     It does not check combinations of columns.`);
     // Create container for the small-view content
     // Iterating over every dataframe
