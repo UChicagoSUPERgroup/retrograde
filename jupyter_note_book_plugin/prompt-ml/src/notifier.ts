@@ -204,7 +204,7 @@ export class Prompter {
     console.log("eqodds length ",eqOdds.length); 
     eqOdds.reverse();
     // preamble on MRN
-    note.addParagraph(`<p><b>The Model Report</b> uses the sensitivity as marked in the Protected Column notification to determine
+    note.addParagraph(`<p>The <span class="code-snippet-inline">Model Report</span> uses the sensitivity as marked in the <span class="code-snippet-inline">Protected Column</span> notification to determine
                        the columns that will be considered in this model report. It is like a report card created by Retrograde that
                        measures your model's performance across groups you may have excluded in your test features. Retrograde does this in part 
                        by parsing your code and finding the original dataframe your test dataframe was derived from, as well as that 
@@ -503,7 +503,7 @@ export class Prompter {
 
     note.addParagraph(`<br /><b>How was it detected?</b> Retrograde calculates missing data values by examining the all columns with na values. 
     This means that placeholder values not recognized by <code>pd.isna()</code> are not recognized.
-    The Missing Data notification uses the protected columns identified in the Protected Column notification and checks the most common sensitive data value when an entry is missing.
+    The <span class="code-snippet-inline">Missing Data</span> notification uses the protected columns identified in the <span class="code-snippet-inline">Protected Column</span> notification and checks the most common sensitive data value when an entry is missing.
     It does not check combinations of columns.`);
     // Create container for the small-view content
     // Iterating over every dataframe
