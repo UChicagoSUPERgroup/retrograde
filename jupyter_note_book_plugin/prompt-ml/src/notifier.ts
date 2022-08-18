@@ -204,7 +204,7 @@ export class Prompter {
     console.log("eqodds length ",eqOdds.length); 
     eqOdds.reverse();
     // preamble on MRN
-    note.addParagraph(`<p><b>The Model Report</b> uses the sensitivity as marked in the Protected Column notification to determine
+    note.addParagraph(`<p>The <span class="code-snippet-inline">Model Report</span> uses the sensitivity as marked in the <span class="code-snippet-inline">Protected Column</span> notification to determine
                        the columns that will be considered in this model report. It is like a report card created by Retrograde that
                        measures your model's performance across groups you may have excluded in your test features. Retrograde does this in part 
                        by parsing your code and finding the original dataframe your test dataframe was derived from, as well as that 
@@ -268,7 +268,7 @@ export class Prompter {
       // Attaching the data to the note itself
       note.addRawHtmlElement(new Model(name, model["current_df"], model["ancestor_df"], groups).export())
     }
-    note.addParagraph(`<p>This plugin has calculated performance metrics for data subsets based on Protected Columns</p>`);
+    note.addParagraph(`<p>Retrograde has calculated performance metrics for data subsets based on <span class="code-snippet-inline">Protected Columns</span></p>`);
     note.addParagraph(`<br /><p><b>Why it matters</b> Overall accuracy of a model may not tell the whole story. 
                        A model may be accurate overall, but may have better or worse performance on particular data subsets. 
                        Alternatively, errors of one type may be more frequent within one subset, and errors of another type may be more frequent in a different data subset.</p>`);
@@ -278,8 +278,8 @@ export class Prompter {
                 Exploring the whole space may not be feasible, so prioritizing certain performance metrics and groups, and characterizing the tradeoffs there may be most efficient.</p>`);
     note.addParagraph(`<br /><p><b>How was it detected?</b> The performance metrics shown here are derived from Retrograde's best guess at the protected columns associated with the model's testing data. 
                        Because of this they may not perfectly match a manual evaluation. 
-                       Retrograde calculates the performance with respect to protected groups identified in the Protected Column notification. 
-                       Retrograde calculates precision, recall, F1 Score, false positive rate (FPR) and false negative rate (FNR). More information about these metrics can be found <a style="color:blue" href="https://towardsdatascience.com/performance-metrics-confusion-matrix-precision-recall-and-f1-score-a8fe076a2262">here</a>.</p>`);
+                       Retrograde calculates the performance with respect to protected groups identified in <span class="code-snippet-inline">Protected Columns</span>. 
+                       Retrograde calculates precision, recall, F1 Score, false positive rate (FPR) and false negative rate (FNR). More information about these metrics can be found <a style="color:blue" href="https://towardsdatascience.com/performance-metrics-confusion-matrix-precision-recall-and-f1-score-a8fe076a2262">here</a></p>`);
     // Send to the Jupyterlab interface to render
     var message = note.generateFormattedOutput();
     this._appendNote(message);
@@ -503,7 +503,7 @@ export class Prompter {
 
     note.addParagraph(`<br /><b>How was it detected?</b> Retrograde calculates missing data values by examining the all columns with na values. 
     This means that placeholder values not recognized by <code>pd.isna()</code> are not recognized.
-    The Missing Data notification uses the protected columns identified in the Protected Column notification and checks the most common sensitive data value when an entry is missing.
+    The <span class="code-snippet-inline">Missing Data</span> notification uses the protected columns identified in the <span class="code-snippet-inline">Protected Column</span> notification and checks the most common sensitive data value when an entry is missing.
     It does not check combinations of columns.`);
     // Create container for the small-view content
     // Iterating over every dataframe

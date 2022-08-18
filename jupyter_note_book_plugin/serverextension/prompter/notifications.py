@@ -6,8 +6,8 @@ These are the classes that handle detecting when a notification may be
 sent, what its response is composed of, and updating response contents
 when relevant
 """
-from random import choice, sample, random as random_number
-from re import compile
+from random import sample, random as random_number
+import re
 from difflib import SequenceMatcher
 from itertools import combinations
 import math
@@ -28,7 +28,7 @@ from sklearn.base import ClassifierMixin
 from .string_compare import check_for_protected, guess_protected, set_env
 from .sortilege import is_categorical
 from .slice_finder import err_slices
-from .storage import clean_json, NpEncoder
+from .storage import clean_json, clean_list, NpEncoder
 
 PVAL_CUTOFF = 0.25 # cutoff for thinking that column is a proxy for a sensitive column
 
@@ -1464,9 +1464,9 @@ class UncertaintyNote(Notification):
             plus_minus = 1 if random_number() < 0.5 else -1
             new_x = x + (plus_minus * std * d) 
             if new_x < lower_bound:
-                return lower_bound
+                return _choose_num(x, std, rng.random() * 0.5, lower_bound, upper_bound)
             elif new_x > upper_bound:
-                return upper_bound
+                return _choose_num(x, std, rng.random() * 0.5, lower_bound, upper_bound)
             else:
                 return new_x
 
@@ -1880,19 +1880,24 @@ class UncertaintyNote(Notification):
                 key_f = f
 
             diff_columns_, diff_preds_, diff_data_ = self.get_diff(env, 
-            diff_indices, key_f, new_predictions[key_f][0], counterfactual_dfs[key_f], X, orig_predictions)
+                diff_indices, key_f, new_predictions[key_f][0], counterfactual_dfs[key_f], X,
+                orig_predictions, comb_list, prefixes, one_hots)
             diff_preds[f] = diff_preds_
             diff_data[f] = diff_data_
             diff_columns[f] = diff_columns_
         # resp["counterfactuals"] = clean_json(counterfactuals)
         # resp["new_predictions"] = clean_json(ctf_preds)
-        resp["columns"] = clean_json(diff_columns)
+        resp["columns"] = clean_json(diff_columns, prefixes)
         resp["original_shape"] = orig_shape
-        resp["ctf_statistics"] = clean_json(ctf_statistics)
+        for col in ctf_statistics.keys():
+            if col != "biggest_diff":
+                info = ctf_statistics[col]["info"]
+                ctf_statistics[col]["info"] = clean_list(env, info, prefixes) 
+        resp["ctf_statistics"] = clean_json(ctf_statistics, prefixes)
         # resp["original_values"] = diff_original
-        resp["modified_values"] = clean_json(diff_data)
+        resp["modified_values"] = clean_json(diff_data, prefixes)
         # resp["original_results"] = diff_original_preds 
-        resp["modified_results"] = clean_json(diff_preds)
+        resp["modified_results"] = clean_json(diff_preds, prefixes)
         try:
             resp["df_name"] = self.found_models[model_name]["x_name"]
         except KeyError:
@@ -1970,7 +1975,8 @@ class UncertaintyNote(Notification):
             del self._info_cache[old_name] 
         self.data = updated_data
 
-    def get_diff(self, env, indices, feature, predictions, df, X, orig_preds):
+    def get_diff(self, env, indices, feature, predictions, df, X, orig_preds, comb_list, prefixes, 
+        one_hots):
         # diff_predictions = {}
         # diff_df = {}
         # for b in predictions.keys():
@@ -1979,17 +1985,65 @@ class UncertaintyNote(Notification):
         # return diff_predictions, diff_df
         preds = pd.concat([orig_preds.loc[indices], predictions[0].loc[indices]], axis=1)
         df = df[0].loc[indices] # NOTE: limiting to just one "trial" (AKA b or budget previously) for simplification
+
+        if df.empty:
+            return [], pd.DataFrame(), pd.DataFrame()
+        
+        # X one hots
+        one_hot_as_column = {col: X[list(one_hots[idx])].idxmax(axis=1) for col, idx in zip(prefixes, range(len(list(one_hots))))}
+
+        for one_hot in one_hots:
+            X = X.drop(list(one_hot), axis=1)
+
+        for col, values in one_hot_as_column.items():
+            c = re.compile('[@_!#$%^&*()<>?/\|}{~:]').split(col, 1)[0] # remove trailing character
+            X[c] = values.str.split('[@_!#$%^&*()<>?/\|}{~:]', expand=True)[1]
+        env.log.debug(f"X: {X}")
+
+        # df one hots
+        try:
+            f1, f2 = feature
+            two_features = True
+        except ValueError:
+            f_single = feature
+            two_features = False
+
+        if two_features:
+            one_hot_feature = {}
+            one_hot_feature[f1] = True if f1 in one_hots else False
+            one_hot_feature[f2] = True if f2 in one_hots else False
+        else:
+            one_hot_feature = {f_single: True} if f_single in one_hots else {f_single: False}
+            
+
+        for f, is_one_hot in one_hot_feature.items():
+            if is_one_hot:
+                one_hot_as_column = df[list(f)].idxmax(axis=1).str.split(
+                    '[@_!#$%^&*()<>?/\|}{~:]', expand=True)[1]
+                env.log.info(f"list f and one hot as column {list(f)}: {one_hot_as_column}")
+                env.log.info(f"df: {df}")
+                old_one_hot_as_col = df[list(f)].idxmax(axis=1)
+                df = df.drop(list(f), axis=1)
+                for p in prefixes:
+                    if old_one_hot_as_col.str.startswith(p).all():
+                        prefix = p
+                        prefix = re.compile('[@_!#$%^&*()<>?/\|}{~:]').split(prefix, 1)[0] # remove trailing character
+                        df[prefix] = one_hot_as_column
+                        env.log.debug(f"found prefix {prefix}")
+        env.log.debug(f"df after: {df}")
         column_set = set(X.columns.tolist())
         modified_indicator = '_mod'
-        if isinstance(feature, tuple):
-            for mod_f in feature:
-                if isinstance(mod_f, tuple):
-                    for c in mod_f:
-                        column_set.add(c+modified_indicator)
-                else:
-                    column_set.add(mod_f+modified_indicator)
-        else:
-            column_set.add(feature+modified_indicator)
+        # if isinstance(feature, tuple):
+        #     for mod_f in feature:
+        #         if isinstance(mod_f, tuple):
+        #             for c in mod_f:
+        #                 column_set.add(c+modified_indicator)
+        #         else:
+        #             column_set.add(mod_f+modified_indicator)
+        # else:
+            # column_set.add(feature+modified_indicator)
+        for col in df.columns:
+            column_set.add(col+modified_indicator)
         column_set = list(column_set)
         column_set.sort() # place '_mod' features after their originals
         env.log.debug(f"[uncertainty] column_set for {feature} is {column_set}")
@@ -1998,6 +2052,7 @@ class UncertaintyNote(Notification):
         diff_df = X.join(df, how='right')
         diff_df = diff_df[column_set]
         
+        env.log.debug(f"diff_df: {diff_df}")
         return column_set, preds, diff_df
 
 def error_rates(tp, fp, tn, fn):
@@ -2236,7 +2291,7 @@ def resolve_col_type(column):
 def get_one_hot_prefix(columns):
     substring_counts={}
     
-    special_char = compile('[@_!#$%^&*()<>?/\|}{~:]')
+    special_char = re.compile('[@_!#$%^&*()<>?/\|}{~:]')
     for i in range(0, len(columns)):
         for j in range(i+1,len(columns)):
             string1 = columns[i]

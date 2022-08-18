@@ -686,25 +686,36 @@ th {
 
 .uncertaintyNote .old {
   text-decoration: line-through;
-  float: right;
+  float: left;
   font-size: 0.8em;
+  padding-right: 2px;
 }
 
 .uncertaintyNote .new {
   font-weight: 600;
-  padding-right: 15px;
+  padding-left: 5px;
 }
 
 .uncertaintyNote table td {
   max-width: 100px;
   word-wrap: wrap;
   white-space: normal;
+  padding-right: 30px;
+  padding-left: 8px;
 }
 
 .uncertaintyNote .modified {
   background-color: #f1c56b;
+  width: auto;
 }
 
 .uncertaintyNote .summary h4 {
   margin: 0;
+}
+
+.uncertaintyNote tr td:first-of-type,
+.uncertaintyNote tr th:first-of-type {
+  border-right: 3px solid black;
+  padding-right: 30px;
+  background-color: #74aaf2;
 }

@@ -33,8 +33,8 @@ export class UncertaintyNote extends PopupNotification {
                 <h1>Counterfactual</h1>
                 <p>
                 A counterfactual is a conditional statement used to reason about what could 
-                have been true under different circumstances. "If Brenda was allergic to apples 
-                she would not eat an apple every day", is an example of a counterfactual 
+                have been true under different circumstances. "If Brenda were allergic to apples 
+                she would not eat an apple every day" is an example of a counterfactual 
                 statement. In the machine learning setting, a counterfactual means perturbing 
                 each data point and observing how this impacts the predictions made by a model.
                 </p>
@@ -50,7 +50,7 @@ export class UncertaintyNote extends PopupNotification {
                 <p>
                 <b>Why should I be concerned?</b> <br />
                 When you are building a machine learning model, it is sometimes difficult to 
-                know how a model will perform on out-of-distribution data (i.e. data instances 
+                know how a model will perform on out-of-distribution data (i.e., data instances 
                 it has not previously seen). Consequently, it may be difficult to solely use 
                 the accuracy of a model as a measure. This uncertainty is a result of the 
                 inability to know the degree to which your model has "generalized" and 
@@ -58,13 +58,15 @@ export class UncertaintyNote extends PopupNotification {
                 </p>
                 <br />
                 <b>What can I do about it?</b> <br />  
-                Retrograde offers brief statistics about the number of predictions affected by 
-                the perturbations as well as how the predictions were affected (i.e. 
-                quantifying the changes from True to False or False to True). The statistics 
-                from this modification are summarized above the table. It is up to you to 
-                interpret and evaluate the ramifications of the counterfactual predictions 
-                presented to see if there exist systemic issues or outliers with the results of 
-                the counterfactual predictions.               
+                Retrograde provides brief statistics about the number of predictions affected by 
+                the perturbations as well as how the predictions were affected (i.e., 
+                quantifying the changes from True to False or False to True). Use the dropdown 
+                menu to select which modified column or combination of columns to view in the 
+                table. Once a selection is made, the table below the summary will show the
+                original data side-by-side with the modified column(s) in orange.
+                It is up to you to interpret and evaluate the ramifications of the counterfactual 
+                predictions presented to determine if there exist systemic issues or outliers with 
+                the results of the counterfactual predictions.               
                 </p>
                 <div class="models">
                 </div>
@@ -81,15 +83,22 @@ export class UncertaintyNote extends PopupNotification {
       model.columns[colName].sort();
     }
     var elem = $.parseHTML(`
-      <div class="noselect model shadowDefault" prompt-ml-tracking-enabled prompt-ml-tracker-interaction-description="Toggled model tab (${model["model_name"]})">
-        <h2><span class="prefix"> - </span>Within <span class="code-snippet">${model["model_name"]}</span> Base Accuracy: ${model["original_accuracy"]}}</h2>
+      <div class="noselect model shadowDefault" prompt-ml-tracking-enabled prompt-ml-tracker-interaction-description="Toggled model tab (${
+        model["model_name"]
+      })">
+        <h2><span class="prefix"> - </span>Within <span class="code-snippet">${
+          model["model_name"]
+        }</span> Original Accuracy: ${UncertaintyNote._r(
+      model["original_accuracy"] * 100,
+      1
+    )}%</h2>
         <div class="toggleable"></div>
       </div>
     `);
     // handle expanded / condensed views
     $(elem)
-      .find("h2")
-      .on("mouseup", (e: Event) => {
+      .find("h2")[0]
+      .onmouseup = (e: Event) => {
         var parentElem = $($(e.currentTarget).parent());
         // Toggle basic visibility effects
         parentElem.toggleClass("condensed");
@@ -97,16 +106,12 @@ export class UncertaintyNote extends PopupNotification {
         parentElem
           .find("h2 .prefix")
           .text(parentElem.hasClass("condensed") ? " + " : " - ");
-      });
+      };
     $(elem).find(".toggleable").append(this._generateSummary(model));
     // generate table
     $(elem)
       .find(".toggleable")
-      .append(
-        $.parseHTML(
-          `<div class="tableContainer"><h4>Modifications Table</h4></div>`
-        )
-      );
+      .append($.parseHTML(`<div class="tableContainer"></div>`));
     $(elem)
       .find(".toggleable .tableContainer")
       .append(this._generateTable(model));
@@ -121,7 +126,13 @@ export class UncertaintyNote extends PopupNotification {
         .append(this._generateTable(model));
     };
     // generate interactivity
-    $(elem).find(".toggleable").prepend(this._generateSelector(model, onPress));
+    $(elem)
+      .find(".toggleable .tableContainer")
+      .prepend(this._generateSelector(model, onPress));
+    // generate title
+    const tableHeader = document.createElement("h4");
+    tableHeader.innerText = "Modifications Table";
+    $(elem).find(".toggleable .tableContainer").prepend(tableHeader);
     return elem[1] as HTMLElement;
   }
 
@@ -136,9 +147,9 @@ export class UncertaintyNote extends PopupNotification {
     for (var columnName of Object.keys(model.modified_values)
       .sort()
       .filter((columnName) => model.ctf_statistics[columnName].raw_diff > 0)) {
-      const displayName = model.ctf_statistics[columnName].info
-        .flat()
-        .join(", ");
+      const displayName = Array.isArray(model.ctf_statistics[columnName].info)
+        ? model.ctf_statistics[columnName].info.flat().join(", ")
+        : model.ctf_statistics[columnName].info;
       $(elem)
         .find(".options")
         .append(
@@ -147,13 +158,13 @@ export class UncertaintyNote extends PopupNotification {
           )
         );
     }
-    $(elem).on("mouseup", (e: Event) => {
+    (elem[0] as HTMLElement).onmouseup = (e: Event) => {
       if ($(e.target).prop("id")) {
         $(elem).find(".selected p").text($(e.target).attr("displayname"));
         onSelect($(e.target).prop("id"));
       }
       $(elem).toggleClass("active");
-    });
+    };
     return elem[0] as any as HTMLElement;
   }
 
@@ -173,21 +184,34 @@ export class UncertaintyNote extends PopupNotification {
         $.parseHTML(
           `<li><strong>${UncertaintyNote._r(
             colStats["accuracy"][0] * 100,
-            3
-          )}</strong>% of predictions were accurate</li>`
+            1
+          )}%</strong> of predictions were accurate <strong>(${UncertaintyNote._r(
+            model["original_accuracy"] * 100,
+            1
+          )}% in original model)</strong></li>`
         )
       );
       $(colSummary[1]).append(
         $.parseHTML(
-          `<li><strong>${colStats["raw_diff"]}</strong> predictions changed</li><ul class="predictionsSublist"></ul>`
+          `<li><strong>${colStats["raw_diff"]} (${UncertaintyNote._r(
+            (colStats["raw_diff"] / colStats["total"]) * 100,
+            1
+          )}%)</strong> predictions changed</li>
+          <ul class="predictionsSublist"></ul>`
         )
       );
       $(colSummary[1])
         .find(".predictionsSublist")
         .append(
           $.parseHTML(
-            `<li><strong>${colStats["true_to_False"]}</strong> changed from <strong>True</strong> to <strong>False</strong></li>
-            <li><strong>${colStats["false_to_True"]}</strong> changed from <strong>False</strong> to <strong>True</strong></li>`
+            `<li><strong>${colStats["true_to_False"]} (${UncertaintyNote._r(
+              (colStats["true_to_False"] / colStats["total"]) * 100,
+              1
+            )}%)</strong> changed from <strong>True</strong> to <strong>False</strong></li>
+            <li><strong>${colStats["false_to_True"]} (${UncertaintyNote._r(
+              (colStats["false_to_True"] / colStats["total"]) * 100,
+              1
+            )}%)</strong> changed from <strong>False</strong> to <strong>True</strong></li>`
           )
         );
       $(elem).find("ul.modificationSummaries").append(colSummary);
@@ -232,7 +256,7 @@ export class UncertaintyNote extends PopupNotification {
         )
       );
       // prediction
-      row.appendChild(
+      row.prepend(
         UncertaintyNote._generateCell(
           x == 0
             ? "prediction"
@@ -252,12 +276,16 @@ export class UncertaintyNote extends PopupNotification {
             ? modifiedIndices.indexOf(y - 1) >= 0
               ? rowData[y - 1]
               : cellData
-            : UncertaintyNote._r(cellData, 3),
+            : typeof cellData == "number"
+            ? UncertaintyNote._r(cellData, 3)
+            : cellData,
           x == 0,
           x != 0 &&
             modifiedIndices.indexOf(y - 1) >= 0 &&
             rowData[y - 1] != rowData[y]
-            ? UncertaintyNote._r(rowData[y - 1], 3)
+            ? typeof rowData == "number"
+              ? UncertaintyNote._r(rowData[y - 1], 3)
+              : rowData[y - 1]
             : null,
           x == 0 && modifiedIndices.indexOf(y - 1) >= 0
         );
@@ -291,7 +319,8 @@ export class UncertaintyNote extends PopupNotification {
       ${modified || overrideModifiedStyling ? "class='modified'" : ""} >
         ${
           modified
-            ? `<span class="new">${content}</span><span class="old">${modified}</span>`
+            ? // ? `<span class="new">${content}</span><span class="old">${modified}</span>`
+              `<span class="old">${modified}</span>➜<span class="new">${content}</span>`
             : content
         }
 
@@ -303,7 +332,9 @@ export class UncertaintyNote extends PopupNotification {
     model: { [key: string]: any },
     columnString: string
   ): string {
-    return model.ctf_statistics[columnString].info.flat().join(", ");
+    return Array.isArray(model.ctf_statistics[columnString].info)
+      ? model.ctf_statistics[columnString].info.flat().join(", ")
+      : model.ctf_statistics[columnString].info;
   }
 
   ////////////////////////////////////////////////////////////
