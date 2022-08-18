@@ -45,6 +45,7 @@ export class Explorer {
                   <div class="columns"></div>
               </details>
           </fieldset>
+          <p class="error"></p>
           <h3>Classification</h3>
           <p class="classification">Please select a column to begin.</p>
           <h3>Value Distributions</h3>

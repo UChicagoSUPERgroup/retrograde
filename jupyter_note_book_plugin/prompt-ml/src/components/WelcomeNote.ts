@@ -8,21 +8,23 @@ export class WelcomeNote extends PopupNotification {
   constructor() {
     super("welcome", false, "Welcome", [{}]);
     this.addHeader("Welcome to Retrograde");
-        this.addParagraph(`Throughout the course of this data task, the Retrograde plugin will provide information about the data and your decisions with respect to fairness. 
-        Retrograde provides information through distinct notifications that each provide different data and analysis. 
-        This <span class="code-snippet-inline">Welcome Notification</span> provides background information about Retrograde, other notifications, and the task itself.`);
+        this.addParagraph(`Throughout this data task, the Retrograde plugin will provide information about the data and your decisions. 
+        Retrograde provides a series of notifications that provide different information at relevant points throughout the task. 
+        This <span class="code-snippet-inline">Welcome Notification</span> provides background information about Retrograde and other notifications.`);
     this.addSubheader("The Retrograde Interface")
         this.addParagraph(`Retrograde has two main interfaces, the side panel on the right that shows which notifications are available and the main window that provides the actual notification content. 
         You can open, close, and dismiss notifications as needed, but please note that the information changes as cells are executed`);
     this.addSubheader("Protected Data")
-        this.addParagraph(`Many of the notifications include references to so-called protected data. 
-        A protected class is group of people sharing a common trait who are legally 
-        protected from being discriminated against on the basis of that trait. 
-        Some common examples include race, gender, and pregnancy status.`);
+        this.addParagraph(`Some notifications reference protected classes, which are groups of 
+        people sharing a common trait who are legally protected from being discriminated against 
+        on the basis of that trait. Some common examples include race, gender, 
+        and pregnancy status.`);
         this.addRawHtmlElement(document.createElement("br"));
-        this.addParagraph(`Retrograde attempts to identify protected data for the dataframes within this data task. 
-        You are able to modify these classifications within the <span class="code-snippet-inline">Protected Columns</span> notification, as Retrograde
-        may falsely mark or fail to mark a given column as protected. The changes made within this notification will affect how other notifications analyze aspects of fairness.`)
+    this.addSubheader("Remember to Check for Updates")
+        this.addParagraph(`If Retrograde has any new information to show you, they will appear in the JupyterLab side panel labeled
+        'Retrograde'. Be sure to check it at least once before you submit the task. Notifications that that have new information that 
+        has not yet been viewed will appear in <b style="color:orange">orange</b>. Notifications with information that has already 
+        been viewed can be revisited at any time by clicking on it, however, these will appear in <b style="color:gray">gray</b>.`)
   }
 
   ////////////////////////////////////////////////////////////

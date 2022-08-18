@@ -82,7 +82,7 @@ export class ProtectedColumnNote extends PopupNotification {
       .join(", ");
     var elem = $.parseHTML(`
             <div class="promptMl protectedColumns">
-                <h1>Protected Column Note</h1>
+                <h1>Protected Columns</h1>
                 <div class="intro">
                     <p>Some of the columns in the <strong>${joinedColumnNames}</strong> dataframe feature protected classes of data. 
                     A protected class is group of people sharing a common trait who are legally 
