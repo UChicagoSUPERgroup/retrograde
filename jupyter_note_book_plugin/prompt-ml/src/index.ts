@@ -64,7 +64,16 @@ const extension: JupyterFrontEndPlugin<void> = {
       // remove old children element and append the new, generated version
       note_container.empty().append(payload["htmlContent"])
     };
-    const prompter = new Prompter(listener, tracker, app, factory, onUpdate, app.shell as LabShell);
+
+    var onDelete = (noteType: string) => {
+      if(!(noteType in openNotes))
+        return
+      var node = openNotes[noteType].widget
+      node.close()
+      delete openNotes[noteType]
+    }
+
+    const prompter = new Prompter(listener, tracker, app, factory, onUpdate, onDelete, app.shell as LabShell);
     console.log("init prompter", prompter);
     console.log("factory", factory);
     let widgets = app.shell.widgets("main");

@@ -38,6 +38,7 @@ export class Prompter {
   // the content of open notifications on the frontend.
   // Validation checks for open / closed notifications are handled by index.ts
   notificationUpdate: Function
+  onDelete: Function
   shell: LabShell
   // This generates prompts for notebook cells on notification of new data or a new model
   constructor(
@@ -46,6 +47,7 @@ export class Prompter {
     app: JupyterFrontEnd,
     factory: NotebookPanel.IContentFactory,
     notificationUpdate: Function, // holds the pointer to the `onUpdate` index.ts function
+    onDelete: Function, // holds the pointer to the `onDelete` index.ts function
     shell: LabShell
   ) {
     this.oldContent = {}; // see structure above
@@ -53,6 +55,7 @@ export class Prompter {
     // This function is executed whenever new information is received from
     // the backend but a notification has already been generated
     this.notificationUpdate = notificationUpdate;
+    this.onDelete = onDelete
     
     // Handler for the backend JSON object of notifications to generate
     listener.infoSignal.connect((sender: Listener, output: any) => {
@@ -152,10 +155,43 @@ export class Prompter {
     }
   }
 
+  // if a notification no longer appears in the
+  // backend data, then we want to remove it from
+  // the plugin & the JupyterLab environment
+  private _handleNotificationDeletion(info_object: {[index: string] : any }) {
+    // The notification types in the backend object do not always share the same frontend
+    // name; this ensures consistency between the two
+    const noteNameConversions : { [key: string]: string } = {
+      "proxy": "proxy",
+      "error": "errors",
+      "resemble": "protected",
+      "missing": "missing",
+      "model_report": "modelReport",
+      "welcome": "welcome",
+      "uncertainty": "uncertainty",
+    }
+    const listOfOldNoteTypes = Object.keys(this.oldContent)
+    const listOfCurrentNoteTypes = Object.keys(info_object).map(backendName => noteNameConversions[backendName]);;
+    const deletedNotes = listOfOldNoteTypes.filter(oldNoteType => listOfCurrentNoteTypes.indexOf(oldNoteType) == -1)
+    console.log("Removed notifications", deletedNotes);
+    deletedNotes.forEach(noteType => this._deleteNote(noteType))
+  }
+
+  private _deleteNote(noteType: string) {
+    console.log("Deleting", noteType)
+    // remove from notifications.ts memory
+    delete this.oldContent[noteType];
+    // remove from side panel
+    $(`#${noteType}`).parent().remove();
+    // remove any open references & index.ts memory
+    this.onDelete(noteType)
+  }
+
   // Main notification handling function
   private _onInfo(info_object: any) {
     var kernel_id = info_object["kernel_id"];
     console.log("_onInfo");
+    this._handleNotificationDeletion(info_object);
     for (const notice_type in info_object) {
       var list_of_notes = info_object[notice_type];
       switch(notice_type) {

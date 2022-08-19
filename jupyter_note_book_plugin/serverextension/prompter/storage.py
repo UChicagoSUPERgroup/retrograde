@@ -419,8 +419,8 @@ class DbHandler:
             results = self._cursor.fetchall()
             
             unmarked_cols[name] = [res["col_name"] for res in results]
-
-        return unmarked_cols
+        
+        return {df: res for df, res in unmarked_cols.items() if res}
 
     def update_marked_columns(self, kernel, input_data):
         """
