@@ -8,9 +8,8 @@ export class WelcomeNote extends PopupNotification {
   constructor() {
     super("welcome", false, "Welcome", [{}]);
     this.addHeader("Welcome to Retrograde");
-        this.addParagraph(`Throughout this data task, the Retrograde plugin will provide information about the data and your decisions. 
-        Retrograde provides a series of notifications that provide different information at relevant points throughout the task. 
-        This <span class="code-snippet-inline">Welcome Notification</span> provides background information about Retrograde and other notifications.`);
+        this.addParagraph(`The Retrograde plugin will provide information about your data and your decisions.  
+        This <span class="code-snippet-inline">Welcome Notification</span> provides background information about Retrograde.`);
     this.addSubheader("The Retrograde Interface")
         this.addParagraph(`Retrograde has two main interfaces, the side panel on the right that shows which notifications are available and the main window that provides the actual notification content. 
         You can open, close, and dismiss notifications as needed, but please note that the information changes as cells are executed`);

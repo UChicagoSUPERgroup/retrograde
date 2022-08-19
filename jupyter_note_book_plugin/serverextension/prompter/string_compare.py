@@ -77,8 +77,11 @@ def guess_protected(dataframe):
         if NATIONALITY_WORDS is None:
             load_nationalities()
 
-        results = []
         protected_corpus = _get_protected()
+
+        results = []
+        if dataframe.empty or len(dataframe.index) == 0:
+            return results
 
         # dataframe[col].unique()
 
