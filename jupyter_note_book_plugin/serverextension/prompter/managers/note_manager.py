@@ -34,6 +34,7 @@ class NoteManager:
                 if note.feasible(cell_id, env,dfs, non_dfs):
                     note.make_response(env, kernel_id, cell_id)
                     note.started=True
+                note.expunge(dfs, non_dfs, self.log)
                 note.update(env, kernel_id, cell_id, dfs, non_dfs)
 
     def make_responses(self, cell_id, kernel_id, exec_ct, cell_type, dfs, non_dfs):
@@ -43,7 +44,6 @@ class NoteManager:
 
         for note, context in zip(self.notes, self.context):
             if note.started and re.match(context[2], cell_type):
-                note.expunge(dfs, non_dfs)
                 for note_data in note.data.values():
                     for note_entry in note_data:
                         if note_entry["type"] not in resp:

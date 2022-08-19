@@ -66,7 +66,7 @@ class Notification:
     def check_feasible(self, cell_id, env, dfs, ns):
         """check feasibility of implementing class"""
         raise NotImplementedError("check_feasible must be overridden") 
-    def expunge(self, dfs, non_dfs):
+    def expunge(self, dfs, non_dfs, logger=None):
         """Remove any entries that are stale"""
         pass
 class ProtectedColumnNote(Notification):
@@ -86,9 +86,10 @@ class ProtectedColumnNote(Notification):
         super().__init__(db)
         self.df_protected_cols = {}
         self.df_not_protected_cols = {}
+        self._suppresed = {}
         self.ncounter = 0
 
-    def expunge(self, dfs, non_dfs):
+    def expunge(self, dfs, non_dfs, logger=None):
         """
         If df not in dfs, remove it
 
@@ -96,9 +97,28 @@ class ProtectedColumnNote(Notification):
         in the frontend. If df_name removed is the only one, the note
         is not updated
         """
+        if logger:
+            logger.debug(f"[ProtectedColumnNote.expunge] dfs are {list(dfs.keys())}")
+        removed_keys = []
         for df_name in self.data:
             if df_name not in dfs:
-                del self.data[df_name]
+                self._suppresed[df_name] = self.data[df_name].copy()
+                if logger:
+                   logger.debug(f"[ProtectedColumnNote.expunge] removing {df_name}") 
+                removed_keys.append(df_name)
+        for df_name in removed_keys:
+            del self.data[df_name]
+        if logger:
+            logger.debug(f"[ProtectedColumnNote.expunge] suppresed {self._suppresed}") 
+    def _check_restore(self, dfs):
+        """
+        if suppressed df name in dfs and not in 
+        protected_cols, add it back to the data
+        """
+
+        for df_name in self._suppresed:
+            if df_name not in self.df_protected_cols and df_name in dfs:
+                self.data[df_name] = self._suppresed[df_name]
 
     def check_feasible(self, cell_id, env, dfs, ns):
 
@@ -108,7 +128,10 @@ class ProtectedColumnNote(Notification):
 
         # pylint: disable=protected-access
         poss_cols = self.db.get_unmarked_columns(env._kernel_id)
+
         env.log.debug(f"[ProtectedColumnNote.check_feasible] dfs with unmarked_cols {poss_cols}")
+        env.log.debug(f"[ProtectedColumnNote.check_feasible] suppresed dfs {self._suppresed}")
+
         for df_name, cols in poss_cols.items():
             if df_name not in dfs:
                 continue # sometimes dfs are in database, but have been deleted
@@ -175,7 +198,7 @@ class ProtectedColumnNote(Notification):
             for col_name, col_info in resp["columns"].items():
                 input_data[resp["df"]][col_name] = {"is_sensitive": col_info["sensitive"], 
                                                     "user_specified" : False, "fields" : col_info["field"]}
-        env.log.debug(f"[ProtectedColumn.make_response")
+        env.log.debug(f"[ProtectedColumnNote.make_response] suppresed dfs {self._suppresed}")
         self.db.update_marked_columns(kernel_id, input_data)
 
     def _make_resp_entry(self, df_name):
@@ -261,7 +284,11 @@ class ProtectedColumnNote(Notification):
             if col_name  not in col_prev[df_name]:
                 col_prev[df_name][col_name] = {}
             col_prev[df_name][col_name] = {"sensitive" : is_sensitive, "user_specified" : user_specified, "fields" : fields}
+
+        self._check_restore(dfs)
+        env.log.debug(f"[ProtectedColumnNote.update] suppresed dfs {self._suppresed}, {new_df_names}")
         env.log.debug(f"[ProtectedColumnNote.update] note has {list(self.data.keys())}")
+
         for df_name, old_protected_columns in self.data.items():
 
             if df_name not in dfs:
