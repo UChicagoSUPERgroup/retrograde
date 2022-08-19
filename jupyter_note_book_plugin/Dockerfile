@@ -9,6 +9,8 @@ RUN rm -rf /usr/bin/apt-get
 RUN rm -rf /usr/bin/apt
 #Install pipenv and run the build script
 ADD . /
+RUN mkdir -p /etc/jupyter/lab/workspaces 
+RUN touch /Pipfile
 RUN useradd -m -r -g users A && \
 chown -R A:users /evaluation_task && \
 chown -R A:users /etc/jupyter/lab/workspaces
