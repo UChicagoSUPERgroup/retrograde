@@ -1,0 +1,13 @@
+[Unit]
+Description=Gunicorn instance running retrograde notebooks
+After=network.target
+
+[Service]
+User=blase
+Group=www-data
+WorkingDirectory=/home/blase/retrograde/notebook-server
+Environment="PATH=/home/blase/.local/bin"
+ExecStart=/home/blase/.local/bin/pipenv run gunicorn --workers 5 --bind unix:nbserver.sock -m 007 wsgi:app --access-logfile - --capture-output --log-level debug --error-logfile /var/log/gunicorn/error.log
+
+[Install]
+WantedBy=multi-user.target 
