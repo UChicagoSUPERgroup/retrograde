@@ -2337,18 +2337,27 @@ def resolve_col_type(column):
 
 def get_one_hot_prefix(columns):
     substring_counts={}
-    
-    special_char = re.compile('[@_!#$%^&*()<>?/\|}{~:]')
+    special_char_re = re.compile('[@_!#$%^&*()<>?/\|}{~:]')
+    special_char = '[@_!#$%^&*()<>?/\|}{~:]'
     for i in range(0, len(columns)):
         for j in range(i+1,len(columns)):
             string1 = columns[i]
             string2 = columns[j]
             match = SequenceMatcher(None, string1, string2).find_longest_match(0, len(string1), 0, len(string2))
             matching_substring=string1[match.a:match.a+match.size]
-            if(matching_substring not in substring_counts):
-                if (special_char.search(matching_substring)):
+            # some substrings extend past the special character separator.
+            # this should prevent that by reducing the substring until
+            # the end character is a special character
+            if (special_char_re.search(matching_substring)):
+                l = len(matching_substring)
+                for letter in matching_substring[::-1]:
+                    if letter not in special_char:
+                        l -= 1
+                    else:
+                        break
+                matching_substring = matching_substring[:l]
+                if(matching_substring not in substring_counts):
                     substring_counts[matching_substring]=1
-            else:
-                substring_counts[matching_substring]+=1
-
-    return [prefix for prefix, occurences in substring_counts.items() if occurences > 1 and len(prefix) > 0]
+                else:
+                    substring_counts[matching_substring]+=1
+    return [prefix for prefix, occurences in substring_counts.items() if occurences > 1 and len(prefix) > 1]
