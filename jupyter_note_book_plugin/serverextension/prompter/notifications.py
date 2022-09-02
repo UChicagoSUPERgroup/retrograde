@@ -135,9 +135,12 @@ class ProtectedColumnNote(Notification):
         for df_name, cols in poss_cols.items():
             if df_name not in dfs:
                 continue # sometimes dfs are in database, but have been deleted
-            protected_columns = check_for_protected(cols)
+
+            # Trying to fix problem of stale columns from DB query
+            avail_cols = [c for c in cols if c in dfs[df_name].columns]
+            protected_columns = check_for_protected(avail_cols)
             # env.log.debug("[ProtectedColumnNote] ({1}) protected by name columns are {0}".format(protected_columns, self.ncounter))
-            guessed_columns = guess_protected(dfs[df_name][cols])
+            guessed_columns = guess_protected(dfs[df_name][avail_cols])
             # env.log.debug("[ProtectedColumnNote] ({1}) protected by guess columns are {0}".format(guessed_columns, self.ncounter))
             protected_columns = self._merge_protected(protected_columns, guessed_columns)
       
@@ -145,7 +148,7 @@ class ProtectedColumnNote(Notification):
               
             protected_col_names = [c["original_name"] for c in protected_columns]
             self.df_protected_cols[df_name] = protected_columns        
-            self.df_not_protected_cols[df_name] = [c for c in cols if c not in protected_col_names]
+            self.df_not_protected_cols[df_name] = [c for c in avail_cols if c not in protected_col_names]
             
             self.ncounter += 1
 
@@ -421,6 +424,8 @@ class ProxyColumnNote(ProtectedColumnNote):
             df_name = col["name"]
             if df_name in noted_dfs or df_name not in dfs:
                 continue
+            if col["col_name"] not in dfs[df_name].columns:
+                continue
             if df_name not in candidates:
                 candidates[df_name] = {
                     "df" : dfs[df_name],
@@ -531,6 +536,9 @@ class ProxyColumnNote(ProtectedColumnNote):
 
             for sens_col in updated_cols[df_name]["sensitive"]:
                 for non_sens_col in updated_cols[df_name]["not_sensitive"]:
+                    if sens_col not in df.columns or non_sens_col not in df.columns:
+                        env.log.warn(f"[ProxyNote] {sens_col} or {non_sens_col} not in {df.columns}")
+                        continue
                     result = self._test_combo(df, sens_col, non_sens_col)                        
                     if result:
                         resp = {"type" : "proxy", "df" : df_name}
@@ -620,11 +628,13 @@ class MissingDataNote(ProtectedColumnNote):
             if df_name not in dfs:
                 continue
 
+            filtered_entry = [col for col in df_names[df_name] if col["col_name"] in dfs[df_name].columns]
+
             has_missing = dfs[df_name].isna().any().any()
-            has_sensitive = any([col["is_sensitive"] for col in df_names[df_name]])
+            has_sensitive = any([col["is_sensitive"] for col in filtered_entry])
 
             if has_missing and has_sensitive: 
-                self.missing_col_lists[df_name] = (dfs[df_name], df_names[df_name])
+                self.missing_col_lists[df_name] = (dfs[df_name], filtered_entry)
         env.log.debug(f"""[MissingDataNote] found {self.missing_col_lists.keys()}""")
         return self.missing_col_lists != {}
          
@@ -1248,7 +1258,7 @@ class ModelReportNote(Notification):
             
             prot_anc_found, x_ancestors, x_ancestor_names, prot_col_names, prot_cols = self.prot_ancestors_found(env, df_name, dfs, env._kernel_id)
             if not prot_anc_found:
-                env.log.error(f"[ModelReportNote] (update) Error. no prot ancestors found in {x_ancestor_name} for current df {df_name}")
+                env.log.error(f"[ModelReportNote] (update) Error. no prot ancestors found in {x_ancestor_names} for current df {df_name}")
                 continue
             env.log.debug("[ModelReportNote] (update) is retrieving error rates for these columns: {0}."
                 .format(prot_col_names))
