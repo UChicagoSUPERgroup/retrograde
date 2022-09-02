@@ -16,12 +16,12 @@ if MODE == "EXP_CTS":
     ]
 if MODE == "EXP_END":
     CONTEXT = [
-        (".*", ".*", "end"),
-        (".*", ".*", "end"),
-        ("clean", ".*", "end"),
-        ("feature_select", ".*", "end"),
-        ("model", ".*", "end"),
-        ("model", ".*", "end"),
+        (".*", ".*", "model_select"),
+        (".*", ".*", "model_select"),
+        ("clean", ".*", "model_select"),
+        ("feature_select", ".*", "model_select"),
+        ("model", ".*", "model_select"),
+        ("model", ".*", "model_select"),
     ]
 if MODE == "EXP_NONE":
     CONTEXT = [

@@ -14,6 +14,7 @@ SECTION_START_KEYS = {
     'clean_start' : 'clean',
     'feature_select_start' : 'feature_select',
     'model_start' : 'model',
+    'model_select' : 'model_select',
     'end_start' : 'end'
 }
 
