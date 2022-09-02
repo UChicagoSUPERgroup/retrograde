@@ -31,11 +31,17 @@ class NoteManager:
             if (note.displayed and re.match(context[1], cell_type)) or \
                (re.match(context[0], cell_type)):
                 self.log.debug(f"[NoteManager] checking {note}, displayed {note.displayed}, {cell_type}, {context}")
-                if note.feasible(cell_id, env,dfs, non_dfs):
-                    note.make_response(env, kernel_id, cell_id)
-                    note.started=True
-                note.expunge(dfs, non_dfs, self.log)
-                note.update(env, kernel_id, cell_id, dfs, non_dfs)
+                try:
+                    if note.feasible(cell_id, env,dfs, non_dfs):
+                        note.make_response(env, kernel_id, cell_id)
+                        note.started=True
+                except Exception as inst:
+                    self.log.warn(f"[NoteManager] Exception in {note}, {cell_type}, {cell_id}, {kernel_id} \n {inst}")
+                try:
+                    note.expunge(dfs, non_dfs, self.log)
+                    note.update(env, kernel_id, cell_id, dfs, non_dfs)
+                except Exception as inst:
+                    self.log.warn(f"[NoteManager] Exception updating {note}, {cell_type}, {cell_id}, {kernel_id} \n {inst}")
 
     def make_responses(self, cell_id, kernel_id, exec_ct, cell_type, dfs, non_dfs):
 
