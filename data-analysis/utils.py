@@ -1,4 +1,4 @@
-
+import pandas as pd
 PID = "PROLIFIC_PID"
 CTS = "EXP_CTS"
 END = "EXP_END"
@@ -9,11 +9,11 @@ LIKERT_QUESTIONS = ['Q12.2', 'Q12.3', 'Q12.4', 'Q12.5', 'Q12.6', 'Q13.1',
     'Q14.2', 'Q14.4', 'Q14.6', 'Q14.8', 'Q14.10', 'Q14.12',
 ]
 LIKERT_CONVERT = {
-    "Strongly agree": 2,
-    "Somewhat agree": 1,
-    "Neither agree nor disagree": 0,
+    "Strongly disagree": -2,
     "Somewhat disagree": -1,
-    "Strongly disagree": -2
+    "Neither agree nor disagree": 0,
+    "Somewhat agree": 1,
+    "Strongly agree": 2,
 }
 QUESTION_COLUMNS = ['Q1.2', 'Q2.1', 'Q2.2', 'Q2.3',
        'Q2.4', 'Q2.5', 'Q2.6', 'Q2.7', 'Q2.8', 'Q2.9', 'Q5.1', 'Q6.2', 'Q6.3',
