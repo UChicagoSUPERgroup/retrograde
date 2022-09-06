@@ -1,9 +1,13 @@
+import os
 import pandas as pd
+import numpy as np
+dir_path = os.path.dirname(os.path.realpath(__file__))
 PID = "PROLIFIC_PID"
 CTS = "EXP_CTS"
 END = "EXP_END"
 NONE = "EXP_NONE"
-DATA_PATH = "data/Jupyter in Retrograde evaluation study_September 3, 2022_13.38.csv"
+conds = [NONE, CTS, END]
+DATA_PATH = os.path.join(dir_path, "data/Retrograde_September6.csv")
 LIKERT_QUESTIONS = ['Q12.2', 'Q12.3', 'Q12.4', 'Q12.5', 'Q12.6', 'Q13.1',
     'Q13.3', 'Q13.5', 'Q13.7', 'Q13.10', 'Q13.12', 'Q13.14',
     'Q14.2', 'Q14.4', 'Q14.6', 'Q14.8', 'Q14.10', 'Q14.12',
@@ -26,5 +30,36 @@ QUESTION_COLUMNS = ['Q1.2', 'Q2.1', 'Q2.2', 'Q2.3',
        'Q14.11', 'Q14.12', 'Q14.13', 'Q14.14', 'Q16.2', 'Q16.3', 'Q16.4',
        'Q16.4_5_TEXT', 'Q16.5', 'Q16.5_7_TEXT'
 ]
-QUESTION_TEXT = pd.read_csv(DATA_PATH)
-QUESTION_TEXT = QUESTION_TEXT.iloc[0][QUESTION_COLUMNS].values
+QUESTION_TEXT = pd.read_csv(DATA_PATH).iloc[0][QUESTION_COLUMNS].values
+
+def get_conds() -> list:
+    return conds
+def get_notif_conds() -> list:
+    return conds[1:3]
+def read_data(path: str) -> pd.DataFrame:
+    return pd.read_csv(DATA_PATH)
+def clean_data(df: pd.DataFrame) -> pd.DataFrame:
+    not_needed = ["Status", "Create New Field or Choose From Dropdown...", 
+              "RecipientLastName", "RecipientFirstName", "RecipientEmail", "LocationLatitude", 
+              "LocationLongitude", "IPAddress", "ExternalReference"]
+    data = df.drop(not_needed, axis=1)
+    data = data.drop([0,1]).reset_index(drop=True) # just metadata in these rows
+    # data = data.replace(LIKERT_CONVERT) # replaces "Strongly Agree" with 2, "Somewhat Agree" with 1, etc. 
+    data["StartDate"] = pd.to_datetime(data["StartDate"])
+    data["EndDate"] = pd.to_datetime(data["StartDate"])
+    data["RecordedDate"] = pd.to_datetime(data["StartDate"])
+    data["Duration (in seconds)"] = data["Duration (in seconds)"].astype(int)
+    data["Finished"] = data["Finished"].astype(bool)
+    return data
+def get_question_column(question: str):
+    if isinstance(question, int):
+        return QUESTION_COLUMNS[question]
+    else:
+        return QUESTION_COLUMNS[np.where(QUESTION_TEXT == question)[0][0]]
+def iter_likert_questions(method: str = "pairs") -> list:
+    likert_it = iter(LIKERT_QUESTIONS)
+    if method == "pairs":
+        return [[x, next(likert_it)] for x in likert_it]
+    elif method == "section":
+        # TODO: implement
+        return LIKERT_QUESTIONS
