@@ -19,8 +19,9 @@ END = "EXP_END"
 NONE = "EXP_NONE"
 conds = [NONE, CTS, END]
 DATA_PATH = os.path.join(dir_path, "data/Jupyter+in+Retrograde+evaluation+study_September+8,+2022_05.57.csv")
-ALT_DATA_PATH = os.path.join(dir_path, "data/alt_df.csv")
-LIKERT_QUESTIONS = ['Q12.2', 'Q12.3', 'Q12.4', 'Q12.5', 'Q12.6', 'Q13.1',
+ALIGNED_DATA_PATH = os.path.join(dir_path, "data/aligned_likert_df.csv")
+LIKERT_QUESTIONS = [
+    'Q12.2', 'Q12.3', 'Q12.4', 'Q12.5', 'Q12.6', 'Q13.1',
     'Q13.3', 'Q13.5', 'Q13.7', 'Q13.10', 'Q13.12', 'Q13.14',
     'Q14.2', 'Q14.4', 'Q14.6', 'Q14.8', 'Q14.10', 'Q14.12',
 ]
@@ -51,10 +52,14 @@ def get_notif_conds() -> list:
 def read_data(path: str) -> pd.DataFrame:
     return pd.read_csv(path)
 def clean_data(df: pd.DataFrame) -> pd.DataFrame:
-    not_needed = ["Status", "Create New Field or Choose From Dropdown...", 
-              "RecipientLastName", "RecipientFirstName", "RecipientEmail", "LocationLatitude", 
-              "LocationLongitude", "IPAddress", "ExternalReference"]
+    not_needed = [
+        "Status", "Create New Field or Choose From Dropdown...", 
+        "RecipientLastName", "RecipientFirstName", "RecipientEmail", "LocationLatitude", 
+        "LocationLongitude", "IPAddress", "ExternalReference"
+    ]
     data = df.drop(not_needed, axis=1)
+    excluding_participants_indices = data[data["PROLIFIC_PID"].isin(EXCLUDE_PARTICIPANTS)].index
+    data = data.drop(excluding_participants_indices)
     data = data.drop([0,1]).reset_index(drop=True) # just metadata in these rows
     # data = data.replace(LIKERT_CONVERT) # replaces "Strongly Agree" with 2, "Somewhat Agree" with 1, etc. 
     data["StartDate"] = pd.to_datetime(data["StartDate"])
@@ -63,11 +68,17 @@ def clean_data(df: pd.DataFrame) -> pd.DataFrame:
     data["Duration (in seconds)"] = data["Duration (in seconds)"].astype(int)
     data["Finished"] = data["Finished"].astype(bool)
     return data
-def get_question_column(question: str):
-    if isinstance(question, int):
+def get_question_idx(question: str) -> int:
+    return np.where(QUESTION_TEXT == question)[0][0]
+def get_question_column(question: int or str) -> str:
+    if isinstance(question, (int, np.int64, np.int32)):
         return QUESTION_COLUMNS[question]
     else:
-        return QUESTION_COLUMNS[np.where(QUESTION_TEXT == question)[0][0]]
+        return QUESTION_COLUMNS[get_question_idx(question)]
+def convert_idx(question: str) -> list:
+    return [LIKERT_QUESTIONS[LIKERT_QUESTIONS.index(get_question_column(question))]]
+def question_number_to_question_text(question: str) -> str:
+    return QUESTION_TEXT[QUESTION_COLUMNS.index(question)]
 def iter_likert_questions(method: str = "pairs") -> list:
     likert_it = iter(LIKERT_QUESTIONS)
     if method == "pairs":
@@ -78,3 +89,9 @@ def iter_likert_questions(method: str = "pairs") -> list:
         sections.append([q for q in LIKERT_QUESTIONS if q.startswith("Q13")])
         sections.append([q for q in LIKERT_QUESTIONS if q.startswith("Q14")])
         return sections
+def make_aligned_likert_df() -> pd.DataFrame:
+    data = clean_data(read_data(DATA_PATH))
+    alt = data[['mode'] + LIKERT_QUESTIONS]
+    alt = alt.replace(LIKERT_CONVERT).fillna(0)
+    alt.to_csv(ALIGNED_DATA_PATH)
+    return alt
