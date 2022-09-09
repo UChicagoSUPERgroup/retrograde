@@ -12,13 +12,14 @@ EXCLUDE_PARTICIPANTS = [
     "5d93ee94eaf36200134a1d87", ###### issue
     "62bdd8ea1de5b02c9ccb99fc", # restarting, so only remove the first one
     "5b3011a8c6d7d20001143ab5", # in CTS, did not see notifications... 
+    "62b43755f6be0c82be3cb760", # in CTS, did not see notifications... 
 ]
 PID = "PROLIFIC_PID"
 CTS = "EXP_CTS"
 END = "EXP_END"
 NONE = "EXP_NONE"
 conds = [NONE, CTS, END]
-DATA_PATH = os.path.join(dir_path, "data/Jupyter+in+Retrograde+evaluation+study_September+8,+2022_05.57.csv")
+DATA_PATH = os.path.join(dir_path, "data/Jupyter+in+Retrograde+evaluation+study_September+9,+2022_08.25.csv")
 ALIGNED_DATA_PATH = os.path.join(dir_path, "data/aligned_likert_df.csv")
 LIKERT_QUESTIONS = [
     'Q12.2', 'Q12.3', 'Q12.4', 'Q12.5', 'Q12.6', 'Q13.1',

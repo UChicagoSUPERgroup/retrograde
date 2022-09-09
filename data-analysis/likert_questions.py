@@ -213,7 +213,7 @@ def aligned_likert(data,
 
 def likert_plots(args: argparse.ArgumentParser):
     df = make_aligned_likert_df()
-    print(df)
+    print(df.shape)
 
     if args.method.lower():
         method = args.method

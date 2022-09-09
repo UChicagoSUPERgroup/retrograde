@@ -1,4 +1,5 @@
 **/*.png
 **/*.zip
 **/*.csv
+**/*.txt
 extracted_user_data/
