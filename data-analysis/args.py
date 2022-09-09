@@ -20,7 +20,7 @@ def parser_flag(parser: argparse.ArgumentParser, flag_name: str, desc: str):
                         default=False)
 
 
-def parser_value(parser: argparse.ArgumentParser, flag_name: str, desc: str, default: str=None):
+def parser_value(parser: argparse.ArgumentParser, flag_name: str, desc: str='', default: str=None):
     """
     Template format for creating parser args that expect values
     Arguments:
@@ -32,12 +32,15 @@ def parser_value(parser: argparse.ArgumentParser, flag_name: str, desc: str, def
     parser.add_argument("--" + flag_name,
                         dest=flag_name.replace('-', '_'),
                         default=default,
+                        help=desc,
                         action="store")
 
 def likert_args(parser: argparse.ArgumentParser):
-    parser_value(parser, "fig_name", "The path to save the figures at", default='all')
-    parser_value(parser, "questions", "The indices of the questions you want plotted", 'all')  # TODO: indices? Q12.2? all?
-    parser_value(parser, "conditions", "The conditions you want to see", 'all')
+    parser_value(parser, "path", "The path to save the figures at", default='all')
+    parser_value(parser, "method", "The indices of the questions you want plotted", default='sections')
+    parser_flag(parser, "show_title", "Show a title on the saved figure")
+    parser_value(parser, "title", "The title to show on a figure(s)", default="")
+    parser_value(parser, "conditions", "The conditions you want to see", default='all')
 
 def parse_args() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description='Analysis for Retrograde Data')  
