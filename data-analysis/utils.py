@@ -19,7 +19,7 @@ CTS = "EXP_CTS"
 END = "EXP_END"
 NONE = "EXP_NONE"
 conds = [NONE, CTS, END]
-DATA_PATH = os.path.join(dir_path, "data/Jupyter+in+Retrograde+evaluation+study_September+9,+2022_08.25.csv")
+DATA_PATH = os.path.join(dir_path, "data/Jupyter+in+Retrograde+evaluation+study_September+11,+2022_16.08.csv")
 ALIGNED_DATA_PATH = os.path.join(dir_path, "data/aligned_likert_df.csv")
 LIKERT_QUESTIONS = [
     'Q12.2', 'Q12.3', 'Q12.4', 'Q12.5', 'Q12.6', 'Q13.1',
@@ -45,6 +45,9 @@ QUESTION_COLUMNS = ['Q1.2', 'Q2.1', 'Q2.2', 'Q2.3',
        'Q16.4_5_TEXT', 'Q16.5', 'Q16.5_7_TEXT'
 ]
 QUESTION_TEXT = pd.read_csv(DATA_PATH).iloc[0][QUESTION_COLUMNS].values
+for idx, qt in enumerate(QUESTION_TEXT):
+    if "..." in qt:
+        QUESTION_TEXT[idx] = "I spent a large portion of my time in this study " + qt[3:]
 
 def get_conds() -> list:
     return conds
@@ -68,6 +71,8 @@ def clean_data(df: pd.DataFrame) -> pd.DataFrame:
     data["RecordedDate"] = pd.to_datetime(data["StartDate"])
     data["Duration (in seconds)"] = data["Duration (in seconds)"].astype(int)
     data["Finished"] = data["Finished"].astype(bool)
+    data["Progress"] = data["Progress"].astype(int)
+    data = data[data["Progress"] == 100]
     return data
 def get_question_idx(question: str) -> int:
     return np.where(QUESTION_TEXT == question)[0][0]
