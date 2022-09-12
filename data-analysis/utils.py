@@ -97,7 +97,7 @@ def iter_likert_questions(method: str = "pairs") -> list:
         return sections
 def make_aligned_likert_df() -> pd.DataFrame:
     data = clean_data(read_data(DATA_PATH))
-    alt = data[['mode'] + LIKERT_QUESTIONS]
+    alt = data[[PID, 'mode'] + LIKERT_QUESTIONS]
     alt = alt.replace(LIKERT_CONVERT).fillna(0)
     alt.to_csv(ALIGNED_DATA_PATH)
     return alt
