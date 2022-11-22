@@ -37,7 +37,7 @@ def parser_value(parser: argparse.ArgumentParser, flag_name: str, desc: str='', 
 
 def likert_args(parser: argparse.ArgumentParser):
     parser_value(parser, "path", "The path to save the figures at", default='all')
-    parser_value(parser, "method", "The indices of the questions you want plotted", default='sections')
+    parser_value(parser, "method", "The indices of the questions you want plotted", default='paper')
     parser_flag(parser, "show_title", "Show a title on the saved figure")
     parser_value(parser, "title", "The title to show on a figure(s)", default="")
     parser_value(parser, "conditions", "The conditions you want to see", default='all')

@@ -68,7 +68,7 @@ def diverging_likert(results: pd.DataFrame,
             likerts = likert_counts(results, question_group, condition_column)
             if percentages:
                 likert_percents = _compute_percentages(likerts)
-                likert_percents = likert_percents[likert_percents['mode'] == cond].drop('mode', axis=1)
+                likert_percents = likert_percents[likert_percents[condition_column] == cond].drop(condition_column, axis=1)
             likerts = likerts[cond]
             # TODO: fix this for multiple conditions
             labels = list(likerts.keys())
@@ -141,7 +141,6 @@ def diverging_likert(results: pd.DataFrame,
         if save_fig_path:
             fig.savefig(os.path.join(dir_path, f"{save_fig_path}_{method}{fig_num}.png"), bbox_inches="tight")
 
-# TODO: match most of the diverging params
 def aligned_likert(data, 
     conditions_to_include: list,
     save_path: str,
@@ -150,8 +149,9 @@ def aligned_likert(data,
     title: str='', 
     method: str='sections'
     ):
+    # labels = np.array(get_conds())
     labels = data[condition_column].unique()
-    figsize = (100, 10)
+    figsize = (30, 7)
     question_groups = np.asarray(iter_likert_questions(method=method), dtype=object)[include_groups]
     if not isinstance(include_groups, int):
         ncols = sum([len(question_group) for question_group in question_groups])
@@ -162,48 +162,59 @@ def aligned_likert(data,
     last_m = 0
     for idx, question_group in enumerate(question_groups):
         likert_percents_cumul = pd.DataFrame()
-        likerts_ = _compute_percentages(likert_counts(data, LIKERT_QUESTIONS, 'mode', from_int=True))
+        likerts_ = _compute_percentages(likert_counts(data, question_group, 'mode', from_int=True))
         # print(likerts_)
         for jdx, cond in enumerate(labels):
-            likerts = likert_counts(data[data['mode'] == cond], LIKERT_QUESTIONS, 'mode', from_int=True)
+            likerts = likert_counts(data[data['mode'] == cond], question_group, 'mode', from_int=True)
             likert_percents = _compute_percentages(likerts)
             mode = likert_percents['mode'].copy(deep=True)
             likert_percents = pd.concat((mode,likert_percents.drop('mode', axis=1).cumsum(axis=0)), axis=1) # add in the column
             likert_percents_cumul = pd.concat((likert_percents_cumul, likert_percents), axis=0) # combine with rest
+            # print("likert_percents", labels, jdx)
+            # print(likert_percents)
+            # print()
         for mdx, question_colname in enumerate(question_group):
             ax = axs[mdx+last_m]
-            ax.invert_yaxis()
+            # ax.invert_yaxis()
             ax.set_xlim(0, 100)
+            for axis in ['left']:
+                ax.spines[axis].set_linewidth(6)
+                ax.spines[axis].set_color('black')
+            ax.spines.right.set_visible(False)
+            ax.spines.top.set_visible(False)
+            ax.spines.bottom.set_visible(False)
             ticks = [0, 25, 50, 75, 100]
-            ax.set_xticks(ticks, labels=[f'{t}%' for t in ticks], )
+            ax.set_xticks(ticks, labels=[f'{t}%' for t in ticks], fontweight='bold')
             category_colors = plt.colormaps['coolwarm_r'](np.linspace(0.15, 0.85, 5))
+            category_colors = category_colors[::-1]
             for kdx, (likert_name, color) in enumerate(zip(LIKERT_CONVERT, category_colors)):
                 # .loc[index_of_likert_scale_value, question_column_name]
                 widths = likerts_.loc[kdx%5, question_colname].values
                 starts = likert_percents_cumul.loc[kdx%5, question_colname].values - widths
-                if idx == 1:
-                    print(widths)
-                    print(starts)
-                    print(question_colname, likert_name)
-                    print()
-                rects = ax.barh(labels, widths, left=starts, height=0.5,
+                rects = ax.barh(get_conds_plot(labels), widths, left=starts, height=.8,
                                 label=likert_name, color=color,
                                 edgecolor='white', linewidth=1.5)
-                r, g, b, _ = color
-                text_color = 'white' if r * g * b < 0.5 else 'black'
+                # r, g, b, _ = color
+                # text_color = 'white' if r * g * b < 0.5 else 'black'
                 # ax.bar_label(rects, 
                 #              labels=[f'{x:.1f}%' for x in likerts_.loc[kdx%5, question_colname]], 
                 #              label_type='center', 
                 #              color=text_color,
                 #              fontsize=15)
                 ax.tick_params(axis='both', labelsize=24)
-                ax.tick_params(axis='y', pad=30)
-            ax.set_title(question_colname, loc='center', fontsize=36)
+                ax.tick_params(axis='y', labelsize=30)
+                for label in ax.get_yticklabels():
+                    label.set_fontweight('heavy')
+            ax.set_title(LIKERT_QUESTIONS_PLOT[question_colname], loc='center', fontsize=30, pad=15, fontweight='heavy')
             if mdx != 0 or idx != 0:
                 ax.set_yticklabels([])
         last_m += mdx + 1
-    lines, labels = fig.axes[-1].get_legend_handles_labels()
-    fig.legend(lines, labels, ncol=5, loc='lower center', bbox_to_anchor=(0.5,0), borderaxespad=.1, frameon=False, prop={'size': 32})
+    lines, _labels = fig.axes[-1].get_legend_handles_labels()
+    fig.legend(lines, 
+        _labels, ncol=5, loc='lower center', bbox_to_anchor=(0.5,-0.09), 
+        borderaxespad=.15, frameon=False, labelspacing=.001,
+        markerscale=.3,
+        prop={'size': 27.5, "weight": "heavy" })
     if title != '':
         fig.suptitle(title, fontsize=40)
     fig.savefig(os.path.join(dir_path, "figs/", f"{save_path}.png"), bbox_inches='tight')
@@ -235,20 +246,26 @@ def likert_plots(args: argparse.ArgumentParser):
                 title = title + '_' + str(section)
             else:
                 title = ''
-            if section == 2:
-                # EXP_END has no responses for this section, so implicitly exclude
-                aligned_likert(df, 
-                    conditions_to_include=conds[:2],
-                    save_path=path,
-                    include_groups=[section],
-                    title=title,
-                    method=method
-                )
+            aligned_likert(df, 
+                conditions_to_include=conds,
+                save_path=path,
+                include_groups=[section],
+                title=title,
+                method=method,
+            )
+    elif method == 'paper':
+        for section in [0, 1, 2, 3, 4]:
+            path = args.path + str(section)
+            if args.show_title:
+                title = str(args.title)
+                title = title.replace('_', ' ')
+                title = title + '_' + str(section)
             else:
-                aligned_likert(df, 
-                    conditions_to_include=conds,
-                    save_path=path,
-                    include_groups=[section],
-                    title=title,
-                    method=method,
-                )
+                title = ''
+            aligned_likert(df, 
+                conditions_to_include=conds,
+                save_path=path,
+                include_groups=[section],
+                title=title,
+                method=method,
+            )
