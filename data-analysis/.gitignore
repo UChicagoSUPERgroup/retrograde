@@ -2,4 +2,5 @@
 **/*.zip
 **/*.csv
 **/*.txt
+**/*.xlsx
 extracted_user_data/
