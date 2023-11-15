@@ -66,6 +66,8 @@ class AnalysisManager:
         code = request["contents"]
         metadata = json.loads(request["metadata"])
         cell_mode = metadata.get("section")
+        if not cell_mode:
+            cell_mode = ""
 
         self._nb.log.info("[MANAGER] Analyzing cell {0} with kernel {1}".format(cell_id, kernel_id))
 
