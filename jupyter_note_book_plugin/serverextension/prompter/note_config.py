@@ -5,6 +5,15 @@ NOTES = [WelcomeNote, ProtectedColumnNote,
          MissingDataNote, ProxyColumnNote,
          ModelReportNote, UncertaintyNote]
 
+if MODE == "NO_EXP":
+    CONTEXT = [
+        (".*", ".*", ".*"),
+        (".*", ".*", ".*"),
+        (".*", ".*", ".*"),
+        (".*", ".*", ".*"),
+        (".*", ".*", ".*"),
+        (".*", ".*", ".*"),
+    ]
 if MODE == "EXP_CTS":
     CONTEXT = [
         (".*", ".*", ".*"),
