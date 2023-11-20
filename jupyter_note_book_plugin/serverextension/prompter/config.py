@@ -6,7 +6,7 @@ DB_NAME = "cells.db"
 
 
 if not os.getenv("MODE"):
-    MODE = "EXP_CTS" # the sorts of responses the plugin should provide. options are "SORT" for sortilege, "SIM" for column similarity, and None
+    MODE = "NO_EXP"
 else:
     MODE = os.getenv("MODE")
 if not os.getenv("DOCKER_HOST_IP"):
